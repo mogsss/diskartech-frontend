@@ -1,222 +1,139 @@
 import Avatar from '@/components/ui/Avatar';
+import ChatOptionsModal from '@/components/modals/student/ChatOptionsModal';
 import { Colors } from '@/constants/colors';
-import { BorderRadius, Shadow, Spacing, Typography } from '@/constants/typography';
 import { conversations } from '@/data/messages';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
-  const [message, setMessage] = useState('');
-  const conversation = conversations.find((c) => c.id === id);
+  const initialConversation = conversations.find((c) => c.id === id);
 
-  if (!conversation) {
+  const [message, setMessage] = useState('');
+  const [messagesList, setMessagesList] = useState(initialConversation ? initialConversation.messages : []);
+  const [isOptionsModalVisible, setOptionsModalVisible] = useState(false);
+  
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  if (!initialConversation) {
     return (
-      <View style={styles.container}>
-        <Text>Conversation not found</Text>
+      <View className="flex-1 bg-[#F8FAFC] justify-center items-center">
+        <Text className="text-slate-500">Conversation not found</Text>
       </View>
     );
   }
 
   const handleSend = () => {
     if (!message.trim()) return;
+
+    const newMessage = {
+      id: Date.now().toString(),
+      sender: 'me',
+      text: message.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setMessagesList([...messagesList, newMessage]);
     setMessage('');
+
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <Avatar uri={conversation.senderAvatar} name={conversation.senderName} size={40} online={conversation.online} />
-        <View style={styles.headerInfo}>
-          <Text style={styles.senderName}>{conversation.senderName}</Text>
-          <Text style={styles.onlineStatus}>{conversation.online ? 'Online' : 'Offline'}</Text>
-        </View>
-        <TouchableOpacity style={styles.moreBtn}>
-          <MaterialIcons name="more-vert" size={24} color={Colors.text} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Messages */}
-      <ScrollView
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {conversation.messages.map((msg) => (
-          <View
-            key={msg.id}
-            style={[
-              styles.messageBubble,
-              msg.sender === 'me' ? styles.myMessage : styles.theirMessage,
-            ]}
-          >
-            <Text
-              style={[
-                styles.messageText,
-                msg.sender === 'me' ? styles.myMessageText : styles.theirMessageText,
-              ]}
-            >
-              {msg.text}
-            </Text>
-            <Text
-              style={[
-                styles.messageTime,
-                msg.sender === 'me' ? styles.myMessageTime : styles.theirMessageTime,
-              ]}
-            >
-              {msg.timestamp}
-            </Text>
+      <View className="flex-1 bg-[#F8FAFC]">
+        {/* Header */}
+        <View className="flex-row items-center px-4 pt-12 pb-4 bg-white border-b border-gray-100">
+          <TouchableOpacity onPress={() => router.back()} className="mr-4">
+            <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Avatar uri={initialConversation.senderAvatar} name={initialConversation.senderName} size={40} online={initialConversation.online} />
+          <View className="flex-1 ml-4">
+            <Text className="text-sm font-semibold text-slate-900">{initialConversation.senderName}</Text>
+            <Text className="text-xs text-emerald-600">{initialConversation.online ? 'Online' : 'Offline'}</Text>
           </View>
-        ))}
-      </ScrollView>
+          <TouchableOpacity onPress={() => setOptionsModalVisible(true)} className="p-2">
+            <MaterialIcons name="more-vert" size={24} color={Colors.text} />
+          </TouchableOpacity>
+        </View>
 
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.attachBtn}>
-          <MaterialIcons name="attach-file" size={24} color={Colors.textSecondary} />
-        </TouchableOpacity>
-        <TextInput
-          style={styles.input}
-          placeholder="Type a message..."
-          placeholderTextColor={Colors.gray400}
-          value={message}
-          onChangeText={setMessage}
-          multiline
-        />
-        <TouchableOpacity onPress={handleSend} style={[styles.sendBtn, message.trim() && styles.sendBtnActive]}>
-          <MaterialIcons
-            name="send"
-            size={22}
-            color={message.trim() ? Colors.white : Colors.gray400}
+        {/* Messages Scroll Area */}
+        <ScrollView
+          ref={scrollViewRef}
+          className="flex-1"
+          contentContainerStyle={{ padding: 24, paddingBottom: 20 }}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+        >
+          {messagesList.map((msg) => (
+            <View
+              key={msg.id}
+              className={`max-w-[80%] p-4 rounded-2xl mb-2 ${
+                msg.sender === 'me'
+                  ? 'bg-red-600 self-end rounded-br-[4px]'
+                  : 'bg-white self-start rounded-bl-[4px] shadow-sm'
+              }`}
+            >
+              <Text className={`text-sm leading-5 ${msg.sender === 'me' ? 'text-white' : 'text-slate-900'}`}>
+                {msg.text}
+              </Text>
+              <Text className={`text-xs mt-1 text-right ${msg.sender === 'me' ? 'text-white/70' : 'text-slate-500'}`}>
+                {msg.timestamp}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Input Section - Ginawa nating mas compact at idinikit sa pinakababa */}
+        {/* Input Section - Medyo pinalaki at pinaluwag natin nang konti */}
+        <View className="flex-row items-center px-3 py-3 bg-white border-t border-gray-100 gap-2">
+          <TouchableOpacity className="p-2">
+            <MaterialIcons name="attach-file" size={24} color={Colors.gray400} />
+          </TouchableOpacity>
+          <TextInput
+            className="flex-1 bg-gray-100 rounded-full px-4 py-3 text-base text-slate-900 max-h-[120px]"
+            placeholder="Type a message..."
+            placeholderTextColor={Colors.gray400}
+            value={message}
+            onChangeText={setMessage}
+            multiline
           />
-        </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleSend} 
+            className={`w-10 h-10 rounded-full items-center justify-center ${
+              message.trim() ? 'bg-red-600' : 'bg-gray-200'
+            }`}
+          >
+            <MaterialIcons name="send" size={20} color={message.trim() ? Colors.white : Colors.gray400} />
+          </TouchableOpacity>
+        </View>
+
+        {/* CHAT OPTIONS MODAL */}
+        <ChatOptionsModal
+          visible={isOptionsModalVisible}
+          onClose={() => setOptionsModalVisible(false)}
+          onViewProfile={() => {
+            setOptionsModalVisible(false);
+            Alert.alert("View Profile", "Redirecting to profile...");
+          }}
+          onClearChat={() => {
+            setOptionsModalVisible(false);
+            setMessagesList([]);
+          }}
+          onBlockUser={() => {
+            setOptionsModalVisible(false);
+            Alert.alert("Block User", "User has been blocked.");
+          }}
+        />
       </View>
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.xxxl,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-  },
-  backBtn: {
-    marginRight: Spacing.md,
-  },
-  headerInfo: {
-    flex: 1,
-    marginLeft: Spacing.md,
-  },
-  senderName: {
-    ...Typography.bodySmall,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  onlineStatus: {
-    ...Typography.caption,
-    color: Colors.success,
-  },
-  moreBtn: {
-    padding: Spacing.sm,
-  },
-  messagesList: {
-    flex: 1,
-  },
-  messagesContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    marginBottom: Spacing.sm,
-  },
-  myMessage: {
-    backgroundColor: Colors.primary,
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
-  },
-  theirMessage: {
-    backgroundColor: Colors.white,
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 4,
-    ...Shadow.sm,
-  },
-  messageText: {
-    ...Typography.bodySmall,
-    lineHeight: 20,
-  },
-  myMessageText: {
-    color: Colors.white,
-  },
-  theirMessageText: {
-    color: Colors.text,
-  },
-  messageTime: {
-    ...Typography.caption,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-  myMessageTime: {
-    color: 'rgba(255,255,255,0.7)',
-  },
-  theirMessageTime: {
-    color: Colors.textLight,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray100,
-    gap: Spacing.sm,
-  },
-  attachBtn: {
-    padding: Spacing.sm,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: Colors.gray50,
-    borderRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    ...Typography.body,
-    color: Colors.text,
-    maxHeight: 100,
-  },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-});
-

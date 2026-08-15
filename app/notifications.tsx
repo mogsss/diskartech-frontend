@@ -1,35 +1,37 @@
 import NotificationCard from '@/components/ui/NotificationCard';
 import { Colors } from '@/constants/colors';
-import { Spacing, Typography } from '@/constants/typography';
 import { notifications } from '@/data/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 export default function NotificationsScreen() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+    <View className="flex-1 bg-[#F8FAFC]">
+      <View className="flex-row items-center px-6 pt-12 pb-4 bg-white border-b border-gray-100">
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-4"
+        >
           <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>Notifications</Text>
+        <View className="flex-1">
+          <Text className="text-2xl font-bold text-slate-900">Notifications</Text>
           {unreadCount > 0 && (
-            <Text style={styles.unreadCount}>{unreadCount} unread</Text>
+            <Text className="text-xs text-blue-600 font-semibold mt-[2px]">{unreadCount} unread</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.markAllBtn}>
-          <Text style={styles.markAllText}>Mark all read</Text>
+        <TouchableOpacity className="py-2 px-4">
+          <Text className="text-sm text-blue-600 font-semibold">Mark all read</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
+        className="flex-1"
+        contentContainerClassName="p-6 pb-10"
         showsVerticalScrollIndicator={false}
       >
         {notifications.map((notification) => (
@@ -43,59 +45,3 @@ export default function NotificationsScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xxxl,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    ...Typography.h3,
-    color: Colors.text,
-  },
-  unreadCount: {
-    ...Typography.caption,
-    color: Colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  markAllBtn: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-  },
-  markAllText: {
-    ...Typography.bodySmall,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xxl,
-  },
-});
-

@@ -1,6 +1,5 @@
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
-import { Shadow, Spacing, Typography } from '@/constants/typography';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -10,7 +9,6 @@ import {
     FlatList,
     NativeScrollEvent,
     NativeSyntheticEvent,
-    StyleSheet,
     Text,
     View,
 } from 'react-native';
@@ -72,12 +70,15 @@ export default function OnboardingScreen() {
   };
 
   const renderSlide = ({ item }: { item: typeof slides[0] }) => (
-    <View style={styles.slide}>
-      <View style={[styles.iconWrapper, { backgroundColor: item.bgColor }]}>
+    <View style={{ width }} className="flex-1 items-center justify-center px-10">
+      <View 
+        style={{ backgroundColor: item.bgColor }} 
+        className="w-[180px] h-[180px] rounded-[90px] items-center justify-center mb-8 shadow-lg"
+      >
         <MaterialIcons name={item.icon as any} size={80} color={item.color} />
       </View>
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.subtitle}>{item.subtitle}</Text>
+      <Text className="text-3xl font-bold text-slate-900 text-center mb-3">{item.title}</Text>
+      <Text className="text-base text-slate-500 text-center leading-6 px-4">{item.subtitle}</Text>
     </View>
   );
 
@@ -88,10 +89,10 @@ export default function OnboardingScreen() {
   });
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-white">
       {/* Skip button */}
-      <Animated.View style={[styles.skipContainer, { opacity: dotOpacity }]}>
-        <Text onPress={handleSkip} style={styles.skipText}>
+      <Animated.View style={{ opacity: dotOpacity }} className="absolute top-[60px] right-6 z-10">
+        <Text onPress={handleSkip} className="text-base font-semibold text-slate-500">
           Skip
         </Text>
       </Animated.View>
@@ -111,9 +112,9 @@ export default function OnboardingScreen() {
       />
 
       {/* Bottom section */}
-      <View style={styles.bottomSection}>
+      <View className="px-10 pb-12">
         {/* Dots */}
-        <View style={styles.dotsContainer}>
+        <View className="flex-row justify-center items-center mb-8 gap-[6px]">
           {slides.map((_, index) => {
             const inputRange = [
               (index - 1) * width,
@@ -125,7 +126,7 @@ export default function OnboardingScreen() {
               outputRange: [8, 32, 8],
               extrapolate: 'clamp',
             });
-            const dotOpacity = scrollX.interpolate({
+            const dotOpacityAnim = scrollX.interpolate({
               inputRange,
               outputRange: [0.3, 1, 0.3],
               extrapolate: 'clamp',
@@ -134,27 +135,27 @@ export default function OnboardingScreen() {
               <Animated.View
                 key={index}
                 style={[
-                  styles.dot,
                   {
                     width: dotWidth,
-                    opacity: dotOpacity,
+                    opacity: dotOpacityAnim,
                     backgroundColor: currentIndex === index ? Colors.primary : Colors.gray300,
                   },
                 ]}
+                className="h-2 rounded-full"
               />
             );
           })}
         </View>
 
         {/* Button */}
-        <View style={styles.buttonContainer}>
+        <View className="mb-4">
           <PrimaryButton
             title={currentIndex === slides.length - 1 ? 'Get Started' : 'Next'}
             onPress={handleNext}
             size="large"
             icon={
               <MaterialIcons
-                name={currentIndex === slides.length - 1 ? 'arrow-forward' : 'arrow-forward'}
+                name="arrow-forward"
                 size={20}
                 color={Colors.white}
               />
@@ -165,69 +166,3 @@ export default function OnboardingScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.white,
-  },
-  skipContainer: {
-    position: 'absolute',
-    top: 60,
-    right: 24,
-    zIndex: 10,
-  },
-  skipText: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-  },
-  slide: {
-    width,
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  iconWrapper: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xxl,
-    ...Shadow.lg,
-  },
-  title: {
-    ...Typography.h2,
-    color: Colors.text,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: Spacing.md,
-  },
-  bottomSection: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-    gap: 6,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  buttonContainer: {
-    marginBottom: Spacing.md,
-  },
-});
-

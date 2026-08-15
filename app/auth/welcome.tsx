@@ -64,7 +64,7 @@ export default function WelcomeScreen() {
               Don&apos;t have an account?{' '}
               <Text
                 className="text-primary font-semibold"
-                onPress={() => router.push('/auth/register-student')}
+                onPress={() => router.push('/auth/student-register')}
               >
                 Register
               </Text>
