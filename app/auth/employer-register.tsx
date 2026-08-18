@@ -8,11 +8,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import axios from 'axios'; // <--- Idinagdag ang axios
+import axios from 'axios';
 
 export default function RegisterEmployerScreen() {
   const [step, setStep] = useState(1);
-  
+
   // Step 1: Business Info & Owner/Contact Person Name
   const [businessName, setBusinessName] = useState('');
   const [businessType, setBusinessType] = useState('');
@@ -23,7 +23,7 @@ export default function RegisterEmployerScreen() {
   // Step 2: Contact & Location Info
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [detailedAddress, setDetailedAddress] = useState(''); 
+  const [detailedAddress, setDetailedAddress] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [mapModalVisible, setMapModalVisible] = useState(false);
@@ -32,7 +32,14 @@ export default function RegisterEmployerScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('')
   const [loading, setLoading] = useState(false);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasMinLength = password.length >= 8;
+  const hasNumber = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
 
   // Modal Visibility
   const [businessTypeModalVisible, setBusinessTypeModalVisible] = useState(false);
@@ -55,26 +62,41 @@ export default function RegisterEmployerScreen() {
 
   // Konekta sa Laravel Backend gamit ang Axios
   const handleRegister = async () => {
-    if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all account credentials.');
-      return;
+    // I-reset muna ang mga error
+    setEmailError('');
+    setPasswordError('');
+    setConfirmPasswordError('');
+
+    let hasError = false;
+
+    if (!email) {
+      setEmailError('Email address is required.');
+      hasError = true;
     }
+
+    if (!hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar) {
+      setPasswordError('Please meet all password requirements.');
+      hasError = true;
+    }
+
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
-      return;
+      setConfirmPasswordError('Passwords do not match.');
+      hasError = true;
     }
-    
+
+    if (hasError) return; // Huwag ituloy kung may error sa form
+
     setLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.2:8000/api/register', {
+      const response = await axios.post('http://192.168.1.2:8000/api/register/employer', {
         role: 'employer',
         business_name: businessName,
         business_type: businessType,
         first_name: firstName,
         middle_name: middleName,
         last_name: lastName,
-        phone: phone, // Mapupunta sa contact_number sa database
+        phone: phone,
         address: address,
         detailed_address: detailedAddress,
         latitude: latitude,
@@ -89,9 +111,18 @@ export default function RegisterEmployerScreen() {
       }
     } catch (error: any) {
       console.error(error);
-      // Ito ang magpapakita ng eksaktong error galing sa Laravel backend sa screen mo
-      const errorMsg = error.response?.data?.message || error.message;
-      Alert.alert('Registration Failed', errorMsg);
+
+      // Kung galing sa Laravel backend ang validation error (422)
+      if (error.response && error.response.status === 422) {
+        const errors = error.response.data.errors;
+        if (errors.email) setEmailError(errors.email[0]);
+        if (errors.password) setPasswordError(errors.password[0]);
+      } else {
+        const errorMsg = error.response?.data?.message || error.message;
+        Alert.alert('Registration Failed', errorMsg);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -116,7 +147,7 @@ export default function RegisterEmployerScreen() {
 
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Business Type</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setBusinessTypeModalVisible(true)}
               className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
             >
@@ -127,7 +158,7 @@ export default function RegisterEmployerScreen() {
               <MaterialIcons name="arrow-drop-down" size={24} color={Colors.gray500} />
             </TouchableOpacity>
           </View>
-          
+
           <Text className="text-base font-bold text-slate-900 mt-5 mb-3">Contact Person / HR</Text>
           <InputField label="First Name" placeholder="Contact person first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
           <InputField label="Middle Name (Optional)" placeholder="Contact person middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
@@ -146,7 +177,7 @@ export default function RegisterEmployerScreen() {
 
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Business Location</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setMapModalVisible(true)}
               className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
             >
@@ -158,12 +189,12 @@ export default function RegisterEmployerScreen() {
             </TouchableOpacity>
           </View>
 
-          <InputField 
-            label="House No., Street, Landmark (Optional)" 
-            placeholder="e.g., Bldg 2, Quezon St., near plaza" 
-            icon="home" 
-            value={detailedAddress} 
-            onChangeText={setDetailedAddress} 
+          <InputField
+            label="House No., Street, Landmark (Optional)"
+            placeholder="e.g., Bldg 2, Quezon St., near plaza"
+            icon="home"
+            value={detailedAddress}
+            onChangeText={setDetailedAddress}
           />
 
           <TouchableOpacity onPress={handleNext} className="bg-red-600 rounded-2xl py-4 items-center justify-center mt-6 shadow-sm">
@@ -175,13 +206,87 @@ export default function RegisterEmployerScreen() {
       {/* --- STEP 3: SECURITY --- */}
       {step === 3 && (
         <View>
-          <InputField label="Email Address" placeholder="Enter business email" keyboardType="email-address" autoCapitalize="none" icon="email" value={email} onChangeText={setEmail} />
-          <InputField label="Password" placeholder="Create a password" isPassword icon="lock" value={password} onChangeText={setPassword} />
-          <InputField label="Confirm Password" placeholder="Confirm your password" isPassword icon="lock" value={confirmPassword} onChangeText={setConfirmPassword} />
+          <InputField
+            label="Email Address"
+            placeholder="Enter business email"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            icon="email"
+            value={email}
+            onChangeText={(text) => { setEmail(text); setEmailError(''); }}
+            error={emailError} 
+          />
+
+          <InputField
+            label="Password"
+            placeholder="Create a password"
+            isPassword
+            icon="lock"
+            value={password}
+            onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
+            error={passwordError} 
+          />
+
+          {/* Live requirement checklist */}
+          <View className="mb-4 px-1 gap-1">
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasMinLength ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasMinLength ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                At least 8 characters long
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasNumber ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasNumber ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasNumber ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                Contains at least one number (0-9)
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasUpper ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasUpper ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasUpper ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                Contains an Uppercase Letter
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasSpecialChar ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasSpecialChar ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasSpecialChar ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                Contains a special character (e.g., @, #, $)
+              </Text>
+            </View>
+          </View>
+
+          <InputField
+            label="Confirm Password"
+            placeholder="Confirm your password"
+            isPassword
+            icon="lock"
+            value={confirmPassword}
+            onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
+            error={confirmPasswordError} // 👈 Dito lalabas ang error sa ilalim ng confirm password
+          />
 
           <PrimaryButton
             title={loading ? "Creating Account..." : "CREATE ACCOUNT"}
-            onPress={handleRegister}
+            onPress={handleRegister} // Tinanggal na natin ang Alert dito dahil handleRegister na ang bahala mag-validate
             size="large"
             style={{ marginTop: 24, backgroundColor: '#DC2626' }}
             disabled={loading}

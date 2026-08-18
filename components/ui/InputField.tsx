@@ -1,10 +1,7 @@
 import { Colors } from '@/constants/colors';
-import { BorderRadius, Spacing, Typography } from '@/constants/typography';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
-  Platform,
-  StyleSheet,
   Text,
   TextInput,
   TextInputProps,
@@ -38,104 +35,60 @@ export default function InputField({
   };
 
   return (
-    <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+    <View style={[{ marginBottom: 16 }, containerStyle]}>
+      {label && (
+        <Text className="text-sm font-semibold text-slate-900 mb-2">
+          {label}
+        </Text>
+      )}
+      
       <TouchableOpacity
         activeOpacity={1}
         onPress={handleContainerPress}
-        style={[
-          styles.inputContainer,
-          isFocused && styles.inputFocused,
-          error && styles.inputError,
-        ]}
+        className={`flex-row items-center bg-white border-[1.5px] rounded-xl px-4 h-[52px] ${
+          isFocused ? 'border-red-600' : error ? 'border-red-500' : 'border-gray-300'
+        }`}
       >
         {icon && (
           <MaterialIcons
             name={icon}
             size={20}
-            color={isFocused ? Colors.primary : Colors.gray500}
-            style={styles.icon}
+            color={isFocused ? '#dc2626' : '#6b7280'}
+            style={{ marginRight: 8 }}
           />
         )}
+        
         <TextInput
           ref={inputRef}
-          style={[styles.input, icon && styles.inputWithIcon]}
-          placeholderTextColor={Colors.gray400}
+          className="flex-1 text-base text-slate-900 h-full p-0"
+          placeholderTextColor="#9ca3af"
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           secureTextEntry={isPassword && !showPassword}
           autoCorrect={false}
           {...props}
         />
+
         {isPassword && (
           <TouchableOpacity
             onPress={() => setShowPassword(!showPassword)}
-            style={styles.eyeIcon}
+            className="p-2"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <MaterialIcons
               name={showPassword ? 'visibility' : 'visibility-off'}
               size={20}
-              color={Colors.gray500}
+              color="#6b7280"
             />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
-      {error && <Text style={styles.errorText}>{error}</Text>}
+
+      {error && (
+        <Text className="text-xs text-red-500 mt-1">
+          {error}
+        </Text>
+      )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: Spacing.md,
-  },
-  label: {
-    ...Typography.label,
-    color: Colors.text,
-    marginBottom: Spacing.sm,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    height: 52,
-  },
-  inputFocused: {
-    borderColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: Platform.OS === 'android' ? 0 : 2,
-  },
-  inputError: {
-    borderColor: Colors.error,
-  },
-  icon: {
-    marginRight: Spacing.sm,
-  },
-  input: {
-    flex: 1,
-    ...Typography.body,
-    color: Colors.text,
-    height: '100%',
-    paddingVertical: 0,
-  },
-  inputWithIcon: {
-    marginLeft: 0,
-  },
-  eyeIcon: {
-    padding: Spacing.sm,
-  },
-  errorText: {
-    ...Typography.caption,
-    color: Colors.error,
-    marginTop: Spacing.xs,
-  },
-});
-

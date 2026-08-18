@@ -1,17 +1,106 @@
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 export default function VerificationStatusScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
 
+  // States para sa real-time status mula sa database
+  const [hasValidId, setHasValidId] = useState(false);
+  const [hasCertificate, setHasCertificate] = useState(false);
+
+  useEffect(() => {
+    const checkVerificationDocs = async () => {
+      try {
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          
+          if (isHousehold) {
+            setHasValidId(!!profile.valid_id_path);
+          } else {
+            setHasValidId(!!profile.valid_id_path);
+            setHasCertificate(!!profile.employer_certificate_path);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking verification status:', error);
+      }
+    };
+
+    checkVerificationDocs();
+  }, [isHousehold]);
+
+  // Function para i-handle ang pag-upload ng file patungo sa Laravel backend
+  const handleUploadDocument = async (documentField: 'valid_id_path' | 'certificate_path') => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      const token = await AsyncStorage.getItem('userToken');
+
+      const formData = new FormData();
+      formData.append('type', isHousehold ? 'household' : 'employer');
+      
+      // I-apend ang file gamit ang tamang field name na hinihingi ng Laravel controller
+      formData.append(documentField, {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType || 'application/octet-stream',
+      } as any);
+
+      // Palitan ang URL ng iyong tamang API endpoint
+      const response = await fetch('http://192.168.1.2:8000/api/upload-verification-doc', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert('Success', 'Document uploaded successfully!');
+        await AsyncStorage.setItem('userProfile', JSON.stringify(data.profile));
+        
+        // I-update ang local state para magbago agad ang UI
+        if (documentField === 'valid_id_path') {
+          setHasValidId(true);
+        } else {
+          setHasCertificate(true);
+        }
+      } else {
+        Alert.alert('Error', data.message || 'Upload failed.');
+      }
+
+    } catch (error: any) {
+      console.error('Detailed Upload Error:', error);
+      Alert.alert('Error', 'Upload failed: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const isSubmitted = isHousehold 
+    ? hasValidId 
+    : (hasValidId && hasCertificate);
+
   return (
     <View className="flex-1 bg-[#F8FAFC]">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="p-6 pb-10">
+        
+        {/* Header */}
         <View className="flex-row items-center mb-6 pt-4">
           <TouchableOpacity 
             onPress={() => router.back()} 
@@ -22,83 +111,136 @@ export default function VerificationStatusScreen() {
           <Text className="text-2xl font-bold text-slate-900">Verification Status</Text>
         </View>
 
-        {/* Status Card */}
+        {/* Dynamic Status Card */}
         <View className="bg-white rounded-2xl p-6 items-center shadow-md mb-4">
           <View 
-            style={{ backgroundColor: Colors.warning + '15' }}
+            style={{ backgroundColor: isSubmitted ? Colors.warning + '15' : Colors.gray200 }}
             className="w-20 h-20 rounded-full items-center justify-center mb-4"
           >
-            <MaterialIcons name="hourglass-empty" size={48} color={Colors.warning} />
+            <MaterialIcons 
+              name={isSubmitted ? "hourglass-empty" : "assignment-late"} 
+              size={44} 
+              color={isSubmitted ? Colors.warning : Colors.gray500} 
+            />
           </View>
-          <Text className="text-xl font-bold text-slate-900 mb-2">Verification Pending</Text>
+
+          <Text className="text-xl font-bold text-slate-900 mb-2">
+            {isSubmitted ? 'Verification Pending' : 'Documents Required'}
+          </Text>
+
           <Text className="text-base text-slate-500 text-center mb-6 leading-[22px]">
-            {isHousehold
-              ? 'Your valid ID is currently being reviewed. This usually takes 1-2 business days.'
-              : 'Your account and business documents are currently being reviewed. This usually takes 1-2 business days.'}
+            {isSubmitted
+              ? (isHousehold
+                  ? 'Your valid ID is currently being reviewed. This usually takes 1-2 business days.'
+                  : 'Your account and business documents are currently being reviewed. This usually takes 1-2 business days.')
+              : 'Please upload the required verification documents to activate and verify your account.'}
           </Text>
           
+          {/* Progress Timeline */}
           <View className="w-full items-center px-4">
-            <View className="flex-row items-center w-full mb-1">
-              <View className="w-7 h-7 rounded-full items-center justify-center bg-emerald-600 mr-4">
-                <MaterialIcons name="check" size={16} color={Colors.white} />
-              </View>
-              <Text className="text-sm text-slate-500">Documents Submitted</Text>
-            </View>
-            <View className="w-[2px] h-5 bg-gray-200 ml-[13px] my-1" />
+            
+            {/* Step 1: Documents Submitted */}
             <View className="flex-row items-center w-full mb-1">
               <View 
-                style={{ backgroundColor: Colors.warning }}
+                className={`w-7 h-7 rounded-full items-center justify-center mr-4 ${
+                  isSubmitted ? 'bg-emerald-600' : 'bg-gray-200'
+                }`}
+              >
+                <MaterialIcons 
+                  name="check" 
+                  size={16} 
+                  color={isSubmitted ? Colors.white : Colors.gray400} 
+                />
+              </View>
+              <Text className={`text-sm font-semibold ${isSubmitted ? 'text-slate-900' : 'text-slate-400'}`}>
+                Documents Submitted
+              </Text>
+            </View>
+
+            <View className={`w-[2px] h-5 ml-[13px] my-1 ${isSubmitted ? 'bg-emerald-600' : 'bg-gray-200'}`} />
+
+            {/* Step 2: Under Review */}
+            <View className="flex-row items-center w-full mb-1">
+              <View 
+                style={{ backgroundColor: isSubmitted ? Colors.warning : Colors.gray200 }}
                 className="w-7 h-7 rounded-full items-center justify-center mr-4"
               >
-                <MaterialIcons name="hourglass-empty" size={16} color={Colors.white} />
+                <MaterialIcons 
+                  name="hourglass-empty" 
+                  size={16} 
+                  color={isSubmitted ? Colors.white : Colors.gray400} 
+                />
               </View>
-              <Text style={{ color: Colors.warning }} className="text-sm font-semibold">Under Review</Text>
+              <Text 
+                style={{ color: isSubmitted ? Colors.warning : Colors.gray400 }} 
+                className="text-sm font-semibold"
+              >
+                Under Review
+              </Text>
             </View>
+
             <View className="w-[2px] h-5 bg-gray-200 ml-[13px] my-1" />
+
+            {/* Step 3: Verified */}
             <View className="flex-row items-center w-full">
               <View className="w-7 h-7 rounded-full items-center justify-center bg-gray-200 mr-4">
                 <MaterialIcons name="check" size={16} color={Colors.gray400} />
               </View>
-              <Text className="text-sm text-slate-500">Verified</Text>
+              <Text className="text-sm text-slate-400 font-semibold">Verified</Text>
             </View>
+
           </View>
         </View>
 
-        {/* Documents */}
+        {/* Uploaded Documents List */}
         <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
           <Text className="text-lg font-bold text-slate-900 mb-4">Uploaded Documents</Text>
           
-          {/* Government ID - Laging present para sa pareho */}
-          <View className="flex-row items-center gap-4 py-2 border-b border-gray-100">
-            <MaterialIcons name="description" size={24} color={Colors.success} />
+          {/* Government Valid ID */}
+          <View className="flex-row items-center gap-4 py-3 border-b border-gray-100">
+            <MaterialIcons 
+              name="description" 
+              size={24} 
+              color={hasValidId ? Colors.success : Colors.gray400} 
+            />
             <View className="flex-1">
               <Text className="text-sm font-semibold text-slate-900">Government Valid ID</Text>
-              <Text className="text-xs text-slate-500 mt-0.5">Verified</Text>
+              <Text className="text-xs text-slate-500 mt-0.5">
+                {hasValidId ? 'Uploaded & Submitted' : 'Not yet uploaded'}
+              </Text>
             </View>
-            <MaterialIcons name="check-circle" size={20} color={Colors.success} />
+            <TouchableOpacity 
+              onPress={() => handleUploadDocument('valid_id_path')} 
+              className="bg-gray-100 px-3 py-1.5 rounded-lg"
+            >
+              <Text className="text-xs font-bold text-red-600">{hasValidId ? 'Change' : 'Upload'}</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Business Permit - Ipapakita lang kung Business Employer */}
+          {/* Business Permit (Para lang sa Business Employer) */}
           {!isHousehold && (
-            <View className="flex-row items-center gap-4 py-2 border-b border-gray-100">
-              <MaterialIcons name="description" size={24} color={Colors.warning} />
+            <View className="flex-row items-center gap-4 py-3">
+              <MaterialIcons 
+                name="description" 
+                size={24} 
+                color={hasCertificate ? Colors.success : Colors.gray400} 
+              />
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-slate-900">Business Permit</Text>
-                <Text className="text-xs text-slate-500 mt-0.5">Pending Review</Text>
+                <Text className="text-sm font-semibold text-slate-900">Business Permit / Certificate</Text>
+                <Text className="text-xs text-slate-500 mt-0.5">
+                  {hasCertificate ? 'Uploaded & Submitted' : 'Not yet uploaded'}
+                </Text>
               </View>
-              <MaterialIcons name="hourglass-empty" size={20} color={Colors.warning} />
+              <TouchableOpacity 
+                onPress={() => handleUploadDocument('certificate_path')} 
+                className="bg-gray-100 px-3 py-1.5 rounded-lg"
+              >
+                <Text className="text-xs font-bold text-red-600">{hasCertificate ? 'Change' : 'Upload'}</Text>
+              </TouchableOpacity>
             </View>
           )}
-
-          <PrimaryButton
-            title={isHousehold ? "Upload Valid ID Again" : "Upload Documents Again"}
-            onPress={() => {}}
-            variant="outline"
-            size="large"
-            icon={<MaterialIcons name="cloud-upload" size={20} color={Colors.primary} />}
-            style={{ marginTop: 16 }}
-          />
         </View>
+
       </ScrollView>
     </View>
   );

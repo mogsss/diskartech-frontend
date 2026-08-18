@@ -65,16 +65,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="chat" size={size} color={color} />
           ),
-          tabBarBadge: '2',
-          tabBarBadgeStyle: {
-            backgroundColor: Colors.primary,
-            fontSize: 10,
-            fontWeight: '700',
-            minWidth: 18,
-            height: 18,
-            lineHeight: 18,
-            borderRadius: 9,
-          },
         }}
       />
       <Tabs.Screen

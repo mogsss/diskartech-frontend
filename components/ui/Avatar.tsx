@@ -1,8 +1,7 @@
 import { Colors } from '@/constants/colors';
-import { BorderRadius } from '@/constants/typography';
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
-import { Image, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Text, View, ViewStyle } from 'react-native';
 
 interface AvatarProps {
   uri?: string;
@@ -14,88 +13,63 @@ interface AvatarProps {
 }
 
 export default function Avatar({ uri, name, size = 48, verified = false, online = false, style }: AvatarProps) {
-  const getInitials = () => {
-    if (!name) return '?';
-    const words = name.split(' ');
-    if (words.length >= 2) {
-      return (words[0][0] + words[1][0]).toUpperCase();
+  const [imageError, setImageError] = useState(false);
+
+  const getInitials = (): string => {
+    if (!name || typeof name !== 'string') return '?';
+    const cleanName = name.trim();
+    if (!cleanName) return '?';
+    
+    const words = cleanName.split(' ');
+    if (words.length >= 2 && words[0] && words[1]) {
+      return `${words[0][0]}${words[1][0]}`.toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+    return cleanName.substring(0, 2).toUpperCase();
   };
 
   const borderRadius = size / 2;
+  const initialsText = getInitials();
 
   return (
-    <View style={[styles.container, style]}>
-      {uri ? (
+    <View style={style} className="relative">
+      {uri && !imageError ? (
         <Image
           source={{ uri }}
-          style={[styles.image, { width: size, height: size, borderRadius }]}
+          style={{ width: size, height: size, borderRadius }}
+          className="bg-gray-100"
+          onError={() => setImageError(true)}
         />
       ) : (
         <View
-          style={[
-            styles.placeholder,
-            {
-              width: size,
-              height: size,
-              borderRadius,
-              backgroundColor: Colors.primary + '20',
-            },
-          ]}
+          style={{
+            width: size,
+            height: size,
+            borderRadius,
+            backgroundColor: Colors.primary + '20',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
           <Text
-            style={[
-              styles.initials,
-              { fontSize: size * 0.38, color: Colors.primary },
-            ]}
+            style={{ fontSize: size * 0.38, color: Colors.primary, fontWeight: 'bold' }}
           >
-            {getInitials()}
+            {initialsText}
           </Text>
         </View>
       )}
+
       {verified && (
-        <View style={[styles.verifiedBadge, { bottom: 0, right: 0 }]}>
+        <View className="absolute bottom-0 right-0 bg-white rounded-full">
           <MaterialIcons name="verified" size={size * 0.3} color={Colors.verified} />
         </View>
       )}
+
       {online && (
         <View
-          style={[
-            styles.onlineIndicator,
-            { width: size * 0.28, height: size * 0.28, borderRadius: size * 0.14, bottom: 2, right: 2 },
-          ]}
+          style={{ width: size * 0.28, height: size * 0.28, borderRadius: size * 0.14 }}
+          className="absolute bottom-0.5 right-0.5 bg-emerald-500 border-2 border-white rounded-full"
         />
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-  },
-  image: {
-    backgroundColor: Colors.gray100,
-  },
-  placeholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  initials: {
-    fontWeight: '700',
-  },
-  verifiedBadge: {
-    position: 'absolute',
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.full,
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    backgroundColor: Colors.success,
-    borderWidth: 2,
-    borderColor: Colors.white,
-    borderRadius: BorderRadius.full,
-  },
-});
-

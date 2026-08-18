@@ -16,52 +16,78 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { redirectUserByRole } from '@/utils/authNavigation';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const dismissKeyboard = () => Keyboard.dismiss();
 
   const handleLogin = async () => {
     dismissKeyboard();
 
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password.');
-      return;
-    }
-
     setLoading(true);
+    
 
     try {
-      // Tawagin ang Laravel login API endpoint
       const response = await axios.post('http://192.168.1.2:8000/api/login', {
         email: email,
         password: password,
+        rememberme: rememberMe,
       });
 
       if (response.data.status === 'success') {
         const { role } = response.data.user;
+        const { user, profile, token } = response.data;
 
-        Alert.alert('Success', 'Login successful!');
-
-        // Automatic na i-redirect base sa role na nakuha mula sa database
-        if (role === 'student') {
-          router.replace('/students/(tabs)/home');
-        } else if (role === 'employer') {
-          router.replace('/employer/(tabs)/dashboard?type=business');
-        } else if (role === 'household') {
-          router.replace('/employer/(tabs)/dashboard?type=household');
+        await AsyncStorage.setItem('userToken', token);
+        await AsyncStorage.setItem('userData', JSON.stringify(user));
+        if (profile) {
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
+        Alert.alert('Success', 'Login successful!');
+        redirectUserByRole(role);
       }
     } catch (error: any) {
       console.error(error);
-      const errorMsg = error.response?.data?.message || 'Invalid credentials or connection error.';
-      Alert.alert('Login Failed', errorMsg);
+      const responseData = error.response?.data;
+
+      // I-reset muna ang errors
+      setEmailError('');
+      setPasswordError('');
+
+      if (responseData) {
+        if (responseData.errors) {
+          if (responseData.errors.email) {
+            setEmailError(responseData.errors.email[0]);
+          }
+          if (responseData.errors.password) {
+            setPasswordError(responseData.errors.password[0]);
+          }
+        }
+        // 2. Kung 404 Not Found (Maling Email / Hindi nakarehistro)
+        else if (error.response?.status === 404 || responseData.message?.toLowerCase().includes('email') || responseData.message?.toLowerCase().includes('exist')) {
+          setEmailError(responseData.message);
+        }
+        // 3. Kung 401 Unauthorized (Maling Password)
+        else if (error.response?.status === 401 || responseData.message?.toLowerCase().includes('password')) {
+          setPasswordError(responseData.message);
+        }
+        // 4. Iba pang uri ng error
+        else {
+          Alert.alert('Login Failed', responseData.message || 'Invalid credentials.');
+        }
+      } else {
+        Alert.alert('Login Failed', 'Connection error. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      setLoading(false); 
     }
   };
 
@@ -80,8 +106,8 @@ export default function LoginScreen() {
           bounces={false}
         >
           {/* Back button */}
-          <TouchableOpacity 
-            onPress={() => router.back()} 
+          <TouchableOpacity
+            onPress={() => router.back()}
             className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mb-6"
           >
             <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
@@ -89,7 +115,7 @@ export default function LoginScreen() {
 
           {/* Logo */}
           <View className="flex-row items-center gap-3 mb-6">
-            <View 
+            <View
               style={{ backgroundColor: Colors.primary + '15' }}
               className="w-12 h-12 rounded-full items-center justify-center"
             >
@@ -107,16 +133,19 @@ export default function LoginScreen() {
               label="Email"
               placeholder="Enter your email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => { setEmail(text); setEmailError(''); }} 
+              error={emailError} // 
               keyboardType="email-address"
               autoCapitalize="none"
               icon="email"
             />
+
             <InputField
               label="Password"
               placeholder="Enter your password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => { setPassword(text); setPasswordError(''); }} 
+              error={passwordError} // 
               isPassword
               icon="lock"
             />
@@ -127,8 +156,8 @@ export default function LoginScreen() {
                 className="flex-row items-center gap-2"
                 onPress={() => setRememberMe(!rememberMe)}
               >
-                <View 
-                  style={{ 
+                <View
+                  style={{
                     borderColor: Colors.gray400,
                     ...(rememberMe ? { backgroundColor: Colors.primary, borderColor: Colors.primary } : {})
                   }}
@@ -144,7 +173,7 @@ export default function LoginScreen() {
             </View>
 
             <PrimaryButton
-              title={loading ? "Loading..." : "Login"}
+              title={loading ? "Logging In" : "Login"}
               onPress={handleLogin}
               size="large"
               style={{ marginTop: 16 }}
@@ -152,7 +181,7 @@ export default function LoginScreen() {
             />
 
             {/* Google Login */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={{ borderColor: Colors.border }}
               className="flex-row items-center justify-center gap-2 bg-white border-[1.5px] rounded-2xl py-[14px] mt-4"
             >

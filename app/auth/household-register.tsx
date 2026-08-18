@@ -32,7 +32,16 @@ export default function RegisterHouseholdScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Live Password Checkers
+  const hasUpper = /[A-Z]/.test(password);
+  const hasMinLength = password.length >= 8;
+  const hasNumber = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
 
   // Modal Visibility
   const [genderModalVisible, setGenderModalVisible] = useState(false);
@@ -56,20 +65,34 @@ export default function RegisterHouseholdScreen() {
 
   // Konekta sa Laravel Backend gamit ang Axios
   const handleRegister = async () => {
-    if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all account credentials.');
-      return;
+    // I-reset muna ang mga error
+    setEmailError('');
+    setPasswordError('');
+    setConfirmPasswordError('');
+
+    let hasError = false;
+
+    if (!email) {
+      setEmailError('Email address is required.');
+      hasError = true;
+    }
+
+    if (!hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar) {
+      setPasswordError('Please meet all password requirements.');
+      hasError = true;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
-      return;
+      setConfirmPasswordError('Passwords do not match.');
+      hasError = true;
     }
+
+    if (hasError) return; // Huwag ituloy kung may error sa form
 
     setLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.2:8000/api/register', {
+      const response = await axios.post('http://192.168.1.2:8000/api/register/household', {
         role: 'household',
         first_name: firstName,
         middle_name: middleName,
@@ -87,17 +110,24 @@ export default function RegisterHouseholdScreen() {
 
       if (response.data.status === 'success') {
         Alert.alert('Success', 'Household account created successfully!');
-        router.replace('/employer/dashboard?type=household'); // <--- Itinuro sa tamang shared dashboard
+        router.replace('/employer/dashboard?type=household');
       }
     } catch (error: any) {
       console.error('FULL AXIOS ERROR:', error.response?.data || error);
       
-      const serverMsg = error.response?.data?.message 
-        || (error.response?.data?.errors ? Object.values(error.response.data.errors).flat().join('\n') : null)
-        || error.message 
-        || 'Something went wrong during registration.';
-        
-      Alert.alert('Registration Failed', serverMsg);
+      // Kung galing sa Laravel backend ang validation error (422)
+      if (error.response && error.response.status === 422) {
+        const errors = error.response.data.errors;
+        if (errors.email) setEmailError(errors.email[0]);
+        if (errors.password) setPasswordError(errors.password[0]);
+      } else {
+        const serverMsg = error.response?.data?.message 
+          || (error.response?.data?.errors ? Object.values(error.response.data.errors).flat().join('\n') : null)
+          || error.message 
+          || 'Something went wrong during registration.';
+          
+        Alert.alert('Registration Failed', serverMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -190,9 +220,83 @@ export default function RegisterHouseholdScreen() {
       {/* --- STEP 3: ACCOUNT SECURITY --- */}
       {step === 3 && (
         <View>
-          <InputField label="Email Address" placeholder="Enter your email" keyboardType="email-address" autoCapitalize="none" icon="email" value={email} onChangeText={setEmail} />
-          <InputField label="Password" placeholder="Create a password" isPassword icon="lock" value={password} onChangeText={setPassword} />
-          <InputField label="Confirm Password" placeholder="Confirm your password" isPassword icon="lock" value={confirmPassword} onChangeText={setConfirmPassword} />
+          <InputField
+            label="Email Address"
+            placeholder="Enter your email"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            icon="email"
+            value={email}
+            onChangeText={(text) => { setEmail(text); setEmailError(''); }}
+            error={emailError} 
+          />
+
+          <InputField
+            label="Password"
+            placeholder="Create a password"
+            isPassword
+            icon="lock"
+            value={password}
+            onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
+            error={passwordError} 
+          />
+
+          {/* Live requirement checklist */}
+          <View className="mb-4 px-1 gap-1">
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasMinLength ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasMinLength ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                At least 8 characters long
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasNumber ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasNumber ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasNumber ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                Contains at least one number (0-9)
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasUpper ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasUpper ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasUpper ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                Contains an Uppercase Letter
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons
+                name={hasSpecialChar ? "check-circle" : "radio-button-unchecked"}
+                size={16}
+                color={hasSpecialChar ? "#16a34a" : "#9ca3af"}
+              />
+              <Text className={`text-xs ${hasSpecialChar ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                Contains a special character (e.g., @, #, $)
+              </Text>
+            </View>
+          </View>
+
+          <InputField
+            label="Confirm Password"
+            placeholder="Confirm your password"
+            isPassword
+            icon="lock"
+            value={confirmPassword}
+            onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
+            error={confirmPasswordError} 
+          />
 
           <PrimaryButton
             title={loading ? "Creating Account..." : "CREATE ACCOUNT"}

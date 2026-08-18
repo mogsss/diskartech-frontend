@@ -3,19 +3,87 @@ import Badge from '@/components/ui/Badge';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 
 export default function SharedDashboardScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
 
-  // Dynamic data batay sa kung anong uri ng hirer ang pumasok
+  const [displayName, setDisplayName] = useState(isHousehold ? 'Villa Family Residence' : "Employer Dashboard");
+  const [avatarInitials, setAvatarInitials] = useState(isHousehold ? 'VF' : 'MD');
+  const [profileData, setProfileData] = useState<any>(null);
+  const [isVerified, setIsVerified] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Kukunin natin ang data mula sa AsyncStorage at susuriin ang pangalan, initials, at verification status
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchProfile = async () => {
+      try {
+        setLoadingProfile(true);
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        console.log('NAKUHA SA ASYNCSTORAGE SA DASHBOARD:', storedProfile);
+
+        if (storedProfile && isMounted) {
+          const profile = JSON.parse(storedProfile);
+          setProfileData(profile);
+          
+          // Suriin ang totoong isVerified status galing sa database/storage
+          const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+          setIsVerified(verifiedStatus);
+
+          let resolvedName = '';
+          if (isHousehold) {
+            resolvedName = profile.household_name || profile.name || '';
+            if (resolvedName) {
+              setDisplayName(resolvedName);
+            }
+          } else {
+            resolvedName = profile.employer_name || profile.business_name || profile.name || '';
+            if (resolvedName) {
+              setDisplayName(resolvedName);
+            }
+          }
+
+          // Kumuha ng unang letra ng First Name at unang letra ng Last Name para sa initials
+          const nameParts = resolvedName.trim().split(' ');
+          let initials = '';
+          if (nameParts.length >= 2) {
+            initials = (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
+          } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
+            initials = nameParts[0].substring(0, 2).toUpperCase();
+          } else {
+            initials = isHousehold ? 'VF' : 'MD';
+          }
+          setAvatarInitials(initials);
+        }
+      } catch (error) {
+        console.error('Error loading dashboard profile:', error);
+      } finally {
+        if (isMounted) {
+          setLoadingProfile(false);
+        }
+      }
+    };
+
+    fetchProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [type]);
+
+  // Dynamic data batay sa kung anong uri ng hirer ang pumasok at verification status
   const headerInfo = {
     greeting: isHousehold ? 'Magandang Araw! 👋' : 'Good Morning! 👋',
-    name: isHousehold ? 'Villa Family Residence' : "McDonald's SM North",
-    badgeText: isHousehold ? 'Verified Household' : 'Verified Business',
-    avatarInitials: isHousehold ? 'VF' : 'MD',
+    name: displayName,
+    badgeText: isVerified 
+      ? (isHousehold ? 'Verified Household' : 'Verified Business') 
+      : 'For Verification',
+    avatarInitials: avatarInitials,
   };
 
   const stats = isHousehold
@@ -32,12 +100,12 @@ export default function SharedDashboardScreen() {
         { icon: 'check-circle', label: 'Hired', value: '8', color: '#D32F2F' },
       ];
 
-      const quickActions = [
-        { icon: 'add-circle', label: isHousehold ? 'Post Opening' : 'Post a Job', color: '#D32F2F', route: '/employer/job-posting' as const },
-        { icon: 'people', label: 'Applicants', color: '#2196F3', route: '/employer/applicants-list' as const },
-        { icon: 'chat', label: 'Messages', color: '#4CAF50', route: '/chat' as const },
-        { icon: 'verified', label: 'Verification', color: '#FF9800', route: `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as const },
-      ];
+  const quickActions = [
+    { icon: 'add-circle', label: isHousehold ? 'Post Opening' : 'Post a Job', color: '#D32F2F', route: '/employer/job-posting' as const },
+    { icon: 'people', label: 'Applicants', color: '#2196F3', route: '/employer/applicants-list' as const },
+    { icon: 'chat', label: 'Messages', color: '#4CAF50', route: '/chat' as const },
+    { icon: 'verified', label: 'Verification', color: '#FF9800', route: `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as const },
+  ];
 
   const recentList = isHousehold
     ? [
@@ -63,6 +131,14 @@ export default function SharedDashboardScreen() {
         { title: 'Service Crew (Night)', applicants: 8, status: 'closed' as const, salary: '₱85 - ₱110/hr', icon: 'work' },
       ];
 
+  if (loadingProfile) {
+    return (
+      <View className="flex-1 justify-center items-center bg-[#F8FAFC]">
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-[#F8FAFC]">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="p-6 pb-10">
@@ -73,8 +149,14 @@ export default function SharedDashboardScreen() {
             <Text className="text-xl font-bold text-slate-900">{headerInfo.greeting}</Text>
             <Text className="text-sm text-slate-500 mt-0.5">{headerInfo.name}</Text>
             <View className="flex-row items-center gap-1 mt-1">
-              <MaterialIcons name="verified" size={14} color={Colors.verified} />
-              <Text className="text-xs text-emerald-600 font-semibold">{headerInfo.badgeText}</Text>
+              <MaterialIcons 
+                name={isVerified ? "verified" : "hourglass-empty"} 
+                size={14} 
+                color={isVerified ? Colors.verified : '#FF9800'} 
+              />
+              <Text className={`text-xs font-semibold ${isVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {headerInfo.badgeText}
+              </Text>
             </View>
           </View>
           

@@ -3,20 +3,22 @@ import Badge from '@/components/ui/Badge';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function EmployerProfileScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
 
-  // Dynamic values para sa Business vs Household
-  const profileData = {
+  const [isVerified, setIsVerified] = useState(false);
+
+  const [profileData, setProfileData] = useState({
     title: isHousehold ? 'Household Profile' : 'Business Profile',
     name: isHousehold ? 'Villa Family Residence' : "McDonald's SM North",
-    email: isHousehold ? 'villa.family@example.com' : 'mcdonalds.smnorth@example.com',
+    email: 'Loading...',
     badgeText: isHousehold ? 'Verified Household' : 'Verified Business',
-    avatarInitials: isHousehold ? 'VF' : "McDonald's SM North",
+    avatarInitials: isHousehold ? 'VF' : 'MD',
     infoTypeLabel: isHousehold ? 'Household Type' : 'Business Type',
     infoTypeValue: isHousehold ? 'Residential / Family' : 'Food & Beverage / Fast Food',
     locationLabel: isHousehold ? 'Home Address' : 'Branch Location',
@@ -24,7 +26,55 @@ export default function EmployerProfileScreen() {
     contactNumber: '+63 912 345 6789',
     permitLabel: isHousehold ? 'Government ID' : 'Tax ID / Permit',
     permitValue: isHousehold ? 'Valid ID Verified' : 'Verified & Registered',
-  };
+  });
+
+  useEffect(() => {
+    const fetchStoredProfile = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('userData');
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          const user = storedUser ? JSON.parse(storedUser) : {};
+
+          const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+          setIsVerified(verifiedStatus);
+
+          const actualName = isHousehold 
+            ? (profile.household_name || profile.name || 'Villa Family Residence') 
+            : (profile.employer_name || profile.business_name || profile.name || "McDonald's SM North");
+
+          // Kumuha ng unang letra ng First Name at unang letra ng Last Name para sa initials
+          const nameParts = actualName.trim().split(' ');
+          let initials = '';
+          if (nameParts.length >= 2) {
+            initials = (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
+          } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
+            initials = nameParts[0].substring(0, 2).toUpperCase();
+          } else {
+            initials = isHousehold ? 'VF' : 'MD';
+          }
+
+          setProfileData((prev) => ({
+            ...prev,
+            name: actualName,
+            email: user.email || prev.email,
+            avatarInitials: initials,
+            locationValue: profile.location || profile.detailed_address || prev.locationValue,
+            contactNumber: profile.contact_number || profile.cp_number || prev.contactNumber,
+            badgeText: verifiedStatus 
+              ? (isHousehold ? 'Verified Household' : 'Verified Business') 
+              : 'For Verification',
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading profile from storage:', error);
+      }
+    };
+
+    fetchStoredProfile();
+  }, [isHousehold]);
 
   const menuItems = [
     { icon: 'business', label: isHousehold ? 'Household Details' : 'Business Details', route: '#' },
@@ -34,6 +84,19 @@ export default function EmployerProfileScreen() {
     { icon: 'info-outline', label: 'About DiskarTech', route: '#' },
     { icon: 'logout', label: 'Logout', route: '/auth/welcome', danger: true },
   ];
+
+  const handleMenuPress = async (route: string) => {
+    if (route === '/auth/welcome') {
+      try {
+        await AsyncStorage.clear();
+      } catch (error) {
+        console.error('Error clearing storage on logout:', error);
+      }
+      router.replace(route as any);
+    } else if (route !== '#') {
+      router.push(route as any);
+    }
+  };
 
   return (
     <ScrollView className="flex-1 bg-[#F8FAFC]" showsVerticalScrollIndicator={false}>
@@ -49,7 +112,7 @@ export default function EmployerProfileScreen() {
             uri=""
             name={profileData.avatarInitials}
             size={80}
-            verified={true}
+            verified={isVerified}
           />
           <TouchableOpacity className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-red-600 items-center justify-center border-2 border-white">
             <MaterialIcons name="camera-alt" size={18} color={Colors.white} />
@@ -60,13 +123,13 @@ export default function EmployerProfileScreen() {
         
         <Badge 
           text={profileData.badgeText} 
-          variant="success" 
-          icon="verified" 
+          variant={isVerified ? "success" : "warning"} 
+          icon={isVerified ? "verified" : "hourglass-empty"} 
           style={{ marginTop: 8, alignSelf: 'center' }} 
         />
       </View>
 
-      {/* Subscription Plan Card - Ipapakita lang kung Business Employer, Itatago kung Household */}
+      {/* Subscription Plan Card */}
       {!isHousehold && (
         <View className="bg-white mx-6 rounded-2xl p-5 shadow-sm mb-4 border border-red-100 flex-row items-center justify-between">
           <View className="flex-1 mr-3">
@@ -105,13 +168,7 @@ export default function EmployerProfileScreen() {
             className={`flex-row items-center p-4 border-b border-gray-100 gap-4 ${
               index === menuItems.length - 1 ? 'border-b-0' : ''
             }`}
-            onPress={() => {
-              if (item.route === '/auth/welcome') {
-                router.replace(item.route as any);
-              } else if (item.route !== '#') {
-                router.push(item.route as any);
-              }
-            }}
+            onPress={() => handleMenuPress(item.route)}
           >
             <MaterialIcons
               name={item.icon as any}

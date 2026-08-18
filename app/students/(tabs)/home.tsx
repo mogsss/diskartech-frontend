@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,33 @@ import { Colors } from '@/constants/colors';
 import JobCard from '@/components/ui/JobCard';
 import CategoryCard from '@/components/ui/CategoryCard';
 import SearchBar from '@/components/ui/SearchBar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { categories, jobs, featuredJobs, nearbyJobs, recommendedJobs, recentJobs } from '@/data/jobs';
 
 export default function HomeScreen() {
+  const [studentName, setStudentName] = useState('Student');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string | null>(null); // Pwedeng maging section name o category name
+
+  useEffect(() => {
+    const fetchStudentProfile = async () => {
+      try {
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          // Base sa AuthController mo, ang student name ay nakalagay sa 'student_name'
+          if (profile && profile.student_name) {
+            const firstName = profile.student_name.split(' ')[0]; // Kunin ang unang pangalan
+            setStudentName(firstName);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
+    };
+
+    fetchStudentProfile();
+  }, []);
 
   const handleJobPress = (jobId: string) => {
     router.push(`/students/job-details?id=${jobId}`);
@@ -53,7 +75,8 @@ export default function HomeScreen() {
       {/* Greeting */}
       <View className="flex-row justify-between items-center px-6 pt-12 pb-4">
         <View>
-          <Text className="text-2xl font-bold text-slate-900">Hello, Junnyl 👋</Text>
+          {/* Dito natin ginamit ang dynamic variable */}
+          <Text className="text-2xl font-bold text-slate-900">Hello, {studentName} 👋</Text>
           <Text className="text-xs text-slate-500 mt-[2px]">Find your perfect student job today!</Text>
         </View>
         <TouchableOpacity onPress={() => router.push('/notifications')}>
