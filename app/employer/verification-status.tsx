@@ -7,6 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance
 
 export default function VerificationStatusScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
@@ -15,36 +16,29 @@ export default function VerificationStatusScreen() {
   const [hasValidId, setHasValidId] = useState(false);
   const [hasCertificate, setHasCertificate] = useState(false);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     const checkVerificationDocs = async () => {
       try {
-        const token = await AsyncStorage.getItem('userToken');
+        // 👈 Ginagamit na ang api.get (hindi na kailangan ang manual token headers)
+        const response = await api.get('/user/profile');
+        const data = response.data;
+        const profile = data.profile;
         
-        const response = await fetch('http://192.168.1.2:8000/api/user/profile', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
-        });
+        if (profile) {
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
 
-        if (response.ok) {
-          const data = await response.json();
-          const profile = data.profile;
-          
-          if (profile) {
-            await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-
-            if (isHousehold) {
-              setHasValidId(!!profile.valid_id_path);
-            } else {
-              setHasValidId(!!profile.valid_id_path);
-              setHasCertificate(!!profile.employer_certificate_path);
-            }
-
-            setRejectionReason(profile.rejection_reason || null);
+          if (isHousehold) {
+            setHasValidId(!!profile.valid_id_path);
+          } else {
+            setHasValidId(!!profile.valid_id_path);
+            setHasCertificate(!!profile.employer_certificate_path);
           }
+
+          setRejectionReason(profile.rejection_reason || null);
+          setIsVerified(profile.isVerified === 1 || profile.isVerified === true);
         }
       } catch (error) {
         console.error('Error checking verification status:', error);
@@ -68,7 +62,6 @@ export default function VerificationStatusScreen() {
       setIsUploading(true);
 
       const file = result.assets[0];
-      const token = await AsyncStorage.getItem('userToken');
 
       const formData = new FormData();
       formData.append('type', isHousehold ? 'household' : 'employer');
@@ -79,44 +72,40 @@ export default function VerificationStatusScreen() {
         type: file.mimeType || 'application/octet-stream',
       } as any);
 
-      const response = await fetch('http://192.168.1.2:8000/api/upload-verification-doc', {
-        method: 'POST',
+      // 👈 Ginagamit na ang api.post para sa pag-upload ng file
+      const response = await api.post('/upload-verification-doc', formData, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
         },
-        body: formData,
       });
 
-      const data = await response.json();
+      const data = response.data;
 
-      if (response.ok) {
-        Alert.alert('Success', 'Document uploaded successfully!');
-        await AsyncStorage.setItem('userProfile', JSON.stringify(data.profile));
-        
-        setRejectionReason(null);
+      Alert.alert('Success', 'Document uploaded successfully!');
+      await AsyncStorage.setItem('userProfile', JSON.stringify(data.profile));
+      
+      setRejectionReason(null);
+      setIsVerified(false);
 
-        if (documentField === 'valid_id_path') {
-          setHasValidId(true);
-        } else {
-          setHasCertificate(true);
-        }
+      if (documentField === 'valid_id_path') {
+        setHasValidId(true);
       } else {
-        Alert.alert('Error', data.message || 'Upload failed.');
+        setHasCertificate(true);
       }
 
     } catch (error: any) {
-      console.error('Detailed Upload Error:', error);
-      Alert.alert('Error', 'Upload failed: ' + (error.message || 'Unknown error'));
+      console.error('Detailed Upload Error:', error.response?.data || error);
+      const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+      Alert.alert('Error', 'Upload failed: ' + errorMsg);
     } finally {
       setIsUploading(false);
     }
   };
 
-  const isRejected = !!rejectionReason;
-  const isSubmitted = isHousehold 
+  const isRejected = !isVerified && !!rejectionReason;
+  const isSubmitted = !isVerified && (isHousehold 
     ? (hasValidId && !isRejected) 
-    : (hasValidId && hasCertificate && !isRejected);
+    : (hasValidId && hasCertificate && !isRejected));
 
   return (
     <View className="flex-1 bg-[#F8FAFC]">
@@ -137,72 +126,76 @@ export default function VerificationStatusScreen() {
         <View className="bg-white rounded-2xl p-6 items-center shadow-md mb-4">
           <View 
             style={{ 
-              backgroundColor: isRejected 
-                ? '#EF444415' 
-                : (isSubmitted ? Colors.warning + '15' : Colors.gray200) 
+              backgroundColor: isVerified 
+                ? '#10B98115' 
+                : (isRejected ? '#EF444415' : (isSubmitted ? Colors.warning + '15' : Colors.gray200)) 
             }}
             className="w-20 h-20 rounded-full items-center justify-center mb-4"
           >
             <MaterialIcons 
-              name={isRejected ? "error-outline" : (isSubmitted ? "hourglass-empty" : "assignment-late")} 
+              name={isVerified ? "verified" : (isRejected ? "error-outline" : (isSubmitted ? "hourglass-empty" : "assignment-late"))} 
               size={44} 
-              color={isRejected ? '#EF4444' : (isSubmitted ? Colors.warning : Colors.gray500)} 
+              color={isVerified ? '#10B981' : (isRejected ? '#EF4444' : (isSubmitted ? Colors.warning : Colors.gray500))} 
             />
           </View>
 
           <Text className="text-xl font-bold text-slate-900 mb-2">
-            {isRejected ? 'Verification Rejected' : (isSubmitted ? 'Verification Pending' : 'Documents Required')}
+            {isVerified ? 'Account Verified!' : (isRejected ? 'Verification Rejected' : (isSubmitted ? 'Verification Pending' : 'Documents Required'))}
           </Text>
 
           <Text className="text-base text-slate-500 text-center mb-6 leading-[22px]">
-            {isRejected
-              ? 'Some of your uploaded documents were rejected. Please check the remarks and re-upload valid documents using the button below.'
-              : (isSubmitted
-                ? (isHousehold
-                    ? 'Your valid ID is currently being reviewed. This usually takes 1-2 business days.'
-                    : 'Your account and business documents are currently being reviewed. This usually takes 1-2 business days.')
-                : 'Please upload the required verification documents to activate and verify your account.')}
+            {isVerified
+              ? 'Congratulations! Your account and documents have been successfully verified and approved by the admin.'
+              : (isRejected
+                ? 'Some of your uploaded documents were rejected. Please check the remarks and re-upload valid documents using the button below.'
+                : (isSubmitted
+                  ? (isHousehold
+                      ? 'Your valid ID is currently being reviewed. This usually takes 1-2 business days.'
+                      : 'Your account and business documents are currently being reviewed. This usually takes 1-2 business days.')
+                  : 'Please upload the required verification documents to activate and verify your account.'))}
           </Text>
           
           {/* Progress Timeline */}
           <View className="w-full items-center px-4">
             <View className="flex-row items-center w-full mb-1">
-              <View className={`w-7 h-7 rounded-full items-center justify-center mr-4 ${isSubmitted || isRejected ? 'bg-emerald-600' : 'bg-gray-200'}`}>
+              <View className={`w-7 h-7 rounded-full items-center justify-center mr-4 ${isSubmitted || isRejected || isVerified ? 'bg-emerald-600' : 'bg-gray-200'}`}>
                 <MaterialIcons name="check" size={16} color={Colors.white} />
               </View>
               <Text className="text-sm font-semibold text-slate-900">Documents Submitted</Text>
             </View>
 
-            <View className={`w-[2px] h-5 ml-[13px] my-1 ${isSubmitted || isRejected ? 'bg-emerald-600' : 'bg-gray-200'}`} />
+            <View className={`w-[2px] h-5 ml-[13px] my-1 ${isSubmitted || isRejected || isVerified ? 'bg-emerald-600' : 'bg-gray-200'}`} />
 
             <View className="flex-row items-center w-full mb-1">
               <View 
-                style={{ backgroundColor: isRejected ? '#EF4444' : (isSubmitted ? Colors.warning : Colors.gray200) }}
+                style={{ backgroundColor: isVerified ? '#10B981' : (isRejected ? '#EF4444' : (isSubmitted ? Colors.warning : Colors.gray200)) }}
                 className="w-7 h-7 rounded-full items-center justify-center mr-4"
               >
                 <MaterialIcons 
-                  name={isRejected ? "close" : "hourglass-empty"} 
+                  name={isVerified || isSubmitted ? "check" : (isRejected ? "close" : "hourglass-empty")} 
                   size={16} 
                   color={Colors.white} 
                 />
               </View>
-              <Text style={{ color: isRejected ? '#EF4444' : (isSubmitted ? Colors.warning : Colors.gray400) }} className="text-sm font-semibold">
-                {isRejected ? 'Action Required (Rejected)' : 'Under Review'}
+              <Text style={{ color: isVerified ? '#10B981' : (isRejected ? '#EF4444' : (isSubmitted ? Colors.warning : Colors.gray400)) }} className="text-sm font-semibold">
+                {isVerified ? 'Approved & Reviewed' : (isRejected ? 'Action Required (Rejected)' : 'Under Review')}
               </Text>
             </View>
 
-            <View className={`w-[2px] h-5 ml-[13px] my-1 bg-gray-200`} />
+            <View className={`w-[2px] h-5 ml-[13px] my-1 ${isVerified ? 'bg-emerald-600' : 'bg-gray-200'}`} />
 
             <View className="flex-row items-center w-full mb-1">
-              <View className="w-7 h-7 rounded-full items-center justify-center mr-4 bg-gray-200">
-                <MaterialIcons name="check" size={16} color={Colors.gray400} />
+              <View className={`w-7 h-7 rounded-full items-center justify-center mr-4 ${isVerified ? 'bg-emerald-600' : 'bg-gray-200'}`}>
+                <MaterialIcons name="check" size={16} color={isVerified ? Colors.white : Colors.gray400} />
               </View>
-              <Text className="text-sm font-semibold text-gray-400">Verified</Text>
+              <Text style={{ color: isVerified ? '#10B981' : Colors.gray400 }} className="text-sm font-semibold">
+                Verified
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Rejection Reason Banner (Lalabas lang kapag rejected) */}
+        {/* Rejection Reason Banner */}
         {isRejected && (
           <View className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
             <View className="flex-row items-center mb-1">
@@ -213,58 +206,60 @@ export default function VerificationStatusScreen() {
           </View>
         )}
 
-        {/* Uploaded Documents List */}
-        <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
-          <Text className="text-lg font-bold text-slate-900 mb-4">Uploaded Documents</Text>
-          
-          {/* Government Valid ID */}
-          <View className="flex-row items-center gap-4 py-3 border-b border-gray-100">
-            <MaterialIcons 
-              name="description" 
-              size={24} 
-              color={hasValidId ? (isRejected ? '#EF4444' : Colors.success) : Colors.gray400} 
-            />
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-slate-900">Government Valid ID</Text>
-              <Text className="text-xs text-slate-500 mt-0.5">
-                {isRejected ? 'Rejected - Needs re-upload' : (hasValidId ? 'Uploaded & Submitted' : 'Not yet uploaded')}
-              </Text>
-            </View>
-            <TouchableOpacity 
-              onPress={() => handleUploadDocument('valid_id_path')} 
-              className="bg-gray-100 px-3 py-1.5 rounded-lg"
-            >
-              <Text className="text-xs font-bold text-red-600">
-                {isRejected ? 'Re-upload' : (hasValidId ? 'Change' : 'Upload')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Business Permit (Para lang sa Business Employer) */}
-          {!isHousehold && (
-            <View className="flex-row items-center gap-4 py-3">
+        {/* Uploaded Documents List - Lalabas lang kung HINDI pa verified */}
+        {!isVerified && (
+          <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
+            <Text className="text-lg font-bold text-slate-900 mb-4">Uploaded Documents</Text>
+            
+            {/* Government Valid ID */}
+            <View className="flex-row items-center gap-4 py-3 border-b border-gray-100">
               <MaterialIcons 
                 name="description" 
                 size={24} 
-                color={hasCertificate ? (isRejected ? '#EF4444' : Colors.success) : Colors.gray400} 
+                color={hasValidId ? (isRejected ? '#EF4444' : Colors.success) : Colors.gray400} 
               />
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-slate-900">Business Permit / Certificate</Text>
+                <Text className="text-sm font-semibold text-slate-900">Government Valid ID</Text>
                 <Text className="text-xs text-slate-500 mt-0.5">
-                  {isRejected ? 'Rejected - Needs re-upload' : (hasCertificate ? 'Uploaded & Submitted' : 'Not yet uploaded')}
+                  {isRejected ? 'Rejected - Needs re-upload' : (hasValidId ? 'Uploaded & Submitted' : 'Not yet uploaded')}
                 </Text>
               </View>
               <TouchableOpacity 
-                onPress={() => handleUploadDocument('certificate_path')} 
+                onPress={() => handleUploadDocument('valid_id_path')} 
                 className="bg-gray-100 px-3 py-1.5 rounded-lg"
               >
                 <Text className="text-xs font-bold text-red-600">
-                  {isRejected ? 'Re-upload' : (hasCertificate ? 'Change' : 'Upload')}
+                  {isRejected ? 'Re-upload' : (hasValidId ? 'Change' : 'Upload')}
                 </Text>
               </TouchableOpacity>
             </View>
-          )}
-        </View>
+
+            {/* Business Permit (Para lang sa Business Employer) */}
+            {!isHousehold && (
+              <View className="flex-row items-center gap-4 py-3">
+                <MaterialIcons 
+                  name="description" 
+                  size={24} 
+                  color={hasCertificate ? (isRejected ? '#EF4444' : Colors.success) : Colors.gray400} 
+                />
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-slate-900">Business Permit / Certificate</Text>
+                  <Text className="text-xs text-slate-500 mt-0.5">
+                    {isRejected ? 'Rejected - Needs re-upload' : (hasCertificate ? 'Uploaded & Submitted' : 'Not yet uploaded')}
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => handleUploadDocument('certificate_path')} 
+                  className="bg-gray-100 px-3 py-1.5 rounded-lg"
+                >
+                  <Text className="text-xs font-bold text-red-600">
+                    {isRejected ? 'Re-upload' : (hasCertificate ? 'Change' : 'Upload')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
       </ScrollView>
 

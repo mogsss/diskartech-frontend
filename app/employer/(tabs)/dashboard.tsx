@@ -17,66 +17,84 @@ export default function SharedDashboardScreen() {
   const [isVerified, setIsVerified] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Kukunin natin ang data mula sa AsyncStorage at susuriin ang pangalan, initials, at verification status
+  // Bagong states para sa totoong stats at posted jobs mula sa API
+  const [postedJobs, setPostedJobs] = useState<any[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+
   useEffect(() => {
     let isMounted = true;
 
-    const fetchProfile = async () => {
+    const fetchDashboardData = async () => {
       try {
-        setLoadingProfile(true);
         const storedProfile = await AsyncStorage.getItem('userProfile');
-        console.log('NAKUHA SA ASYNCSTORAGE SA DASHBOARD:', storedProfile);
-
         if (storedProfile && isMounted) {
           const profile = JSON.parse(storedProfile);
           setProfileData(profile);
+          setIsVerified(profile.isVerified === 1 || profile.isVerified === true);
           
-          // Suriin ang totoong isVerified status galing sa database/storage
-          const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
-          setIsVerified(verifiedStatus);
-
-          let resolvedName = '';
-          if (isHousehold) {
-            resolvedName = profile.household_name || profile.name || '';
-            if (resolvedName) {
-              setDisplayName(resolvedName);
-            }
-          } else {
-            resolvedName = profile.employer_name || profile.business_name || profile.name || '';
-            if (resolvedName) {
-              setDisplayName(resolvedName);
-            }
-          }
-
-          // Kumuha ng unang letra ng First Name at unang letra ng Last Name para sa initials
+          let resolvedName = isHousehold ? (profile.household_name || profile.name || '') : (profile.employer_name || profile.business_name || profile.name || '');
+          if (resolvedName) setDisplayName(resolvedName);
+          
           const nameParts = resolvedName.trim().split(' ');
-          let initials = '';
-          if (nameParts.length >= 2) {
-            initials = (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
-          } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
-            initials = nameParts[0].substring(0, 2).toUpperCase();
-          } else {
-            initials = isHousehold ? 'VF' : 'MD';
-          }
+          let initials = nameParts.length >= 2 ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase() : (isHousehold ? 'VF' : 'MD');
           setAvatarInitials(initials);
+
+          setLoadingProfile(false);
         }
+
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) return;
+
+        // 1. Fetch Dashboard Profile Data
+        const response = await fetch('http://192.168.1.2:8000/api/dashboard-data', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+          },
+        });
+
+        const data = await response.json();
+        if (data.status === 'success' && isMounted) {
+          const freshProfile = data.profile;
+          setProfileData(freshProfile);
+          await AsyncStorage.setItem('userProfile', JSON.stringify(freshProfile));
+          
+          const verifiedStatus = freshProfile.isVerified === 1 || freshProfile.isVerified === true;
+          setIsVerified(verifiedStatus);
+        }
+
+        // 2. Fetch Totoong Posted Jobs ng Employer/Household
+        const jobsResponse = await fetch('http://192.168.1.2:8000/api/employer/my-jobs', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+          },
+        });
+
+        const jobsData = await jobsResponse.json();
+        if (jobsData.status === 'success' && isMounted) {
+          setPostedJobs(jobsData.jobs || []);
+        }
+
       } catch (error) {
-        console.error('Error loading dashboard profile:', error);
+        console.log('Background API fetch note:', error);
       } finally {
         if (isMounted) {
           setLoadingProfile(false);
+          setLoadingJobs(false);
         }
       }
     };
 
-    fetchProfile();
+    fetchDashboardData();
 
     return () => {
       isMounted = false;
     };
   }, [type]);
 
-  // Dynamic data batay sa kung anong uri ng hirer ang pumasok at verification status
   const headerInfo = {
     greeting: isHousehold ? 'Magandang Araw! 👋' : 'Good Morning! 👋',
     name: displayName,
@@ -86,24 +104,18 @@ export default function SharedDashboardScreen() {
     avatarInitials: avatarInitials,
   };
 
-  const stats = isHousehold
-    ? [
-        { icon: 'work', label: 'Posted Openings', value: '2', color: '#2196F3' },
-        { icon: 'people', label: 'Applicants', value: '5', color: '#4CAF50' },
-        { icon: 'rate-review', label: 'Pending Reviews', value: '2', color: '#FF9800' },
-        { icon: 'check-circle', label: 'Hired Help', value: '1', color: '#D32F2F' },
-      ]
-    : [
-        { icon: 'work', label: 'Posted Jobs', value: '12', color: '#2196F3' },
-        { icon: 'people', label: 'Applicants', value: '48', color: '#4CAF50' },
-        { icon: 'rate-review', label: 'Pending Reviews', value: '6', color: '#FF9800' },
-        { icon: 'check-circle', label: 'Hired', value: '8', color: '#D32F2F' },
-      ];
+  // Dynamic stats na gumagamit na ng postedJobs.length para sa Posted Openings
+  const stats = [
+    { icon: 'work', label: 'Posted Openings', value: postedJobs.length.toString(), color: '#2196F3' },
+    { icon: 'people', label: 'Applicants', value: '0', color: '#4CAF50' },
+    { icon: 'rate-review', label: 'Pending Reviews', value: '0', color: '#FF9800' },
+    { icon: 'check-circle', label: 'Hired Help', value: '0', color: '#D32F2F' },
+  ];
 
   const quickActions = [
     { icon: 'add-circle', label: isHousehold ? 'Post Opening' : 'Post a Job', color: '#D32F2F', route: '/employer/job-posting' as const },
     { icon: 'people', label: 'Applicants', color: '#2196F3', route: '/employer/applicants-list' as const },
-    { icon: 'chat', label: 'Messages', color: '#4CAF50', route: '/chat' as const },
+    { icon: 'chat', label: 'Messages', color: '#4CAF50', route: '/employer/(tabs)/messages' as const },
     { icon: 'verified', label: 'Verification', color: '#FF9800', route: `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as const },
   ];
 
@@ -115,20 +127,6 @@ export default function SharedDashboardScreen() {
     : [
         { name: 'Junnyl Mabini', position: 'Service Crew', status: 'pending' as const, avatar: '' },
         { name: 'Ana Santos', position: 'Barista', status: 'accepted' as const, avatar: '' },
-        { name: 'Carlos Reyes', position: 'Sales Associate', status: 'pending' as const, avatar: '' },
-        { name: 'Maria Santos', position: 'Cashier', status: 'rejected' as const, avatar: '' },
-      ];
-
-  const postedList = isHousehold
-    ? [
-        { title: 'Household Kasambahay', applicants: 3, status: 'active' as const, salary: '₱8,000 - ₱10,000/mo', icon: 'home' },
-        { title: 'Family Driver', applicants: 2, status: 'active' as const, salary: '₱12,000 - ₱15,000/mo', icon: 'home' },
-      ]
-    : [
-        { title: 'Service Crew', applicants: 15, status: 'active' as const, salary: '₱75 - ₱95/hr', icon: 'work' },
-        { title: 'Barista', applicants: 28, status: 'active' as const, salary: '₱80 - ₱100/hr', icon: 'work' },
-        { title: 'Cashier', applicants: 12, status: 'active' as const, salary: '₱70 - ₱85/hr', icon: 'work' },
-        { title: 'Service Crew (Night)', applicants: 8, status: 'closed' as const, salary: '₱85 - ₱110/hr', icon: 'work' },
       ];
 
   if (loadingProfile) {
@@ -235,7 +233,7 @@ export default function SharedDashboardScreen() {
           ))}
         </View>
 
-        {/* Posted Jobs / Openings */}
+        {/* Posted Jobs / Openings (Dynamic galing sa API) */}
         <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
           <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
             <View>
@@ -253,29 +251,36 @@ export default function SharedDashboardScreen() {
               </View>
             </TouchableOpacity>
           </View>
-          {postedList.map((job, index) => (
-            <TouchableOpacity key={index} className="flex-row items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
-              <View className="flex-row items-center gap-3 flex-1">
-                <View className="w-10 h-10 rounded-xl bg-red-50 items-center justify-center">
-                  <MaterialIcons name={job.icon as any} size={20} color={Colors.primary} />
+
+          {loadingJobs ? (
+            <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+          ) : postedJobs.length === 0 ? (
+            <Text className="text-slate-500 text-center py-6 text-sm italic">No posted jobs yet.</Text>
+          ) : (
+            postedJobs.map((job) => (
+              <TouchableOpacity key={job.id} className="flex-row items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                <View className="flex-row items-center gap-3 flex-1">
+                  <View className="w-10 h-10 rounded-xl bg-red-50 items-center justify-center">
+                    <MaterialIcons name="work" size={20} color={Colors.primary} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-slate-900">{job.title}</Text>
+                    <Text className="text-xs text-slate-500 mt-0.5">₱{job.salary}</Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">{job.title}</Text>
-                  <Text className="text-xs text-slate-500 mt-0.5">{job.salary}</Text>
+                <View className="items-end gap-1">
+                  <Badge
+                    text={job.status === 'active' ? 'Active' : 'Closed'}
+                    variant={job.status === 'active' ? 'success' : 'error'}
+                  />
+                  <Text className="text-xs text-slate-500">0 applicants</Text>
                 </View>
-              </View>
-              <View className="items-end gap-1">
-                <Badge
-                  text={job.status === 'active' ? 'Active' : 'Closed'}
-                  variant={job.status === 'active' ? 'success' : 'error'}
-                />
-                <Text className="text-xs text-slate-500">{job.applicants} applicants</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
-        {/* Performance Overview (Para sa Business lang) */}
+        {/* Performance Overview */}
         {!isHousehold && (
           <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
             <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">

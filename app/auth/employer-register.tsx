@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import axios from 'axios';
+import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance dito
 
 export default function RegisterEmployerScreen() {
   const [step, setStep] = useState(1);
@@ -60,7 +60,7 @@ export default function RegisterEmployerScreen() {
     }
   };
 
-  // Konekta sa Laravel Backend gamit ang Axios
+  // Konekta sa Laravel Backend gamit ang global Axios instance
   const handleRegister = async () => {
     // I-reset muna ang mga error
     setEmailError('');
@@ -89,7 +89,8 @@ export default function RegisterEmployerScreen() {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.2:8000/api/register/employer', {
+      // 👈 Ginagamit na natin ang 'api' instance
+      const response = await api.post('/register/employer', {
         role: 'employer',
         business_name: businessName,
         business_type: businessType,
@@ -281,12 +282,12 @@ export default function RegisterEmployerScreen() {
             icon="lock"
             value={confirmPassword}
             onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
-            error={confirmPasswordError} // 👈 Dito lalabas ang error sa ilalim ng confirm password
+            error={confirmPasswordError}
           />
 
           <PrimaryButton
             title={loading ? "Creating Account..." : "CREATE ACCOUNT"}
-            onPress={handleRegister} // Tinanggal na natin ang Alert dito dahil handleRegister na ang bahala mag-validate
+            onPress={handleRegister}
             size="large"
             style={{ marginTop: 24, backgroundColor: '#DC2626' }}
             disabled={loading}

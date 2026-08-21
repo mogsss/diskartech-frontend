@@ -10,7 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import axios from 'axios';
+import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance dito
 
 export default function RegisterStudentScreen() {
   const [step, setStep] = useState(1);
@@ -69,7 +69,7 @@ export default function RegisterStudentScreen() {
     }
   };
 
-  // Konekta sa Laravel Backend gamit ang Axios
+  // Konekta sa Laravel Backend gamit ang global Axios instance
   const handleRegister = async () => {
     // I-reset muna ang mga error
     setEmailError('');
@@ -98,7 +98,8 @@ export default function RegisterStudentScreen() {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.2:8000/api/register/student', {
+      // 👈 Ginagamit na natin ang 'api' instance
+      const response = await api.post('/register/student', {
         role: 'student',
         first_name: firstName,
         middle_name: middleName,

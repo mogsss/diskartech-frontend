@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import axios from 'axios';
+import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance dito
 
 export default function RegisterHouseholdScreen() {
   const [step, setStep] = useState(1); // 1: Personal Info, 2: Address & Contact, 3: Account Security
@@ -63,7 +63,7 @@ export default function RegisterHouseholdScreen() {
     }
   };
 
-  // Konekta sa Laravel Backend gamit ang Axios
+  // Konekta sa Laravel Backend gamit ang global Axios instance
   const handleRegister = async () => {
     // I-reset muna ang mga error
     setEmailError('');
@@ -92,7 +92,8 @@ export default function RegisterHouseholdScreen() {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.2:8000/api/register/household', {
+      // 👈 Ginagamit na natin ang 'api' instance
+      const response = await api.post('/register/household', {
         role: 'household',
         first_name: firstName,
         middle_name: middleName,

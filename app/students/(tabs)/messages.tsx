@@ -1,7 +1,5 @@
 import Avatar from '@/components/ui/Avatar';
-import { Colors } from '@/constants/colors';
 import { conversations } from '@/data/messages';
-import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';

@@ -4,31 +4,62 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '@/constants/colors';
 import JobCard from '@/components/ui/JobCard';
-import CategoryCard from '@/components/ui/CategoryCard';
 import SearchBar from '@/components/ui/SearchBar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { categories, jobs, featuredJobs, nearbyJobs, recommendedJobs, recentJobs } from '@/data/jobs';
+import api from '@/api/axios';
 
 export default function HomeScreen() {
   const [studentName, setStudentName] = useState('Student');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string | null>(null); // Pwedeng maging section name o category name
+  const [activeTab, setActiveTab] = useState<'all' | 'nearby' | 'ai_match'>('all');
+
+  const [realNearbyJobs, setRealNearbyJobs] = useState<any[]>([]);
+  const [loadingNearby, setLoadingNearby] = useState(true);
+
+  const [realAllJobs, setRealAllJobs] = useState<any[]>([]);
+  const [loadingAll, setLoadingAll] = useState(true);
+
+  const [aiMatchedJobs, setAiMatchedJobs] = useState<any[]>([]);
+  const [loadingAi, setLoadingAi] = useState(true);
+
+  const getCleanSchedule = (job: any) => {
+    if (job.time_slot) {
+      let days = [];
+      try {
+        days = JSON.parse(job.available_days) || [];
+      } catch (e) {
+        days = [];
+      }
+      return `${days.join(', ')} (${job.time_slot})`;
+    }
+    return 'Flexible';
+  };
+
+  const parseJsonField = (field: any) => {
+    if (!field) return [];
+    if (Array.isArray(field)) return field;
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
 
   useEffect(() => {
-    const fetchStudentProfile = async () => {
+    const fetchStudentData = async () => {
       try {
         const storedProfile = await AsyncStorage.getItem('userProfile');
         if (storedProfile) {
           const profile = JSON.parse(storedProfile);
-          // Base sa AuthController mo, ang student name ay nakalagay sa 'student_name'
           if (profile && profile.student_name) {
-            const firstName = profile.student_name.split(' ')[0]; // Kunin ang unang pangalan
+            const firstName = profile.student_name.split(' ')[0];
             setStudentName(firstName);
           }
         }
@@ -37,45 +68,78 @@ export default function HomeScreen() {
       }
     };
 
-    fetchStudentProfile();
+    const fetchNearbyJobsFromAPI = async () => {
+      try {
+        const response = await api.get('/student/nearby-jobs');
+        if (response.data && response.data.status === 'success') {
+          setRealNearbyJobs(response.data.jobs);
+        }
+      } catch (error) {
+        console.error('Error fetching nearby jobs:', error);
+      } finally {
+        setLoadingNearby(false);
+      }
+    };
+
+    const fetchAllJobsFromAPI = async () => {
+      try {
+        const response = await api.get('/student/all-jobs');
+        if (response.data && response.data.status === 'success') {
+          setRealAllJobs(response.data.jobs);
+        }
+      } catch (error) {
+        console.error('Error fetching all jobs:', error);
+      } finally {
+        setLoadingAll(false);
+      }
+    };
+
+    const fetchAiMatchedJobsFromAPI = async () => {
+      try {
+        const response = await api.get('/student/ai-matched-jobs');
+        if (response.data && response.data.status === 'success') {
+          setAiMatchedJobs(response.data.matched_jobs);
+        }
+      } catch (error) {
+        console.error('Error fetching AI matched jobs:', error);
+      } finally {
+        setLoadingAi(false);
+      }
+    };
+
+    fetchStudentData();
+    fetchNearbyJobsFromAPI();
+    fetchAllJobsFromAPI();
+    fetchAiMatchedJobsFromAPI();
   }, []);
 
   const handleJobPress = (jobId: string) => {
     router.push(`/students/job-details?id=${jobId}`);
   };
 
-  // Aling listahan ang ipapakita depende sa pinindot (See All sections o Category)
-  let displayTitle = '';
-  let displayJobs = [];
+  const filterBySearch = (jobs: any[]) => {
+    if (!searchQuery.trim()) return jobs;
+    return jobs.filter(
+      (job) =>
+        job.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.category?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  };
 
-  if (activeFilter === 'featured') {
-    displayTitle = 'Featured Jobs';
-    displayJobs = featuredJobs;
-  } else if (activeFilter === 'nearby') {
-    displayTitle = 'Nearby Jobs';
-    displayJobs = nearbyJobs;
-  } else if (activeFilter === 'recommended') {
-    displayTitle = 'Recommended For You';
-    displayJobs = recommendedJobs;
-  } else if (activeFilter === 'recent') {
-    displayTitle = 'Recent Jobs';
-    displayJobs = recentJobs;
-  } else if (activeFilter === 'all_categories') {
-    displayTitle = 'All Categories';
-    displayJobs = jobs; // O pwede mong gawan ng sariling view para sa categories list kung gusto mo
-  } else if (activeFilter && activeFilter.startsWith('cat_')) {
-    // Kung kategorya ang pinindot (halimbawa: Food Service)
-    const categoryName = activeFilter.replace('cat_', '');
-    displayTitle = `${categoryName} Jobs`;
-    displayJobs = jobs.filter((job) => job.category.toLowerCase() === categoryName.toLowerCase());
-  }
+  const currentJobsList =
+    activeTab === 'nearby'
+      ? filterBySearch(realNearbyJobs)
+      : activeTab === 'ai_match'
+        ? filterBySearch(aiMatchedJobs)
+        : filterBySearch(realAllJobs);
+
+  const isCurrentLoading =
+    activeTab === 'nearby' ? loadingNearby : activeTab === 'ai_match' ? loadingAi : loadingAll;
 
   const renderHeader = () => (
     <View>
-      {/* Greeting */}
       <View className="flex-row justify-between items-center px-6 pt-12 pb-4">
         <View>
-          {/* Dito natin ginamit ang dynamic variable */}
           <Text className="text-2xl font-bold text-slate-900">Hello, {studentName} 👋</Text>
           <Text className="text-xs text-slate-500 mt-[2px]">Find your perfect student job today!</Text>
         </View>
@@ -86,43 +150,46 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
       </View>
-
-      {/* Search Bar */}
       <View className="px-6 mb-4">
         <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
-          onFilter={() => {}}
+          onFilter={() => { }}
         />
       </View>
 
-      {/* Categories (Ipakita lang kung walang active filter) */}
-      {!activeFilter && (
-        <>
-          <View className="flex-row justify-between items-center px-6 mt-4 mb-2">
-            <Text className="text-lg font-bold text-slate-900">Categories</Text>
-            <TouchableOpacity onPress={() => setActiveFilter('all_categories')}>
-              <Text className="text-sm font-semibold text-red-600">See All</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={categories}
-            renderItem={({ item }) => (
-              <CategoryCard
-                name={item.name}
-                icon={item.icon as any}
-                count={item.count}
-                color={item.color}
-                onPress={() => setActiveFilter(`cat_${item.name}`)} // Dito natin ikinabit ang pagpindot sa kategorya
-              />
-            )}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            className="pl-6 mb-2"
-          />
-        </>
-      )}
+      <View className="flex-row px-6 gap-2 mb-4">
+        <TouchableOpacity
+          onPress={() => setActiveTab('all')}
+          className={`flex-1 py-2.5 rounded-xl border items-center ${activeTab === 'all' ? 'bg-red-600 border-red-600' : 'bg-white border-gray-200'
+            }`}
+        >
+          <Text className={`text-xs font-bold ${activeTab === 'all' ? 'text-white' : 'text-slate-700'}`}>
+            All Jobs
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('nearby')}
+          className={`flex-1 py-2.5 rounded-xl border items-center ${activeTab === 'nearby' ? 'bg-red-600 border-red-600' : 'bg-white border-gray-200'
+            }`}
+        >
+          <Text className={`text-xs font-bold ${activeTab === 'nearby' ? 'text-white' : 'text-slate-700'}`}>
+            Nearby (5km)
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('ai_match')}
+          className={`flex-1 py-2.5 rounded-xl border items-center flex-row justify-center gap-1 ${activeTab === 'ai_match' ? 'bg-red-600 border-red-600' : 'bg-white border-gray-200'
+            }`}
+        >
+          <MaterialIcons name="auto-awesome" size={14} color={activeTab === 'ai_match' ? '#fff' : '#dc2626'} />
+          <Text className={`text-xs font-bold ${activeTab === 'ai_match' ? 'text-white' : 'text-slate-700'}`}>
+            AI Match
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -134,104 +201,64 @@ export default function HomeScreen() {
       >
         {renderHeader()}
 
-        {/* Kung may pinindot na See All o Category, ito ang magpapakita */}
-        {activeFilter ? (
-          <View className="px-6 mt-4">
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-2xl font-bold text-slate-900">{displayTitle}</Text>
-              <TouchableOpacity 
-                onPress={() => setActiveFilter(null)}
-                className="bg-gray-200 px-4 py-2 rounded-full"
-              >
-                <Text className="text-xs font-semibold text-slate-700">Back</Text>
-              </TouchableOpacity>
-            </View>
+        <View className="px-6 mt-2">
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-lg font-bold text-slate-900">
+              {activeTab === 'nearby' ? 'Nearby Openings' : activeTab === 'ai_match' ? 'AI Schedule Matches' : 'All Job Openings'}
+            </Text>
+            <Text className="text-xs text-slate-500">
+              <Text>{currentJobsList.length}</Text>
+              <Text> found</Text>
+            </Text>
+          </View>
 
-            {displayJobs.length > 0 ? (
-              displayJobs.map((job) => (
+          {isCurrentLoading ? (
+            <ActivityIndicator size="large" color="#dc2626" style={{ marginVertical: 40 }} />
+          ) : currentJobsList.length === 0 ? (
+            <View className="items-center justify-center py-12">
+              <MaterialIcons name="work-off" size={48} color="#94a3b8" />
+              <Text className="text-slate-500 text-center mt-3 text-sm">
+                {activeTab === 'ai_match'
+                  ? 'No jobs match your schedule/location preference right now.'
+                  : 'No jobs available.'}
+              </Text>
+            </View>
+          ) : (
+            currentJobsList.map((job) => (
+              <View key={job.id} className="mb-3">
+                {/* AI Badge is temporarily commented out */}
+                {activeTab === 'ai_match' && (
+                  <View className="bg-red-50 px-3 py-1 rounded-t-xl self-start border-t border-x border-red-200 flex-row items-center gap-1">
+                    <MaterialIcons name="auto-awesome" size={12} color="#dc2626" />
+                    <Text className="text-xs font-bold text-red-600">
+                      <Text>{job.match_percentage ?? 0}</Text>
+                      <Text>% Schedule Match</Text>
+                    </Text>
+                  </View>
+                )}
+                {/* JobCard is active */}
                 <JobCard
-                  key={job.id}
-                  job={job}
-                  onPress={() => handleJobPress(job.id)}
-                  onBookmark={() => {}}
+                  job={{
+                    ...job,
+                    jobTitle: job.title,
+                    companyName: job.household?.household_name || job.employer?.employer_name || 'Employer',
+                    salary: `₱${job.salary}`,
+                    location: job.household?.location || job.employer?.location || 'Pinamalayan',
+                    distance: job.distance ? `${parseFloat(job.distance).toFixed(1)} km away` : 'Calculating...',
+                    schedule: getCleanSchedule(job),
+                    workingHours: getCleanSchedule(job),
+                    jobType: 'Part-time',
+                    category: job.category || 'General',
+                    requirements: parseJsonField(job.requirements),
+                    skills: parseJsonField(job.skills),
+                  }}
+                  onPress={() => handleJobPress(job.id.toString())}
                   onApply={() => router.push(`/students/job-details?id=${job.id}`)}
                 />
-              ))
-            ) : (
-              <Text className="text-slate-500 text-center mt-10">No jobs found in this category.</Text>
-            )}
-          </View>
-        ) : (
-          /* Normal Home View (Kapag walang pinipili) */
-          <>
-            {/* Featured Jobs */}
-            <View className="flex-row justify-between items-center px-6 mt-4 mb-2">
-              <Text className="text-lg font-bold text-slate-900">Featured Jobs</Text>
-              <TouchableOpacity onPress={() => setActiveFilter('featured')}>
-                <Text className="text-sm font-semibold text-red-600">See All</Text>
-              </TouchableOpacity>
-            </View>
-            {featuredJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                variant="featured"
-                onPress={() => handleJobPress(job.id)}
-                onBookmark={() => {}}
-                onApply={() => router.push(`/students/job-details?id=${job.id}`)}
-              />
-            ))}
-
-            {/* Nearby Jobs */}
-            <View className="flex-row justify-between items-center px-6 mt-4 mb-2">
-              <Text className="text-lg font-bold text-slate-900">Nearby Jobs</Text>
-              <TouchableOpacity onPress={() => setActiveFilter('nearby')}>
-                <Text className="text-sm font-semibold text-red-600">See All</Text>
-              </TouchableOpacity>
-            </View>
-            {nearbyJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                variant="compact"
-                onPress={() => handleJobPress(job.id)}
-              />
-            ))}
-
-            {/* Recommended Jobs */}
-            <View className="flex-row justify-between items-center px-6 mt-4 mb-2">
-              <Text className="text-lg font-bold text-slate-900">Recommended For You</Text>
-              <TouchableOpacity onPress={() => setActiveFilter('recommended')}>
-                <Text className="text-sm font-semibold text-red-600">See All</Text>
-              </TouchableOpacity>
-            </View>
-            {recommendedJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                onPress={() => handleJobPress(job.id)}
-                onBookmark={() => {}}
-                onApply={() => router.push(`/students/job-details?id=${job.id}`)}
-              />
-            ))}
-
-            {/* Recent Jobs */}
-            <View className="flex-row justify-between items-center px-6 mt-4 mb-2">
-              <Text className="text-lg font-bold text-slate-900">Recent Jobs</Text>
-              <TouchableOpacity onPress={() => setActiveFilter('recent')}>
-                <Text className="text-sm font-semibold text-red-600">See All</Text>
-              </TouchableOpacity>
-            </View>
-            {recentJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                variant="compact"
-                onPress={() => handleJobPress(job.id)}
-              />
-            ))}
-          </>
-        )}
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
     </View>
   );

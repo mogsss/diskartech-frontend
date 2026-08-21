@@ -1,12 +1,10 @@
 import { Colors } from '@/constants/colors';
-import { BorderRadius, Shadow, Spacing, Typography } from '@/constants/typography';
 import { Job } from '@/types';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useRef } from 'react';
 import {
     Animated,
     Image,
-    StyleSheet,
     Text,
     TouchableOpacity,
     View,
@@ -43,90 +41,109 @@ export default function JobCard({ job, onPress, onBookmark, onApply, variant = '
   const isFeatured = variant === 'featured';
 
   return (
-    <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.95}
-        style={[
-          styles.card,
-          Shadow.md,
-          isFeatured && styles.featuredCard,
-        ]}
+        className={`bg-white rounded-2xl p-4 mb-4 overflow-hidden shadow-md border-l-4 ${
+          isFeatured ? 'border-l-red-600' : 'border-l-transparent'
+        }`}
       >
         {/* Gradient top for featured */}
-        {isFeatured && <View style={styles.featuredGradient} />}
+        {isFeatured && <View className="absolute top-0 left-0 right-0 h-1 bg-red-600 rounded-t-2xl" />}
 
         {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Image source={{ uri: job.companyLogo }} style={styles.logo} />
+        <View className="flex-row items-center mb-3">
+          <View className="w-[52px] h-[52px] rounded-xl bg-slate-100 overflow-hidden mr-3">
+            <Image source={{ uri: job.companyLogo }} className="w-[52px] h-[52px] rounded-xl" />
           </View>
-          <View style={styles.headerInfo}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.jobTitle, isFeatured && styles.featuredText]} numberOfLines={1}>
+          <View className="flex-1 mr-3">
+            <View className="flex-row items-center gap-1">
+              <Text className="text-base font-bold text-slate-900 flex-shrink-1" numberOfLines={1}>
                 {job.jobTitle}
               </Text>
               {job.verified && (
                 <MaterialIcons name="verified" size={18} color={Colors.verified} />
               )}
             </View>
-            <Text style={styles.companyName} numberOfLines={1}>{job.companyName}</Text>
+            <Text className="text-xs text-slate-500 mt-0.5" numberOfLines={1}>{job.companyName}</Text>
           </View>
           {!isCompact && (
-            <TouchableOpacity onPress={onBookmark} style={styles.bookmarkBtn}>
+            <TouchableOpacity onPress={onBookmark} className="p-1">
               <MaterialIcons
                 name={job.bookmarked ? 'bookmark' : 'bookmark-border'}
                 size={24}
-                color={job.bookmarked ? Colors.bookmark : Colors.gray400}
+                color={job.bookmarked ? Colors.bookmark : '#94a3b8'}
               />
             </TouchableOpacity>
           )}
         </View>
 
         {/* Details */}
-        <View style={[styles.details, isCompact && styles.compactDetails]}>
-          <View style={styles.detailItem}>
-            <MaterialIcons name="attach-money" size={16} color={Colors.primary} />
-            <Text style={styles.detailText}>{job.salary}</Text>
+        <View className={`flex-row flex-wrap gap-3 mb-3 ${isCompact ? 'gap-2' : ''}`}>
+          <View className="flex-row items-center gap-1">
+            <MaterialIcons name="attach-money" size={16} color="#dc2626" />
+            <Text className="text-xs text-slate-600 font-medium">{job.salary}</Text>
           </View>
-          <View style={styles.detailItem}>
-            <MaterialIcons name="location-on" size={16} color={Colors.gray500} />
-            <Text style={[styles.detailText, styles.locationText]} numberOfLines={1}>{job.distance}</Text>
+          <View className="flex-row items-center gap-1">
+            <MaterialIcons name="location-on" size={16} color="#64748b" />
+            <Text className="text-xs text-slate-600 max-w-[100px]" numberOfLines={1}>{job.distance}</Text>
           </View>
-          <View style={styles.detailItem}>
-            <MaterialIcons name="schedule" size={16} color={Colors.gray500} />
-            <Text style={styles.detailText} numberOfLines={1}>{job.workingHours}</Text>
+          <View className="flex-row items-center gap-1">
+            <MaterialIcons name="schedule" size={16} color="#64748b" />
+            <Text className="text-xs text-slate-600" numberOfLines={1}>{job.workingHours}</Text>
           </View>
         </View>
 
         {/* Location */}
-        <View style={styles.locationRow}>
-          <MaterialIcons name="location-city" size={14} color={Colors.gray400} />
-          <Text style={styles.locationFull} numberOfLines={1}>{job.location}</Text>
+        <View className="flex-row items-center gap-1 mb-3">
+          <MaterialIcons name="location-city" size={14} color="#94a3b8" />
+          <Text className="text-xs text-slate-400 flex-1" numberOfLines={1}>{job.location}</Text>
         </View>
 
         {/* Tags */}
-        <View style={styles.tags}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{job.jobType}</Text>
+        <View className="flex-row flex-wrap gap-1.5 mb-3">
+          <View className="bg-slate-100 px-2.5 py-1 rounded-full">
+            <Text className="text-[11px] font-medium text-slate-600">{job.jobType}</Text>
           </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{job.schedule}</Text>
+          <View className="bg-slate-100 px-2.5 py-1 rounded-full">
+            <Text className="text-[11px] font-medium text-slate-600">{job.schedule}</Text>
           </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{job.category}</Text>
+          <View className="bg-slate-100 px-2.5 py-1 rounded-full">
+            <Text className="text-[11px] font-medium text-slate-600">{job.category}</Text>
           </View>
         </View>
 
+        {/* Requirements Pills */}
+        {job.requirements && job.requirements.length > 0 && (
+          <View className="flex-row flex-wrap gap-1.5 -mt-1 mb-3">
+            {job.requirements.slice(0, 2).map((req, index) => (
+              <View key={index} className="bg-red-50 px-2.5 py-1 rounded-full">
+                <Text className="text-[11px] font-medium text-red-600">{req}</Text>
+              </View>
+            ))}
+            {job.requirements.length > 2 && (
+              <View className="bg-slate-100 px-2.5 py-1 rounded-full">
+                <Text className="text-[11px] font-medium text-slate-600">+{job.requirements.length - 2} more</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Footer */}
         {!isCompact && (
-          <View style={styles.footer}>
-            <Text style={styles.postedDate}>{job.postedDate} • {job.applicants} applicants</Text>
-            <TouchableOpacity onPress={onApply} style={styles.applyBtn}>
-              <Text style={styles.applyBtnText}>Apply Now</Text>
-              <MaterialIcons name="arrow-forward" size={16} color={Colors.white} />
+          <View className="flex-row items-center justify-between border-t border-slate-100 pt-3">
+            <Text className="text-xs text-slate-400">
+              <Text>{job.postedDate || 'Recent'}</Text>
+              <Text> • </Text>
+              <Text>{job.applicants ?? 0}</Text>
+              <Text> applicants</Text>
+            </Text>
+            <TouchableOpacity onPress={onApply} className="flex-row items-center bg-red-600 px-4 py-2 rounded-xl gap-1">
+              <Text className="text-xs font-bold text-white">Apply Now</Text>
+              <MaterialIcons name="arrow-forward" size={16} color="#ffffff" />
             </TouchableOpacity>
           </View>
         )}
@@ -134,144 +151,3 @@ export default function JobCard({ job, onPress, onBookmark, onApply, variant = '
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    overflow: 'hidden',
-  },
-  featuredCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.primary,
-  },
-  featuredGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: Colors.primary,
-     borderRadius: BorderRadius.lg,
-    
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  logoContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.gray100,
-    overflow: 'hidden',
-    marginRight: Spacing.sm,
-  },
-  logo: {
-    width: 52,
-    height: 52,
-    borderRadius: BorderRadius.md,
-  },
-  headerInfo: {
-    flex: 1,
-    marginRight: Spacing.sm,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  jobTitle: {
-    ...Typography.h5,
-    color: Colors.text,
-    flexShrink: 1,
-  },
-  featuredText: {
-    color: Colors.primary,
-  },
-  companyName: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  bookmarkBtn: {
-    padding: Spacing.xs,
-  },
-  details: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  compactDetails: {
-    gap: Spacing.xs,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  detailText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-  },
-  locationText: {
-    maxWidth: 100,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: Spacing.sm,
-  },
-  locationFull: {
-    ...Typography.caption,
-    color: Colors.textLight,
-    flex: 1,
-  },
-  tags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.xs,
-    marginBottom: Spacing.sm,
-  },
-  tag: {
-    backgroundColor: Colors.gray100,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-  },
-  tagText: {
-    ...Typography.tag,
-    color: Colors.textSecondary,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray100,
-    paddingTop: Spacing.sm,
-  },
-  postedDate: {
-    ...Typography.caption,
-    color: Colors.textLight,
-  },
-  applyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    gap: 4,
-  },
-  applyBtnText: {
-    ...Typography.buttonSmall,
-    color: Colors.white,
-  },
-});
-

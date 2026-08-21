@@ -1,10 +1,10 @@
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Tabs, router, useGlobalSearchParams } from 'expo-router';
+import { router, Tabs, useGlobalSearchParams } from 'expo-router';
 import React from 'react';
+import { Platform } from 'react-native';
 
 export default function EmployerTabLayout() {
-  // Kunin ang global param (hal. ?type=household) mula sa kasalukuyang route
   const { type } = useGlobalSearchParams<{ type?: string }>();
   const queryParam = type ? `?type=${type}` : '';
 
@@ -18,8 +18,8 @@ export default function EmployerTabLayout() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#F1F5F9',
-          height: 60,
-          paddingBottom: 8,
+          height: Platform.OS === 'ios' ? 85 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -56,13 +56,7 @@ export default function EmployerTabLayout() {
             <MaterialIcons name="chat" size={size} color={color} />
           ),
         }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            // Kung ang messages mo ay dumidiretso sa global chat screen
-            router.push('/chat');
-          },
-        }}
+        initialParams={{ type }}
       />
       <Tabs.Screen
         name="profile"
@@ -76,7 +70,6 @@ export default function EmployerTabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            // Pilitin nating i-push kasama ang query param para hindi mawala
             router.push(`/employer/profile${queryParam}` as any);
           },
         }}

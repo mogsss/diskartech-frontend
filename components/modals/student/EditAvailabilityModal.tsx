@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const TIME_SLOTS = ['Morning (8AM - 12PM)', 'Afternoon (1PM - 5PM)', 'Evening (6PM - 10PM)', 'Whole Day'];
+const TIME_SLOTS = ['Morning (6AM - 12PM)', 'Afternoon (1PM - 5PM)', 'Evening (6PM - 10PM)', 'Whole Day'];
 
 interface EditAvailabilityModalProps {
   visible: boolean;

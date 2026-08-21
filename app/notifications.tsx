@@ -19,7 +19,7 @@ export default function NotificationsScreen() {
           <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-2xl font-bold text-slate-900">Notifications</Text>
+          <Text className="text-2xl font-bold text-slate-900">Notifications Student</Text>
           {unreadCount > 0 && (
             <Text className="text-xs text-blue-600 font-semibold mt-[2px]">{unreadCount} unread</Text>
           )}

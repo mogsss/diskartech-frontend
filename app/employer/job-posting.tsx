@@ -2,6 +2,7 @@ import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -17,15 +18,27 @@ import {
   View,
 } from 'react-native';
 
-const SCHEDULE_OPTIONS = ['Flexible', 'Weekdays', 'Weekends', 'Morning Shift', 'Night Shift'];
+const AVAILABLE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const TIME_SLOTS = [
+  'Morning (6AM - 12PM)', 
+  'Afternoon (1PM - 5PM)', 
+  'Evening (6PM - 10PM)', 
+  'Whole Day'
+];
+const CATEGORY_OPTIONS = ['Food Service', 'Retail', 'Tutoring', 'Delivery', 'Cleaning', 'General'];
 
 export default function JobPostingScreen() {
   const [jobTitle, setJobTitle] = useState('');
   const [description, setDescription] = useState('');
   const [salary, setSalary] = useState('');
   
-  // Schedule state (mga napiling schedules)
-  const [selectedSchedules, setSelectedSchedules] = useState<string[]>(['Flexible']);
+  // Category state at dropdown visibility toggle
+  const [selectedCategory, setSelectedCategory] = useState('General');
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+
+  // Schedule states na kapareho ng sa student availability
+  const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('Whole Day');
   
   const [requirementInput, setRequirementInput] = useState('');
   const [requirements, setRequirements] = useState<string[]>([]);
@@ -35,21 +48,19 @@ export default function JobPostingScreen() {
 
   const [loading, setLoading] = useState(false);
 
-  // Toggle schedule selection
-  const handleToggleSchedule = (option: string) => {
-    if (selectedSchedules.includes(option)) {
-      // Huwag payagang tanggalin kung iisa na lang ang natitira
-      if (selectedSchedules.length > 1) {
-        setSelectedSchedules(selectedSchedules.filter((item) => item !== option));
+  // Toggle days selection
+  const handleToggleDay = (day: string) => {
+    if (selectedDays.includes(day)) {
+      if (selectedDays.length > 1) {
+        setSelectedDays(selectedDays.filter((d) => d !== day));
       }
     } else {
-      setSelectedSchedules([...selectedSchedules, option]);
+      setSelectedDays([...selectedDays, day]);
     }
   };
 
   // Salary input handler para siguradong numbers lang
   const handleSalaryChange = (text: string) => {
-    // Tinatanggal ang lahat maliban sa mga numero at decimal point kung kailangan
     const numericOnly = text.replace(/[^0-9]/g, '');
     setSalary(numericOnly);
   };
@@ -85,17 +96,22 @@ export default function JobPostingScreen() {
     setLoading(true);
 
     try {
+      const token = await AsyncStorage.getItem('userToken');
+
       const response = await fetch('http://192.168.1.2:8000/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           title: jobTitle,
           description: description,
           salary: salary,
-          schedules: selectedSchedules,
+          category: selectedCategory,
+          available_days: selectedDays, 
+          time_slot: selectedTimeSlot,  
           requirements: requirements,
           skills: skills,
         }),
@@ -104,13 +120,16 @@ export default function JobPostingScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert('Success', 'Your job has been successfully posted!', [
-          { text: 'OK', onPress: () => router.back() }
-        ]);
+        Alert.alert(
+          'Success', 
+          `Your job has been successfully posted! Matched ${data.matched_students_count} students nearby.`, 
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       } else {
         Alert.alert('Error', data.message || 'Something went wrong.');
       }
     } catch (error) {
+      console.error(error);
       Alert.alert('Network Error', 'Unable to connect to the server.');
     } finally {
       setLoading(false);
@@ -122,7 +141,7 @@ export default function JobPostingScreen() {
       className="flex-1 bg-white"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+      <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setIsCategoryOpen(false); }}>
         <ScrollView
           contentContainerClassName="p-6 pt-12 pb-12"
           keyboardShouldPersistTaps="handled"
@@ -161,9 +180,9 @@ export default function JobPostingScreen() {
             />
           </View>
 
-          {/* Salary Range (Numbers only) */}
+          {/* Salary Range */}
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-slate-900 mb-2">Rate  / Rate per day (₱) *</Text>
+            <Text className="text-sm font-semibold text-slate-900 mb-2">Rate / Rate per day (₱) *</Text>
             <View className="flex-row items-center border-[1.5px] border-gray-200 rounded-xl px-4 bg-white">
               <MaterialIcons name="attach-money" size={20} color={Colors.gray400} style={{ marginRight: 8 }} />
               <TextInput
@@ -177,24 +196,86 @@ export default function JobPostingScreen() {
             </View>
           </View>
 
-          {/* Schedule Selection Chips */}
+          {/* Category Dropdown */}
+          <View className="mb-4 relative z-50">
+            <Text className="text-sm font-semibold text-slate-900 mb-2">Job Category</Text>
+            <TouchableOpacity
+              onPress={() => setIsCategoryOpen(!isCategoryOpen)}
+              className="flex-row items-center justify-between border-[1.5px] border-gray-200 rounded-xl p-4 bg-white"
+            >
+              <View className="flex-row items-center">
+                <MaterialIcons name="category" size={20} color={Colors.gray400} style={{ marginRight: 8 }} />
+                <Text className="text-base text-slate-900">{selectedCategory}</Text>
+              </View>
+              <MaterialIcons 
+                name={isCategoryOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+                size={24} 
+                color={Colors.gray400} 
+              />
+            </TouchableOpacity>
+
+            {isCategoryOpen && (
+              <View className="absolute top-20 left-0 right-0 bg-white border-[1.5px] border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => {
+                      setSelectedCategory(cat);
+                      setIsCategoryOpen(false);
+                    }}
+                    className="p-4 border-b border-gray-100 flex-row items-center justify-between bg-white"
+                  >
+                    <Text className={`text-base ${selectedCategory === cat ? 'font-bold text-red-600' : 'text-slate-800'}`}>
+                      {cat}
+                    </Text>
+                    {selectedCategory === cat && (
+                      <MaterialIcons name="check" size={18} color="#dc2626" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Available Days Selection (Katulad ng sa Student) */}
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-slate-900 mb-2">Schedule Options</Text>
+            <Text className="text-sm font-semibold text-slate-900 mb-2">Available Days *</Text>
             <View className="flex-row flex-wrap gap-2">
-              {SCHEDULE_OPTIONS.map((option) => {
-                const isSelected = selectedSchedules.includes(option);
+              {AVAILABLE_DAYS.map((day) => {
+                const isSelected = selectedDays.includes(day);
                 return (
                   <TouchableOpacity
-                    key={option}
-                    onPress={() => handleToggleSchedule(option)}
-                    className={`px-4 py-2 rounded-full border ${
-                      isSelected 
-                        ? 'bg-red-600 border-red-600' 
-                        : 'bg-white border-gray-200'
+                    key={day}
+                    onPress={() => handleToggleDay(day)}
+                    className={`px-4 py-2.5 rounded-xl border ${
+                      isSelected ? 'bg-red-600 border-red-600' : 'bg-white border-gray-200'
                     }`}
                   >
                     <Text className={`text-xs font-semibold ${isSelected ? 'text-white' : 'text-slate-600'}`}>
-                      {option}
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Time Slot Selection (Katulad ng sa Student) */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-slate-900 mb-2">Time Slot *</Text>
+            <View className="gap-2">
+              {TIME_SLOTS.map((slot) => {
+                const isSelected = selectedTimeSlot === slot;
+                return (
+                  <TouchableOpacity
+                    key={slot}
+                    onPress={() => setSelectedTimeSlot(slot)}
+                    className={`p-4 rounded-xl border ${
+                      isSelected ? 'bg-red-600 border-red-600' : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <Text className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      {slot}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -205,7 +286,7 @@ export default function JobPostingScreen() {
           {/* Instructional Text */}
           <Text className="text-sm font-bold text-slate-800 mt-2 mb-4">List the skills and requirements needed</Text>
 
-          {/* Requirements with Chip style */}
+          {/* Requirements */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-900 mb-2">Requirements</Text>
             <View className="flex-row items-center gap-2 mb-2">
@@ -235,7 +316,7 @@ export default function JobPostingScreen() {
             </View>
           </View>
 
-          {/* Skills Needed with Chip style */}
+          {/* Skills Needed */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-900 mb-2">Skills Needed</Text>
             <View className="flex-row items-center gap-2 mb-2">
