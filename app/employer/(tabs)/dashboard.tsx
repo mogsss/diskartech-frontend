@@ -4,8 +4,10 @@ import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import api from '@/api/axios';
 
 export default function SharedDashboardScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
@@ -13,103 +15,111 @@ export default function SharedDashboardScreen() {
 
   const [displayName, setDisplayName] = useState(isHousehold ? 'Villa Family Residence' : "Employer Dashboard");
   const [avatarInitials, setAvatarInitials] = useState(isHousehold ? 'VF' : 'MD');
-  const [profileData, setProfileData] = useState<any>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Bagong states para sa totoong stats at posted jobs mula sa API
+  // States para sa totoong stats at posted jobs mula sa API
   const [postedJobs, setPostedJobs] = useState<any[]>([]);
+  const [recentApplicants, setRecentApplicants] = useState<any[]>([]);
+  const [totalApplicantsCount, setTotalApplicantsCount] = useState(0);
   const [loadingJobs, setLoadingJobs] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  const fetchDashboardData = async () => {
+    try {
+      const storedProfile = await AsyncStorage.getItem('userProfile');
+      if (storedProfile) {
+        const profile = JSON.parse(storedProfile);
+        setIsVerified(profile.isVerified === 1 || profile.isVerified === true);
 
-    const fetchDashboardData = async () => {
-      try {
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile && isMounted) {
-          const profile = JSON.parse(storedProfile);
-          setProfileData(profile);
-          setIsVerified(profile.isVerified === 1 || profile.isVerified === true);
-          
-          let resolvedName = isHousehold ? (profile.household_name || profile.name || '') : (profile.employer_name || profile.business_name || profile.name || '');
-          if (resolvedName) setDisplayName(resolvedName);
-          
+        let resolvedName = isHousehold ? (profile.household_name || profile.name || '') : (profile.employer_name || profile.business_name || profile.name || '');
+        if (resolvedName) {
+          setDisplayName(resolvedName);
           const nameParts = resolvedName.trim().split(' ');
           let initials = nameParts.length >= 2 ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase() : (isHousehold ? 'VF' : 'MD');
           setAvatarInitials(initials);
-
-          setLoadingProfile(false);
         }
-
-        const token = await AsyncStorage.getItem('userToken');
-        if (!token) return;
-
-        // 1. Fetch Dashboard Profile Data
-        const response = await fetch('http://192.168.1.2:8000/api/dashboard-data', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
-        });
-
-        const data = await response.json();
-        if (data.status === 'success' && isMounted) {
-          const freshProfile = data.profile;
-          setProfileData(freshProfile);
-          await AsyncStorage.setItem('userProfile', JSON.stringify(freshProfile));
-          
-          const verifiedStatus = freshProfile.isVerified === 1 || freshProfile.isVerified === true;
-          setIsVerified(verifiedStatus);
-        }
-
-        // 2. Fetch Totoong Posted Jobs ng Employer/Household
-        const jobsResponse = await fetch('http://192.168.1.2:8000/api/employer/my-jobs', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
-        });
-
-        const jobsData = await jobsResponse.json();
-        if (jobsData.status === 'success' && isMounted) {
-          setPostedJobs(jobsData.jobs || []);
-        }
-
-      } catch (error) {
-        console.log('Background API fetch note:', error);
-      } finally {
-        if (isMounted) {
-          setLoadingProfile(false);
-          setLoadingJobs(false);
-        }
+        setLoadingProfile(false);
       }
-    };
 
-    fetchDashboardData();
+      // 1. Fetch Dashboard Profile Data gamit ang axios api instance
+      const profileRes = await api.get('/dashboard-data').catch(() => null);
+      if (profileRes && profileRes.data && profileRes.data.status === 'success') {
+        const freshProfile = profileRes.data.profile;
+        await AsyncStorage.setItem('userProfile', JSON.stringify(freshProfile));
+        const verifiedStatus = freshProfile.isVerified === 1 || freshProfile.isVerified === true;
+        setIsVerified(verifiedStatus);
+      }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [type]);
+      const getInitials = (name: string) => {
+        if (!name) return 'ST';
+        const parts = name.trim().split(' ');
+        if (parts.length >= 2) {
+          return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+        return parts[0].substring(0, 2).toUpperCase();
+      }; 
+
+      // 2. Fetch Posted Jobs ng Employer/Household kasama ang applications count
+      const jobsRes = await api.get('/employer/jobs').catch(() => null);
+      if (jobsRes && jobsRes.data && jobsRes.data.status === 'success') {
+        const jobs = jobsRes.data.jobs || [];
+        setPostedJobs(jobs);
+
+        let totalApps = 0;
+        let allApplicants: any[] = [];
+
+        jobs.forEach((job: any) => {
+          totalApps += job.applications_count || (job.applications ? job.applications.length : 0);
+          if (job.applications && Array.isArray(job.applications)) {
+            job.applications.forEach((app: any) => {
+              const studentInfo = app.student || app.user || {};
+              const studentName = studentInfo.student_name || studentInfo.name || studentInfo.fullname || 'Student Applicant';
+              const studentAvatar = studentInfo.avatar || studentInfo.profile_picture || '';
+              const initials = getInitials(studentName);
+              allApplicants.push({
+                id: app.id,
+                name: studentName,
+                position: job.title,
+                status: app.status || 'pending',
+                avatar: studentAvatar ? `http://192.168.1.2:8000/storage/${studentAvatar}` : '',
+                initials: initials,
+              });
+            });
+          }
+        });
+
+        setTotalApplicantsCount(totalApps);
+        setRecentApplicants(allApplicants);
+      }
+
+    } catch (error) {
+      console.log('Error fetching dashboard data:', error);
+    } finally {
+      setLoadingProfile(false);
+      setLoadingJobs(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboardData();
+    }, [type])
+  );
 
   const headerInfo = {
     greeting: isHousehold ? 'Magandang Araw! 👋' : 'Good Morning! 👋',
     name: displayName,
-    badgeText: isVerified 
-      ? (isHousehold ? 'Verified Household' : 'Verified Business') 
+    badgeText: isVerified
+      ? (isHousehold ? 'Verified Household' : 'Verified Business')
       : 'For Verification',
     avatarInitials: avatarInitials,
   };
 
-  // Dynamic stats na gumagamit na ng postedJobs.length para sa Posted Openings
   const stats = [
     { icon: 'work', label: 'Posted Openings', value: postedJobs.length.toString(), color: '#2196F3' },
-    { icon: 'people', label: 'Applicants', value: '0', color: '#4CAF50' },
-    { icon: 'rate-review', label: 'Pending Reviews', value: '0', color: '#FF9800' },
-    { icon: 'check-circle', label: 'Hired Help', value: '0', color: '#D32F2F' },
+    { icon: 'people', label: 'Applicants', value: totalApplicantsCount.toString(), color: '#4CAF50' },
+    { icon: 'rate-review', label: 'Pending Reviews', value: recentApplicants.filter(a => a.status === 'pending').length.toString(), color: '#FF9800' },
+    { icon: 'check-circle', label: 'Hired Help', value: recentApplicants.filter(a => a.status === 'accepted').length.toString(), color: '#D32F2F' },
   ];
 
   const quickActions = [
@@ -118,16 +128,6 @@ export default function SharedDashboardScreen() {
     { icon: 'chat', label: 'Messages', color: '#4CAF50', route: '/employer/(tabs)/messages' as const },
     { icon: 'verified', label: 'Verification', color: '#FF9800', route: `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as const },
   ];
-
-  const recentList = isHousehold
-    ? [
-        { name: 'Maria Santos', position: 'Household Kasambahay', status: 'pending' as const, avatar: '' },
-        { name: 'Juan Dela Cruz', position: 'Family Driver', status: 'accepted' as const, avatar: '' },
-      ]
-    : [
-        { name: 'Junnyl Mabini', position: 'Service Crew', status: 'pending' as const, avatar: '' },
-        { name: 'Ana Santos', position: 'Barista', status: 'accepted' as const, avatar: '' },
-      ];
 
   if (loadingProfile) {
     return (
@@ -140,26 +140,26 @@ export default function SharedDashboardScreen() {
   return (
     <View className="flex-1 bg-[#F8FAFC]">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="p-6 pb-10">
-        
+
         {/* Header */}
         <View className="flex-row justify-between items-center pt-4 mb-6">
           <View>
             <Text className="text-xl font-bold text-slate-900">{headerInfo.greeting}</Text>
             <Text className="text-sm text-slate-500 mt-0.5">{headerInfo.name}</Text>
             <View className="flex-row items-center gap-1 mt-1">
-              <MaterialIcons 
-                name={isVerified ? "verified" : "hourglass-empty"} 
-                size={14} 
-                color={isVerified ? Colors.verified : '#FF9800'} 
+              <MaterialIcons
+                name={isVerified ? "verified" : "hourglass-empty"}
+                size={14}
+                color={isVerified ? Colors.verified : '#FF9800'}
               />
               <Text className={`text-xs font-semibold ${isVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
                 {headerInfo.badgeText}
               </Text>
             </View>
           </View>
-          
+
           <View className="flex-row items-center gap-3">
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.push('/notifications')}
               className="w-10 h-10 rounded-full bg-white items-center justify-center shadow-sm border border-gray-100 relative"
             >
@@ -203,7 +203,7 @@ export default function SharedDashboardScreen() {
           ))}
         </View>
 
-        {/* Recent Applications */}
+        {/* Recent Applications / Applicants */}
         <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
           <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
             <Text className="text-lg font-bold text-slate-900">
@@ -213,27 +213,39 @@ export default function SharedDashboardScreen() {
               <Text className="text-sm font-semibold text-red-600">See All</Text>
             </TouchableOpacity>
           </View>
-          {recentList.map((app, index) => (
-            <TouchableOpacity
-              key={index}
-              className="flex-row items-center py-2 gap-4"
-              onPress={() => router.push(`/employer/applicant-details?name=${encodeURIComponent(app.name)}&position=${encodeURIComponent(app.position)}`)}
-            >
-              <Avatar uri={app.avatar} name={app.name} size={44} />
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-slate-900">{app.name}</Text>
-                <Text className="text-xs text-slate-500">{app.position}</Text>
-              </View>
-              <Badge
-                text={app.status === 'pending' ? 'Pending' : app.status === 'accepted' ? 'Accepted' : 'Rejected'}
-                variant={app.status === 'pending' ? 'warning' : app.status === 'accepted' ? 'success' : 'error'}
-              />
-              <MaterialIcons name="chevron-right" size={20} color={Colors.gray400} />
-            </TouchableOpacity>
-          ))}
+          {recentApplicants.length === 0 ? (
+            <Text className="text-slate-400 text-center py-4 text-xs italic">No applicants yet.</Text>
+          ) : (
+            recentApplicants.slice(0, 3).map((app, index) => (
+              <TouchableOpacity
+                key={index}
+                className="flex-row items-center py-2 gap-4"
+                onPress={() => router.push(`/employer/applicant-details?applicationId=${app.id}`)}
+              >
+                <Avatar uri={app.avatar} name={app.initials || app.name} size={44} />
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-slate-900">{app.name}</Text>
+                  <Text className="text-xs text-slate-500">{app.position}</Text>
+                </View>
+                <Badge
+                  text={app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                  variant={
+                    app.status === 'pending'
+                      ? 'default'
+                      : app.status === 'viewed'
+                      ? 'info'
+                      : app.status === 'accepted'
+                      ? 'success'
+                      : 'error'
+                  }
+                />
+                <MaterialIcons name="chevron-right" size={20} color={Colors.gray400} />
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
-        {/* Posted Jobs / Openings (Dynamic galing sa API) */}
+        {/* Posted Jobs / Openings */}
         <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
           <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
             <View>
@@ -273,40 +285,14 @@ export default function SharedDashboardScreen() {
                     text={job.status === 'active' ? 'Active' : 'Closed'}
                     variant={job.status === 'active' ? 'success' : 'error'}
                   />
-                  <Text className="text-xs text-slate-500">0 applicants</Text>
+                  <Text className="text-xs text-slate-500">
+                    {job.applications_count ?? (job.applications ? job.applications.length : 0)} applicants
+                  </Text>
                 </View>
               </TouchableOpacity>
             ))
           )}
         </View>
-
-        {/* Performance Overview */}
-        {!isHousehold && (
-          <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
-            <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
-              <Text className="text-lg font-bold text-slate-900">Performance Overview</Text>
-              <TouchableOpacity>
-                <Text className="text-sm font-semibold text-red-600">View Report</Text>
-              </TouchableOpacity>
-            </View>
-            <View className="flex-row items-center py-2">
-              <View className="flex-1 items-center justify-center">
-                <Text className="text-xl font-bold text-red-600 text-center">85%</Text>
-                <Text className="text-xs text-slate-500 mt-1 text-center">Application Rate</Text>
-              </View>
-              <View className="w-[1px] h-10 bg-gray-200" />
-              <View className="flex-1 items-center justify-center">
-                <Text className="text-xl font-bold text-red-600 text-center">3.2</Text>
-                <Text className="text-xs text-slate-500 mt-1 text-center">Avg. Rating</Text>
-              </View>
-              <View className="w-[1px] h-10 bg-gray-200" />
-              <View className="flex-1 items-center justify-center">
-                <Text className="text-xl font-bold text-red-600 text-center">7</Text>
-                <Text className="text-xs text-slate-500 mt-1 text-center">Hired This Month</Text>
-              </View>
-            </View>
-          </View>
-        )}
 
       </ScrollView>
     </View>

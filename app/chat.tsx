@@ -1,46 +1,164 @@
 import Avatar from '@/components/ui/Avatar';
 import ChatOptionsModal from '@/components/modals/student/ChatOptionsModal';
 import { Colors } from '@/constants/colors';
-import { conversations } from '@/data/messages';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from '@/utils/firebase';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from 'firebase/firestore';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
-  const initialConversation = conversations.find((c) => c.id === id);
+  const conversationId = Array.isArray(id) ? id[0] : (id || 'mcdonalds_hr'); 
+  
+  const [chatUser, setChatUser] = useState({
+    displayName: 'Loading...',
+    displayAvatar: '',
+    online: true,
+  });
 
   const [message, setMessage] = useState('');
-  const [messagesList, setMessagesList] = useState(initialConversation ? initialConversation.messages : []);
+  const [messagesList, setMessagesList] = useState<any[]>([]);
   const [isOptionsModalVisible, setOptionsModalVisible] = useState(false);
-  
+  const [currentUserId, setCurrentUserId] = useState<string>('user_test');
+  const [isEmployerUser, setIsEmployerUser] = useState<boolean>(false);
+
   const scrollViewRef = useRef<ScrollView>(null);
 
-  if (!initialConversation) {
-    return (
-      <View className="flex-1 bg-[#F8FAFC] justify-center items-center">
-        <Text className="text-slate-500">Conversation not found</Text>
-      </View>
-    );
-  }
+  // Kunin ang user profile at tukuyin kung Student o Employer/Household ba ang nakalogin
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          setCurrentUserId(profile.id?.toString() || profile.email || 'user_test');
+          if (profile.role === 'employer' || profile.role === 'household' || profile.household_name || profile.employer_name) {
+            setIsEmployerUser(true);
+          }
+        }
+      } catch (e) {}
+    };
+    fetchUser();
+  }, []);
 
-  const handleSend = () => {
-    if (!message.trim()) return;
+  // Kunin ang chat details mula sa Firestore at itakda ang tamang pangalan at avatar sa header
+  useEffect(() => {
+    const fetchChatDetails = async () => {
+      try {
+        const chatDocRef = doc(db, 'chats', conversationId);
+        const chatDocSnap = await getDoc(chatDocRef);
+        if (chatDocSnap.exists()) {
+          const data = chatDocSnap.data();
+          
+          // MALINAW NA LOGIC:
+          // - Kung Employer ang nakalogin: Ipakita ang pangalan ng Estudyante (studentName) at avatar nito (studentAvatar)
+          // - Kung Student ang nakalogin: Ipakita ang pangalan ng Employer (employerName) at avatar nito (employerAvatar)
+          const nameToDisplay = isEmployerUser 
+            ? (data.studentName || 'Student Applicant') 
+            : (data.employerName || 'Employer / Store');
 
-    const newMessage = {
-      id: Date.now().toString(),
-      sender: 'me',
-      text: message.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          const avatarToDisplay = isEmployerUser 
+            ? (data.studentAvatar || '') 
+            : (data.employerAvatar || '');
+
+          setChatUser({
+            displayName: nameToDisplay,
+            displayAvatar: avatarToDisplay,
+            online: data.online ?? true,
+          });
+
+          // Iwasto ang pag-clear ng unread status
+          if (isEmployerUser) {
+            await setDoc(chatDocRef, { unreadByEmployer: false }, { merge: true });
+          } else {
+            await setDoc(chatDocRef, { unreadByStudent: false }, { merge: true });
+          }
+
+        } else {
+          setChatUser({
+            displayName: 'Chat User',
+            displayAvatar: '',
+            online: true,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching chat details:', error);
+      }
     };
 
-    setMessagesList([...messagesList, newMessage]);
+    if (conversationId) {
+      fetchChatDetails();
+    }
+  }, [conversationId, isEmployerUser]);
+
+  // Real-time listener para sa mga mensahe
+  useEffect(() => {
+    const q = query(
+      collection(db, 'chats', conversationId, 'messages'),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedMessages = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        let timeString = '';
+        if (data.createdAt && data.createdAt.toDate) {
+          timeString = data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else {
+          timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        const isMe = data.senderId === currentUserId;
+
+        return {
+          id: docSnap.id,
+          sender: isMe ? 'me' : 'other',
+          text: data.text,
+          timestamp: timeString,
+        };
+      });
+
+      setMessagesList(fetchedMessages);
+    });
+
+    return () => unsubscribe();
+  }, [conversationId, currentUserId]);
+
+  const handleSend = async () => {
+    if (!message.trim()) return;
+
+    const textToSend = message.trim();
     setMessage('');
 
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    try {
+      const messagesRef = collection(db, 'chats', conversationId, 'messages');
+      
+      await addDoc(messagesRef, {
+        text: textToSend,
+        senderId: currentUserId,
+        createdAt: serverTimestamp(),
+      });
+
+      const convRef = doc(db, 'chats', conversationId);
+      
+      // I-update ang unread status batay sa kung sino ang nagpadala ng mensahe
+      await setDoc(convRef, {
+        lastMessage: textToSend,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        unreadByEmployer: isEmployerUser ? false : true,
+        unreadByStudent: isEmployerUser ? true : false,
+      }, { merge: true });
+
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error sending message: ', error);
+      Alert.alert('Error', 'Hindi naipadala ang mensahe.');
+    }
   };
 
   return (
@@ -55,10 +173,10 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
             <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <Avatar uri={initialConversation.senderAvatar} name={initialConversation.senderName} size={40} online={initialConversation.online} />
+          <Avatar uri={chatUser.displayAvatar} name={chatUser.displayName} size={40} online={chatUser.online} />
           <View className="flex-1 ml-4">
-            <Text className="text-sm font-semibold text-slate-900">{initialConversation.senderName}</Text>
-            <Text className="text-xs text-emerald-600">{initialConversation.online ? 'Online' : 'Offline'}</Text>
+            <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>{chatUser.displayName}</Text>
+            <Text className="text-xs text-emerald-600">{chatUser.online ? 'Online' : 'Offline'}</Text>
           </View>
           <TouchableOpacity onPress={() => setOptionsModalVisible(true)} className="p-2">
             <MaterialIcons name="more-vert" size={24} color={Colors.text} />
@@ -92,8 +210,7 @@ export default function ChatScreen() {
           ))}
         </ScrollView>
 
-        {/* Input Section - Ginawa nating mas compact at idinikit sa pinakababa */}
-        {/* Input Section - Medyo pinalaki at pinaluwag natin nang konti */}
+        {/* Input Section */}
         <View className="flex-row items-center px-3 py-3 bg-white border-t border-gray-100 gap-2">
           <TouchableOpacity className="p-2">
             <MaterialIcons name="attach-file" size={24} color={Colors.gray400} />

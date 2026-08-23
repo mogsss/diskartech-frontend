@@ -2,15 +2,19 @@ import JobCard from '@/components/ui/JobCard';
 import SearchBar from '@/components/ui/SearchBar';
 import Chip from '@/components/ui/Chip';
 import { Colors } from '@/constants/colors';
-import { jobs } from '@/data/jobs';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import api from '@/api/axios';
 
 const salaryFilters = ['₱50-₱75/hr', '₱75-₱100/hr', '₱100-₱150/hr', '₱150+/hr'];
 const distanceFilters = ['< 1 km', '< 3 km', '< 5 km', 'Any'];
@@ -26,20 +30,102 @@ export default function SearchScreen() {
   const [selectedDistance, setSelectedDistance] = useState<string | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<string | null>(null);
 
-  // Pinagsamang filtering logic
-  const filteredJobs = jobs.filter((job) => {
+  // States para sa API data
+  const [allJobs, setAllJobs] = useState<any[]>([]);
+  const [savedJobs, setSavedJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const getCleanSchedule = (job: any) => {
+    if (job.time_slot) {
+      let days = [];
+      try {
+        days = JSON.parse(job.available_days) || [];
+      } catch (e) {
+        days = [];
+      }
+      return `${days.join(', ')} (${job.time_slot})`;
+    }
+    return 'Flexible';
+  };
+
+  const parseJsonField = (field: any) => {
+    if (!field) return [];
+    if (Array.isArray(field)) return field;
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const fetchJobsData = async () => {
+    try {
+      const response = await api.get('/student/all-jobs');
+      if (response.data && response.data.status === 'success') {
+        setAllJobs(response.data.jobs);
+      }
+
+      // Kunin ang saved jobs para malaman kung alin ang naka-pula
+      const savedResponse = await api.get('/student/saved-jobs');
+      if (savedResponse.data && savedResponse.data.status === 'success') {
+        setSavedJobs(savedResponse.data.jobs);
+      }
+    } catch (error) {
+      console.error('Error fetching jobs for search:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobsData();
+    }, [])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchJobsData();
+    setRefreshing(false);
+  };
+
+  // Function para i-toggle ang bookmark direkta sa Search screen
+  const handleToggleBookmark = async (jobId: string) => {
+    try {
+      const response = await api.post('/student/toggle-save-job', { job_id: jobId });
+      if (response.data && response.data.status === 'success') {
+        // I-refresh ang saved jobs para mag-update agad ang pulang icon
+        const savedResponse = await api.get('/student/saved-jobs');
+        if (savedResponse.data && savedResponse.data.status === 'success') {
+          setSavedJobs(savedResponse.data.jobs);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error toggling bookmark:', error);
+      Alert.alert('Paalala', 'Hindi ma-update ang saved jobs.');
+    }
+  };
+
+  // Pinagsamang filtering logic para sa totoong API data
+  const filteredJobs = allJobs.filter((job) => {
+    const companyName = job.household?.household_name || job.employer?.employer_name || 'Employer';
+    const locationName = job.household?.location || job.employer?.location || 'Pinamalayan';
+
     const matchesSearch = searchQuery
-      ? job.jobTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.location.toLowerCase().includes(searchQuery.toLowerCase())
+      ? job.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        locationName.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
 
     const matchesCategory = selectedCategory
-      ? job.category.toLowerCase() === selectedCategory.toLowerCase()
+      ? job.category?.toLowerCase() === selectedCategory.toLowerCase()
       : true;
 
     const matchesSchedule = selectedSchedule
-      ? job.schedule.toLowerCase().includes(selectedSchedule.toLowerCase())
+      ? (job.time_slot && job.time_slot.toLowerCase().includes(selectedSchedule.toLowerCase())) ||
+        (job.available_days && job.available_days.toLowerCase().includes(selectedSchedule.toLowerCase()))
       : true;
 
     return matchesSearch && matchesCategory && matchesSchedule;
@@ -151,15 +237,36 @@ export default function SearchScreen() {
         className="flex-1"
         contentContainerClassName="p-6 pb-10"
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#dc2626']} />}
       >
         <Text className="text-xs text-slate-500 mb-4">{filteredJobs.length} jobs found</Text>
-        {filteredJobs.length > 0 ? (
+        
+        {loading ? (
+          <ActivityIndicator size="large" color="#dc2626" style={{ marginVertical: 40 }} />
+        ) : filteredJobs.length > 0 ? (
           filteredJobs.map((job) => (
             <JobCard
               key={job.id}
-              job={job}
+              job={{
+                ...job,
+                jobTitle: job.title,
+                companyName: job.household?.household_name || job.employer?.employer_name || 'Employer',
+                salary: `₱${job.salary}`,
+                location: job.household?.location || job.employer?.location || 'Pinamalayan',
+                distance: job.distance ? `${parseFloat(job.distance).toFixed(1)} km away` : 'Calculating...',
+                schedule: getCleanSchedule(job),
+                workingHours: getCleanSchedule(job),
+                jobType: 'Part-time',
+                category: job.category || 'General',
+                requirements: parseJsonField(job.requirements),
+                skills: parseJsonField(job.skills),
+                bookmarked: savedJobs.some((saved: any) => saved.id === job.id),
+                // 👇 Idinagdag dito ang applicants count at posted date para maging consistent sa Home screen
+                applicants: job.applications_count ?? 0,
+                postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Recent',
+              }}
               onPress={() => router.push(`/students/job-details?id=${job.id}`)}
-              onBookmark={() => {}}
+              onBookmark={() => handleToggleBookmark(job.id.toString())}
               onApply={() => router.push(`/students/job-details?id=${job.id}`)}
             />
           ))

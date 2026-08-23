@@ -1,42 +1,51 @@
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-
-// Shared mock list ng mga aplikante para tugma ang bilang
-const allApplicants = [
-  { id: '1', name: 'Junnyl Mabini', position: 'Service Crew', status: 'pending' },
-  { id: '2', name: 'Ana Santos', position: 'Barista', status: 'accepted' },
-  { id: '3', name: 'Carlos Reyes', position: 'Sales Associate', status: 'pending' },
-  { id: '4', name: 'Maria Santos', position: 'Household Kasambahay', status: 'pending' },
-  { id: '5', name: 'Juan Dela Cruz', position: 'Family Driver', status: 'accepted' },
-  { id: '6', name: 'John Doe', position: 'Service Crew', status: 'accepted' },
-];
-
-const businessJobs = [
-  { id: '1', title: 'Service Crew', status: 'active', salary: '₱75 - ₱95/hr', type: 'Part-time' },
-  { id: '2', title: 'Barista', status: 'active', salary: '₱80 - ₱100/hr', type: 'Full-time' },
-  { id: '3', title: 'Cashier', status: 'active', salary: '₱70 - ₱85/hr', type: 'Part-time' },
-  { id: '4', title: 'Service Crew (Night)', status: 'closed', salary: '₱85 - ₱110/hr', type: 'Night Shift' },
-];
-
-const householdJobs = [
-  { id: 'h1', title: 'Household Kasambahay', status: 'active', salary: '₱8,000 - ₱10,000/mo', type: 'Live-in' },
-  { id: 'h2', title: 'Family Driver', status: 'active', salary: '₱12,000 - ₱15,000/mo', type: 'Full-time' },
-];
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import api from '@/api/axios'; // Siguraduhing tama ang path ng iyong axios instance
 
 export default function EmployerJobsScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
 
-  const initialJobs = isHousehold ? householdJobs : businessJobs;
-  const [jobs, setJobs] = useState(initialJobs);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>('all');
 
+  // Fetch employer jobs galing sa Laravel backend
+  useEffect(() => {
+    const fetchEmployerJobs = async () => {
+      try {
+        const response = await api.get('/employer/jobs');
+        if (response.data && response.data.status === 'success') {
+          // Kung gusto mong i-filter depende kung business o household (kung may category column ka)
+          let fetchedJobs = response.data.jobs;
+          
+          if (isHousehold) {
+            fetchedJobs = fetchedJobs.filter((j: any) => j.category?.toLowerCase().includes('household') || j.category?.toLowerCase().includes('home'));
+          } else {
+            fetchedJobs = fetchedJobs.filter((j: any) => !j.category?.toLowerCase().includes('household') && !j.category?.toLowerCase().includes('home'));
+          }
+
+          // Kung gusto mo namang ipakita lahat ng pinost niya nang walang filter sa category, 
+          // pwede mo ring gamitin direkta ang response.data.jobs:
+          setJobs(response.data.jobs);
+        }
+      } catch (error) {
+        console.error('Error fetching employer jobs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmployerJobs();
+  }, [isHousehold]);
+
   const filteredJobs = jobs.filter((job) => {
-    if (filter === 'active') return job.status === 'active';
-    if (filter === 'closed') return job.status === 'closed';
+    const status = job.status ? job.status.toLowerCase() : 'active';
+    if (filter === 'active') return status === 'active';
+    if (filter === 'closed') return status === 'closed';
     return true;
   });
 
@@ -92,12 +101,13 @@ export default function EmployerJobsScreen() {
         contentContainerClassName="p-6 pb-10"
         showsVerticalScrollIndicator={false}
       >
-        {filteredJobs.length > 0 ? (
+        {loading ? (
+          <ActivityIndicator size="large" color="#dc2626" style={{ marginVertical: 40 }} />
+        ) : filteredJobs.length > 0 ? (
           filteredJobs.map((job) => {
-            // Bilangin kung ilan ang tugma sa posisyong ito mula sa allApplicants list
-            const applicantCount = allApplicants.filter(
-              (app) => app.position.toLowerCase() === job.title.toLowerCase()
-            ).length;
+            // Makukuha na rito ang applications_count galing sa withCount('applications') sa ating Laravel controller!
+            const applicantCount = job.applications_count || 0;
+            const jobStatus = job.status || 'active';
 
             return (
               <View 
@@ -107,27 +117,27 @@ export default function EmployerJobsScreen() {
                 <View className="flex-row justify-between items-start mb-2">
                   <View className="flex-1 mr-2">
                     <Text className="text-base font-bold text-slate-900">{job.title}</Text>
-                    <Text className="text-xs text-slate-500 mt-0.5">{job.salary} • {job.type}</Text>
+                    <Text className="text-xs text-slate-500 mt-0.5">₱{job.salary} • {job.category || 'General'}</Text>
                   </View>
                   <View className={`px-2.5 py-1 rounded-full ${
-                    job.status === 'active' ? 'bg-emerald-50' : 'bg-red-50'
+                    jobStatus === 'active' ? 'bg-emerald-50' : 'bg-red-50'
                   }`}>
                     <Text className={`text-[10px] font-bold uppercase ${
-                      job.status === 'active' ? 'text-emerald-600' : 'text-red-600'
+                      jobStatus === 'active' ? 'text-emerald-600' : 'text-red-600'
                     }`}>
-                      {job.status}
+                      {jobStatus}
                     </Text>
                   </View>
                 </View>
 
                 <View className="flex-row justify-between items-center mt-4 pt-3 border-t border-gray-100">
                   <View className="flex-row items-center gap-1.5">
-                    <MaterialIcons name="people" size={16} color={Colors.gray500} />
+                    <MaterialIcons name="people" size={16} color="#64748b" />
                     <Text className="text-xs font-semibold text-slate-700">{applicantCount} Applicants</Text>
                   </View>
 
                   <TouchableOpacity 
-                    onPress={() => router.push(`/employer/applicants-list?jobTitle=${encodeURIComponent(job.title)}`)}
+                    onPress={() => router.push(`/employer/applicants-list?jobId=${job.id}&jobTitle=${encodeURIComponent(job.title)}`)}
                     className="flex-row items-center gap-1"
                   >
                     <Text className="text-xs font-semibold text-red-600">View Applicants</Text>
@@ -139,7 +149,7 @@ export default function EmployerJobsScreen() {
           })
         ) : (
           <View className="items-center justify-center py-20">
-            <MaterialIcons name="work-off" size={48} color={Colors.gray400} />
+            <MaterialIcons name="work-off" size={48} color="#94a3b8" />
             <Text className="text-sm font-semibold text-slate-600 mt-2">No jobs found</Text>
             <Text className="text-xs text-slate-400 mt-1">Try changing the filter or post a new job.</Text>
           </View>

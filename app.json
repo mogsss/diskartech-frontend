@@ -22,7 +22,7 @@
       "package": "com.diskartech.app",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "resize"  
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "output": "static",
@@ -41,7 +41,8 @@
             "backgroundColor": "#9A0007"
           }
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
