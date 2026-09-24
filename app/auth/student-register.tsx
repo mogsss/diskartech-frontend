@@ -10,7 +10,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance dito
+import api from '@/api/axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterStudentScreen() {
   const [step, setStep] = useState(1);
@@ -69,9 +70,7 @@ export default function RegisterStudentScreen() {
     }
   };
 
-  // Konekta sa Laravel Backend gamit ang global Axios instance
   const handleRegister = async () => {
-    // I-reset muna ang mga error
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
@@ -93,12 +92,11 @@ export default function RegisterStudentScreen() {
       hasError = true;
     }
 
-    if (hasError) return; // Huwag ituloy kung may error sa form
+    if (hasError) return;
 
     setLoading(true);
 
     try {
-      // 👈 Ginagamit na natin ang 'api' instance
       const response = await api.post('/register/student', {
         role: 'student',
         first_name: firstName,
@@ -119,13 +117,27 @@ export default function RegisterStudentScreen() {
       });
 
       if (response.data.status === 'success') {
-        Alert.alert('Success', 'Student account created successfully!');
-        router.replace('/auth/login');
+        const { token, user, student_profile } = response.data;
+
+        if (token) {
+          await AsyncStorage.setItem('userToken', token);
+        }
+        if (user) {
+          await AsyncStorage.setItem('userData', JSON.stringify(user));
+        }
+        if (student_profile) {
+          await AsyncStorage.setItem('userProfile', JSON.stringify(student_profile));
+        }
+
+        // Diretsong pumunta sa Verify Email screen
+        router.replace({
+          pathname: '/auth/verify-email',
+          params: { email: email },
+        });
       }
     } catch (error: any) {
       console.error(error);
 
-      // Kung galing sa Laravel backend ang validation error (422)
       if (error.response && error.response.status === 422) {
         const errors = error.response.data.errors;
         if (errors.email) setEmailError(errors.email[0]);

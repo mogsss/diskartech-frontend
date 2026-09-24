@@ -8,7 +8,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance dito
+import api from '@/api/axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterHouseholdScreen() {
   const [step, setStep] = useState(1); // 1: Personal Info, 2: Address & Contact, 3: Account Security
@@ -63,9 +64,7 @@ export default function RegisterHouseholdScreen() {
     }
   };
 
-  // Konekta sa Laravel Backend gamit ang global Axios instance
   const handleRegister = async () => {
-    // I-reset muna ang mga error
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
@@ -87,12 +86,11 @@ export default function RegisterHouseholdScreen() {
       hasError = true;
     }
 
-    if (hasError) return; // Huwag ituloy kung may error sa form
+    if (hasError) return;
 
     setLoading(true);
 
     try {
-      // 👈 Ginagamit na natin ang 'api' instance
       const response = await api.post('/register/household', {
         role: 'household',
         first_name: firstName,
@@ -110,13 +108,28 @@ export default function RegisterHouseholdScreen() {
       });
 
       if (response.data.status === 'success') {
-        Alert.alert('Success', 'Household account created successfully!');
-        router.replace('/employer/dashboard?type=household');
+        const { token, user, profile } = response.data;
+
+        // 💡 MAHALAGA: I-save ang token, user data, at profile sa AsyncStorage para hindi ma-expire session sa verify screen
+        if (token) {
+          await AsyncStorage.setItem('userToken', token);
+        }
+        if (user) {
+          await AsyncStorage.setItem('userData', JSON.stringify(user));
+        }
+        if (profile) {
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+        }
+
+        // 💡 Diretsong i-redirect sa Verify Email screen habang ipinapasa ang email
+        router.replace({
+          pathname: '/auth/verify-email',
+          params: { email: email },
+        });
       }
     } catch (error: any) {
       console.error('FULL AXIOS ERROR:', error.response?.data || error);
       
-      // Kung galing sa Laravel backend ang validation error (422)
       if (error.response && error.response.status === 422) {
         const errors = error.response.data.errors;
         if (errors.email) setEmailError(errors.email[0]);
