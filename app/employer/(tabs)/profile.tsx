@@ -3,11 +3,12 @@ import Badge from '@/components/ui/Badge';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ScrollView, Text, TouchableOpacity, View, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import api from '@/api/axios';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function EmployerProfileScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
@@ -31,24 +32,67 @@ export default function EmployerProfileScreen() {
     permitValue: isHousehold ? 'Valid ID Verified' : 'Verified & Registered',
   });
 
-  useEffect(() => {
-    const fetchStoredProfile = async () => {
+  const fetchEmployerProfile = async () => {
+    try {
+      // 1. Kunin muna ang cached data sa AsyncStorage para agad mag-load ang tamang pangalan
+      const storedUser = await AsyncStorage.getItem('userData');
+      const storedProfile = await AsyncStorage.getItem('userProfile');
+
+      const user = storedUser ? JSON.parse(storedUser) : {};
+      if (user.email) {
+        setProfileData(prev => ({ ...prev, email: user.email }));
+      }
+
+      if (storedProfile) {
+        const profile = JSON.parse(storedProfile);
+        const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+        setIsVerified(verifiedStatus);
+
+        const actualName = isHousehold 
+          ? (profile.household_name || profile.name || 'Villa Family Residence') 
+          : (profile.employer_name || profile.business_name || profile.name || "Business Name");
+
+        const nameParts = actualName.trim().split(' ');
+        let initials = '';
+        if (nameParts.length >= 2) {
+          initials = (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
+        } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
+          initials = nameParts[0].substring(0, 2).toUpperCase();
+        } else {
+          initials = isHousehold ? 'VF' : 'MD';
+        }
+
+        if (profile.profile_picture || profile.avatar) {
+          const picPath = profile.profile_picture || profile.avatar;
+          const fullUrl = picPath.startsWith('http') ? picPath : `http://192.168.1.2:8000/storage/${picPath}`;
+          setAvatarUri(fullUrl);
+        }
+
+        setProfileData((prev) => ({
+          ...prev,
+          name: actualName,
+          avatarInitials: initials,
+          locationValue: profile.location || profile.detailed_address || prev.locationValue,
+          contactNumber: profile.contact_number || profile.cp_number || prev.contactNumber,
+          badgeText: verifiedStatus 
+            ? (isHousehold ? 'Verified Household' : 'Verified Business') 
+            : 'For Verification',
+        }));
+      }
+
+      // 2. Pagkatapos ay i-sync sa API (/user/profile) para makuha ang pinakabagong update
       try {
-        const storedUser = await AsyncStorage.getItem('userData');
-        const storedProfile = await AsyncStorage.getItem('userProfile');
+        const response = await api.get('/user/profile');
+        const profile = response.data.profile;
 
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          const user = storedUser ? JSON.parse(storedUser) : {};
-
+        if (profile) {
           const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
           setIsVerified(verifiedStatus);
 
           const actualName = isHousehold 
             ? (profile.household_name || profile.name || 'Villa Family Residence') 
-            : (profile.employer_name || profile.business_name || profile.name || "McDonald's SM North");
+            : (profile.employer_name || profile.business_name || profile.name || "Business Name");
 
-          // Kumuha ng unang letra ng First Name at unang letra ng Last Name para sa initials
           const nameParts = actualName.trim().split(' ');
           let initials = '';
           if (nameParts.length >= 2) {
@@ -59,15 +103,15 @@ export default function EmployerProfileScreen() {
             initials = isHousehold ? 'VF' : 'MD';
           }
 
-          // Kunin ang nakasave na profile picture kung mayroon na
-          if (profile.profile_picture) {
-            setAvatarUri(profile.profile_picture);
+          if (profile.profile_picture || profile.avatar) {
+            const picPath = profile.profile_picture || profile.avatar;
+            const fullUrl = picPath.startsWith('http') ? picPath : `http://192.168.1.2:8000/storage/${picPath}`;
+            setAvatarUri(fullUrl);
           }
 
           setProfileData((prev) => ({
             ...prev,
             name: actualName,
-            email: user.email || prev.email,
             avatarInitials: initials,
             locationValue: profile.location || profile.detailed_address || prev.locationValue,
             contactNumber: profile.contact_number || profile.cp_number || prev.contactNumber,
@@ -75,16 +119,25 @@ export default function EmployerProfileScreen() {
               ? (isHousehold ? 'Verified Household' : 'Verified Business') 
               : 'For Verification',
           }));
+
+          // I-update din ang AsyncStorage cache
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
-      } catch (error) {
-        console.error('Error loading profile from storage:', error);
+      } catch (apiErr) {
+        console.log('API profile sync failed, using cached storage:', apiErr);
       }
-    };
 
-    fetchStoredProfile();
-  }, [isHousehold]);
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    }
+  };
 
-  // Function para mamili at mag-upload ng profile picture
+  useFocusEffect(
+    useCallback(() => {
+      fetchEmployerProfile();
+    }, [isHousehold])
+  );
+
   const handlePickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -130,13 +183,20 @@ export default function EmployerProfileScreen() {
       if (response.data.status === 'success') {
         Alert.alert('Success', 'Profile picture updated successfully!');
         
-        // I-update ang AsyncStorage para magbago rin ang stored profile data
+        const rawPath = response.data.profile_picture || response.data.file_path;
+        if (rawPath) {
+          const fullUrl = rawPath.startsWith('http') ? rawPath : `http://192.168.1.2:8000/storage/${rawPath}`;
+          setAvatarUri(fullUrl);
+        }
+
         const storedProfile = await AsyncStorage.getItem('userProfile');
         if (storedProfile) {
           const profileObj = JSON.parse(storedProfile);
-          profileObj.profile_picture = response.data.profile_picture;
+          profileObj.profile_picture = rawPath;
           await AsyncStorage.setItem('userProfile', JSON.stringify(profileObj));
         }
+
+        fetchEmployerProfile();
       }
     } catch (error: any) {
       console.error('Error uploading avatar:', error);
@@ -215,7 +275,7 @@ export default function EmployerProfileScreen() {
             onPress={() => router.push('/employer/subscription')}
             className="bg-red-600 px-4 py-2.5 rounded-xl items-center justify-center shadow-sm"
           >
-            <Text className="text-xs font-bold text-white">Manage Plan</Text>
+            <Text className="text-xs font-bold text-white">Manage Plan s</Text>
           </TouchableOpacity>
         </View>
       )}

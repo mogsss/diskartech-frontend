@@ -6,13 +6,11 @@ import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useState, useCallback } from 'react'; // 👈 Idinagdag ang useCallback
+import React, { useState, useEffect } from 'react';
 import { ScrollView, Text, TouchableOpacity, View, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import DocumentPlaceholderCard from '@/components/ui/student/DocumentPlaceholderCard';
 import * as ImagePicker from 'expo-image-picker';
-import api from '@/api/axios';
-import { useFocusEffect } from '@react-navigation/native'; // 👈 Idinagdag para mag-refresh tuwing tututok sa screen
 
 const menuItems = [
   { icon: 'settings', label: 'Settings', route: '/settings' },
@@ -22,6 +20,7 @@ const menuItems = [
 ];
 
 export default function ProfileScreen() {
+  // 1. States para sa Student Profile Data
   const [studentName, setStudentName] = useState('Junnyl Mabini');
   const [studentEmail, setStudentEmail] = useState('junnyl.mabini@example.com');
   const [school, setSchool] = useState('Not specified');
@@ -29,96 +28,67 @@ export default function ProfileScreen() {
   const [yearLevel, setYearLevel] = useState('Not specified');
   const [location, setLocation] = useState('Not specified');
   const [isVerified, setIsVerified] = useState(false);
+  
+  // 👇 IDINAGDAG NATIN ITO: State para sa Profile Picture URI
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
 
+  // States para sa Skills
   const [skills, setSkills] = useState<string[]>([]);
   const [isAddSkillModalVisible, setAddSkillModalVisible] = useState(false);
 
+  // States para sa Availability
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('');
   const [isAvailabilityModalVisible, setAvailabilityModalVisible] = useState(false);
 
-  // Global fetch function na kumukuha sa /student/profile API endpoint
+  // 2. Global fetch function para madaling ma-refresh ang data
   const fetchStudentProfile = async () => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      console.log('Stored Token:', token);
+      const storedProfile = await AsyncStorage.getItem('userProfile');
+      const storedUser = await AsyncStorage.getItem('userData');
 
-      try {
-        const response = await api.get('/student/profile');
-        console.log('API Student Profile Response:', response.data);
+      if (storedProfile && storedProfile !== 'null' && storedProfile !== 'undefined') {
+        const profile = JSON.parse(storedProfile);
 
-        const profileData = response.data.profile || response.data;
+        if (profile.student_name) setStudentName(profile.student_name);
+        if (profile.student_school_name) setSchool(profile.student_school_name);
+        if (profile.course) setCourse(profile.course);
+        if (profile.year_level) setYearLevel(profile.year_level);
+        if (profile.location) setLocation(profile.location);
+        if (profile.isVerified !== undefined) setIsVerified(profile.isVerified);
 
-        if (profileData) {
-          if (profileData.student_name) setStudentName(profileData.student_name);
-          if (profileData.student_school_name || profileData.school_name) {
-            setSchool(profileData.student_school_name || profileData.school_name);
-          }
-          if (profileData.course) setCourse(profileData.course);
-          if (profileData.year_level) setYearLevel(profileData.year_level);
-          if (profileData.location || profileData.address) {
-            setLocation(profileData.location || profileData.address);
-          }
-          if (profileData.isVerified !== undefined) {
-            setIsVerified(profileData.isVerified === 1 || profileData.isVerified === true);
-          }
-
-          if (profileData.avatar || profileData.profile_picture) {
-            const avatarPath = profileData.avatar || profileData.profile_picture;
-            const fullAvatarUrl = avatarPath.startsWith('http')
-              ? avatarPath
-              : `http://192.168.1.2:8000/storage/${avatarPath}`;
-            setProfilePicUri(fullAvatarUrl);
-          }
-
-          if (profileData.skillset && Array.isArray(profileData.skillset)) {
-            setSkills(profileData.skillset);
-          }
-
-          if (profileData.available_days) setSelectedDays(profileData.available_days);
-          if (profileData.time_slot) setSelectedTimeSlot(profileData.time_slot);
+        // 👇 IDINAGDAG NATIN ITO: Kunin ang avatar kung meron man sa profile
+        if (profile.avatar) {
+          const fullAvatarUrl = profile.avatar.startsWith('http')
+            ? profile.avatar
+            : `http://192.168.1.2:8000/storage/${profile.avatar}`;
+          setProfilePicUri(fullAvatarUrl);
         }
 
-        const storedUser = await AsyncStorage.getItem('userData');
-        if (storedUser && storedUser !== 'null') {
-          const user = JSON.parse(storedUser);
-          if (user.email) setStudentEmail(user.email);
+        if (profile.skillset && Array.isArray(profile.skillset)) {
+          setSkills(profile.skillset);
+        } else {
+          setSkills([]);
         }
 
-      } catch (apiErr) {
-        console.log('API fetch failed, fallback to AsyncStorage:', apiErr);
+        if (profile.available_days) setSelectedDays(profile.available_days);
+        if (profile.time_slot) setSelectedTimeSlot(profile.time_slot);
+      }
 
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        const storedUser = await AsyncStorage.getItem('userData');
-
-        if (storedProfile && storedProfile !== 'null') {
-          const profile = JSON.parse(storedProfile);
-          if (profile.student_name) setStudentName(profile.student_name);
-          if (profile.student_school_name) setSchool(profile.student_school_name);
-          if (profile.course) setCourse(profile.course);
-          if (profile.year_level) setYearLevel(profile.year_level);
-          if (profile.location) setLocation(profile.location);
-          if (profile.isVerified !== undefined) setIsVerified(profile.isVerified);
-        }
-
-        if (storedUser && storedUser !== 'null') {
-          const user = JSON.parse(storedUser);
-          if (user.email) setStudentEmail(user.email);
-        }
+      if (storedUser && storedUser !== 'null' && storedUser !== 'undefined') {
+        const user = JSON.parse(storedUser);
+        if (user.email) setStudentEmail(user.email);
       }
     } catch (error) {
       console.error('Error loading student profile from storage:', error);
     }
   };
 
-  // 👇 Ginamit na natin ang useFocusEffect para mag-refresh kada bukas ng profile screen
-  useFocusEffect(
-    useCallback(() => {
-      fetchStudentProfile();
-    }, [])
-  );
+  useEffect(() => {
+    fetchStudentProfile();
+  }, []);
 
+  // Function para i-save ang availability sa backend API
   const handleSaveAvailability = async (days: string[], timeSlot: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -142,7 +112,14 @@ export default function ProfileScreen() {
         setSelectedTimeSlot(timeSlot);
         setAvailabilityModalVisible(false);
         alert('Availability updated successfully!');
-        fetchStudentProfile(); // I-refresh ang data
+
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          profile.available_days = days;
+          profile.time_slot = timeSlot;
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+        }
       } else {
         alert(data.message || 'Failed to update availability');
       }
@@ -152,6 +129,7 @@ export default function ProfileScreen() {
     }
   };
 
+  // Function para i-save ang skills sa backend API
   const handleSaveSkills = async (updatedSkills: string[]) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -172,7 +150,13 @@ export default function ProfileScreen() {
       if (response.ok) {
         setSkills(updatedSkills);
         setAddSkillModalVisible(false);
-        fetchStudentProfile(); // I-refresh ang data
+
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          profile.skillset = updatedSkills;
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+        }
       } else {
         alert(data.message || 'Failed to update skills');
       }
@@ -182,6 +166,7 @@ export default function ProfileScreen() {
     }
   };
 
+  // Function para sa document upload (Resume, School ID, COR)
   const handleUploadDocument = async (documentType: string, title: string) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -226,6 +211,7 @@ export default function ProfileScreen() {
     }
   };
 
+  // Function para sa Logout
   const handleLogout = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -248,6 +234,7 @@ export default function ProfileScreen() {
     }
   };
 
+  // Function para mag-upload ng Profile Picture
   const handleUploadProfilePic = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -288,12 +275,27 @@ export default function ProfileScreen() {
         data = JSON.parse(responseText);
       } catch (e) {
         console.error('Server returned HTML instead of JSON:', responseText);
-        alert('Server Error: Nagbalik ang Laravel ng HTML error page.');
+        alert('Server Error: Nagbalik ang Laravel ng HTML error page. Tingnan ang console.');
         return;
       }
 
       if (response.ok) {
         alert('Profile picture uploaded successfully!');
+        
+        // 👇 DITO INAYOS NATIN PARA AGAD LUMITAW ANG LITRATO:
+        const newPath = data.file_path || data.profile_picture;
+        const fullUrl = `http://192.168.1.2:8000/storage/${newPath}`;
+        
+        setProfilePicUri(fullUrl); // I-update ang state
+
+        // I-save din sa AsyncStorage para hindi mawala kapag nire-refresh
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profile = JSON.parse(storedProfile);
+          profile.avatar = newPath;
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+        }
+
         fetchStudentProfile(); 
       } else {
         alert(data.message || 'Failed to upload profile picture');
@@ -304,6 +306,7 @@ export default function ProfileScreen() {
     }
   };
 
+  // Format para sa display ng schedule
   const formatScheduleText = () => {
     if (!selectedDays || selectedDays.length === 0) return 'No days selected';
     return `${selectedDays.join(', ')} | ${selectedTimeSlot || ''}`;
@@ -323,7 +326,7 @@ export default function ProfileScreen() {
             <Image 
               source={{ uri: profilePicUri }} 
               style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#e2e8f0' }} 
-              onError={(e) => console.log('Image Load Error:', e.nativeEvent.error)}
+              onError={(e) => console.log('Image Load Error:', e.nativeEvent.error)} // 👈 Idinagdag natin ito
             />
           ) : (
             <Avatar

@@ -39,6 +39,8 @@ export default function VerifyEmailScreen() {
   };
 
   const handleVerifyOtp = async () => {
+    console.log('--- HANDLE VERIFY OTP CLICKED ---'); // 👇 Tingnan kung lumalabas ito
+
     if (otpCode.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit OTP code.');
       return;
@@ -46,29 +48,54 @@ export default function VerifyEmailScreen() {
 
     try {
       setLoading(true);
+      console.log('Sending request to /email/verify-otp with code:', otpCode);
 
       const response = await api.post('/email/verify-otp', { otp_code: otpCode });
+      console.log('Verify OTP Response Received:', response.data);
 
       if (response.data.status === 'success') {
         Alert.alert('Success!', 'Your email has been successfully verified.');
         
         const storedUser = await AsyncStorage.getItem('userData');
+        console.log('Stored User Data found:', storedUser);
+
         if (storedUser) {
           const user = JSON.parse(storedUser);
-          
           user.isEmailVerified = true;
           await AsyncStorage.setItem('userData', JSON.stringify(user));
 
-          // Gamitin na ang redirectUserByRole para maging pareho sila ng LoginScreen
+          try {
+            console.log('Fetching profile for role:', user.role);
+            if (user.role === 'student') {
+              const profileRes = await api.get('/student/profile');
+              console.log('Student Profile Response:', profileRes.data);
+              const profileData = profileRes.data.profile || profileRes.data;
+              if (profileData) {
+                await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
+              }
+            } else if (user.role === 'employer' || user.role === 'household') {
+              const profileRes = await api.get('/user/profile');
+              console.log('Employer Profile Response:', profileRes.data);
+              const profileData = profileRes.data.profile || profileRes.data;
+              if (profileData) {
+                await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
+              }
+            }
+          } catch (profileErr: any) {
+            console.log('Error fetching profile block:', profileErr.response?.data || profileErr.message);
+          }
+
           setTimeout(() => {
+            console.log('Redirecting user to role:', user.role);
             redirectUserByRole(user.role);
           }, 100);
         } else {
+          console.log('No storedUser found in AsyncStorage, redirecting to login.');
           router.replace('/auth/login' as any);
         }
       }
     } catch (error: any) {
-      console.error(error);
+      console.error('CATCH ERROR IN VERIFY OTP:', error.response?.data || error.message);
       Alert.alert('Verification Failed', error.response?.data?.message || 'Invalid or expired OTP code.');
     } finally {
       setLoading(false);
