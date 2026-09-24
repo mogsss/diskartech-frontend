@@ -15,6 +15,7 @@ export default function SharedDashboardScreen() {
 
   const [displayName, setDisplayName] = useState(isHousehold ? 'Villa Family Residence' : "Employer Dashboard");
   const [avatarInitials, setAvatarInitials] = useState(isHousehold ? 'VF' : 'MD');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -30,6 +31,13 @@ export default function SharedDashboardScreen() {
       if (storedProfile) {
         const profile = JSON.parse(storedProfile);
         setIsVerified(profile.isVerified === 1 || profile.isVerified === true);
+
+        if (profile.avatar) {
+          const fullAvatarUrl = profile.avatar.startsWith('http') 
+            ? profile.avatar 
+            : `http://192.168.1.2:8000/storage/${profile.avatar}`;
+          setAvatarUri(fullAvatarUrl);
+        }
 
         let resolvedName = isHousehold ? (profile.household_name || profile.name || '') : (profile.employer_name || profile.business_name || profile.name || '');
         if (resolvedName) {
@@ -48,6 +56,12 @@ export default function SharedDashboardScreen() {
         await AsyncStorage.setItem('userProfile', JSON.stringify(freshProfile));
         const verifiedStatus = freshProfile.isVerified === 1 || freshProfile.isVerified === true;
         setIsVerified(verifiedStatus);
+        if (freshProfile.avatar) {
+          const fullAvatarUrl = freshProfile.avatar.startsWith('http') 
+            ? freshProfile.avatar 
+            : `http://192.168.1.2:8000/storage/${freshProfile.avatar}`;
+          setAvatarUri(fullAvatarUrl);
+        }
       }
 
       const getInitials = (name: string) => {
@@ -113,6 +127,7 @@ export default function SharedDashboardScreen() {
       ? (isHousehold ? 'Verified Household' : 'Verified Business')
       : 'For Verification',
     avatarInitials: avatarInitials,
+    avatarUri: avatarUri,
   };
 
   const stats = [
@@ -167,8 +182,8 @@ export default function SharedDashboardScreen() {
               <View className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-600" />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push('/employer/(tabs)/profile')}>
-              <Avatar uri="" name={headerInfo.avatarInitials} size={44} />
+            <TouchableOpacity onPress={() => router.push(`/employer/(tabs)/profile?type=${type}`)}>
+              <Avatar uri={headerInfo.avatarUri || ''} name={headerInfo.avatarInitials} size={44} />
             </TouchableOpacity>
           </View>
         </View>

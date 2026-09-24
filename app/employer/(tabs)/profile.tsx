@@ -4,14 +4,17 @@ import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import api from '@/api/axios';
 
 export default function EmployerProfileScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
 
   const [isVerified, setIsVerified] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   const [profileData, setProfileData] = useState({
     title: isHousehold ? 'Household Profile' : 'Business Profile',
@@ -56,6 +59,11 @@ export default function EmployerProfileScreen() {
             initials = isHousehold ? 'VF' : 'MD';
           }
 
+          // Kunin ang nakasave na profile picture kung mayroon na
+          if (profile.profile_picture) {
+            setAvatarUri(profile.profile_picture);
+          }
+
           setProfileData((prev) => ({
             ...prev,
             name: actualName,
@@ -75,6 +83,66 @@ export default function EmployerProfileScreen() {
 
     fetchStoredProfile();
   }, [isHousehold]);
+
+  // Function para mamili at mag-upload ng profile picture
+  const handlePickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Denied', 'You need to grant permission to access your photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0].uri) {
+      const uri = result.assets[0].uri;
+      setAvatarUri(uri);
+      await uploadProfile(uri);
+    }
+  };
+
+  const uploadProfile = async (uri: string) => {
+    try {
+      const formData = new FormData();
+      
+      const filename = uri.split('/').pop() || 'profile.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      formData.append('profile_picture', {
+        uri: uri,
+        name: filename,
+        type: type,
+      } as any);
+
+      const response = await api.post('/employer/add-profile', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.status === 'success') {
+        Alert.alert('Success', 'Profile picture updated successfully!');
+        
+        // I-update ang AsyncStorage para magbago rin ang stored profile data
+        const storedProfile = await AsyncStorage.getItem('userProfile');
+        if (storedProfile) {
+          const profileObj = JSON.parse(storedProfile);
+          profileObj.profile_picture = response.data.profile_picture;
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profileObj));
+        }
+      }
+    } catch (error: any) {
+      console.error('Error uploading avatar:', error);
+      Alert.alert('Upload Failed', error.response?.data?.message || 'Something went wrong.');
+    }
+  };
 
   const menuItems = [
     { icon: 'business', label: isHousehold ? 'Household Details' : 'Business Details', route: '#' },
@@ -109,12 +177,15 @@ export default function EmployerProfileScreen() {
       <View className="bg-white mx-6 rounded-2xl p-6 items-center shadow-md mb-4">
         <View className="relative mb-4">
           <Avatar
-            uri=""
+            uri={avatarUri || ''}
             name={profileData.avatarInitials}
             size={80}
             verified={isVerified}
           />
-          <TouchableOpacity className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-red-600 items-center justify-center border-2 border-white">
+          <TouchableOpacity 
+            onPress={handlePickImage}
+            className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-red-600 items-center justify-center border-2 border-white"
+          >
             <MaterialIcons name="camera-alt" size={18} color={Colors.white} />
           </TouchableOpacity>
         </View>

@@ -31,7 +31,6 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     dismissKeyboard();
-
     setLoading(true);
 
     try {
@@ -51,7 +50,6 @@ export default function LoginScreen() {
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
 
-        // Magbigay ng kaunting oras para masigurong nakasave na ang token sa storage bago mag-redirect
         setTimeout(() => {
           redirectUserByRole(role);
         }, 100);
@@ -59,10 +57,39 @@ export default function LoginScreen() {
     } catch (error: any) {
       console.error(error);
       const responseData = error.response?.data;
+      const status = error.response?.status;
       setEmailError('');
       setPasswordError('');
 
       if (responseData) {
+        // Kapag ang email ay hindi pa beripikado (Status 403)
+        if (status === 403) {
+          if (responseData.token) {
+            await AsyncStorage.setItem('userToken', responseData.token);
+          }
+          // I-save ang user data kahit unverified para makuha ang role sa VerifyEmailScreen
+          if (responseData.user) {
+            await AsyncStorage.setItem('userData', JSON.stringify(responseData.user));
+          }
+
+          Alert.alert(
+            'Email Not Verified', 
+            responseData.message || 'Please verify your email to continue.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  router.push({
+                    pathname: '/auth/verify-email',
+                    params: { email: email }
+                  });
+                }
+              }
+            ]
+          );
+          return;
+        }
+
         if (responseData.errors) {
           if (responseData.errors.email) {
             setEmailError(responseData.errors.email[0]);
@@ -71,10 +98,10 @@ export default function LoginScreen() {
             setPasswordError(responseData.errors.password[0]);
           }
         }
-        else if (error.response?.status === 404 || responseData.message?.toLowerCase().includes('email') || responseData.message?.toLowerCase().includes('exist')) {
+        else if (status === 404 || responseData.message?.toLowerCase().includes('email') || responseData.message?.toLowerCase().includes('exist')) {
           setEmailError(responseData.message);
         }
-        else if (error.response?.status === 401 || responseData.message?.toLowerCase().includes('password')) {
+        else if (status === 401 || responseData.message?.toLowerCase().includes('password')) {
           setPasswordError(responseData.message);
         }
         else {

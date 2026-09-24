@@ -8,7 +8,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
-import api from '@/api/axios'; // 👈 In-import natin ang ating global Axios instance dito
+import api from '@/api/axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterEmployerScreen() {
   const [step, setStep] = useState(1);
@@ -34,8 +35,9 @@ export default function RegisterEmployerScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [confirmPasswordError, setConfirmPasswordError] = useState('')
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
+  
   const hasUpper = /[A-Z]/.test(password);
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
@@ -60,9 +62,7 @@ export default function RegisterEmployerScreen() {
     }
   };
 
-  // Konekta sa Laravel Backend gamit ang global Axios instance
   const handleRegister = async () => {
-    // I-reset muna ang mga error
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
@@ -84,12 +84,11 @@ export default function RegisterEmployerScreen() {
       hasError = true;
     }
 
-    if (hasError) return; // Huwag ituloy kung may error sa form
+    if (hasError) return;
 
     setLoading(true);
 
     try {
-      // 👈 Ginagamit na natin ang 'api' instance
       const response = await api.post('/register/employer', {
         role: 'employer',
         business_name: businessName,
@@ -107,13 +106,20 @@ export default function RegisterEmployerScreen() {
       });
 
       if (response.data.status === 'success') {
-        Alert.alert('Success', 'Employer account created successfully!');
-        router.replace('/employer/dashboard');
+        // Isinave natin bilang 'userToken' para magtugma sa global Axios interceptor
+        if (response.data.token) {
+          await AsyncStorage.setItem('userToken', response.data.token);
+        }
+
+        // I-redirect patungo sa Verify Email screen habang ipinapasa ang email
+        router.replace({
+          pathname: '/auth/verify-email', 
+          params: { email: email }
+        });
       }
     } catch (error: any) {
       console.error(error);
 
-      // Kung galing sa Laravel backend ang validation error (422)
       if (error.response && error.response.status === 422) {
         const errors = error.response.data.errors;
         if (errors.email) setEmailError(errors.email[0]);

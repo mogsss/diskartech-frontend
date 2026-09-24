@@ -34,15 +34,30 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                         const resolvedOwnerId = jobData.employer_id || jobData.household_id || jobData.user_id || 'employer_default';
                         setOwnerId(resolvedOwnerId.toString());
 
-                        const resolvedName = jobData.household?.household_name || jobData.employer?.employer_name || 'Employer';
+                        // 👇 Sinusuri nang maayos kung household o employer ba ang nag-post para hindi magka-interchange ang avatar/pangalan
+                        let rawAvatar = '';
+                        let resolvedName = 'Employer';
+
+                        if (jobData.household_id && jobData.household) {
+                            resolvedName = jobData.household.household_name || 'Household';
+                            rawAvatar = jobData.household.avatar || '';
+                        } else if (jobData.employer_id && jobData.employer) {
+                            resolvedName = jobData.employer.employer_name || 'Employer';
+                            rawAvatar = jobData.employer.avatar || '';
+                        } else {
+                            resolvedName = jobData.household?.household_name || jobData.employer?.employer_name || 'Employer';
+                            rawAvatar = jobData.household?.avatar || jobData.employer?.avatar || '';
+                        }
+
                         setCompanyName(resolvedName);
 
-                        const rawAvatar = jobData.household?.avatar || jobData.employer?.avatar || '';
                         if (rawAvatar) {
                             const formattedAvatar = rawAvatar.startsWith('http')
                                 ? rawAvatar
                                 : `http://192.168.1.2:8000/storage/${rawAvatar}`;
                             setEmployerAvatar(formattedAvatar);
+                        } else {
+                            setEmployerAvatar('');
                         }
                     }
                 } catch (error) {
@@ -111,6 +126,7 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
             Alert.alert('Paalala', 'Hindi mabuksan ang chat sa ngayon.');
         }
     };
+
     const handleCancelApplication = () => {
         Alert.alert(
             'Kanselahin ang Aplikasyon',
@@ -168,12 +184,12 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <View className="bg-slate-50 p-4 rounded-xl mb-4">
                             <Text className="text-base font-bold text-slate-900">{application.job?.title || 'Job Opening'}</Text>
-                            <Text className="text-xs text-slate-500 mt-1">{application.job?.category || 'General'}</Text>
                             <Text className="text-xs font-medium text-slate-700">{companyName}</Text>
+                            <Text className="text-xs text-slate-500 mt-1">{application.job?.category || 'General'}</Text>
                         </View>
 
                         <View className="mb-4">
-                            <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Status</Text>
+                            <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Current Status</Text>
                             <View className="flex-row items-center gap-2 mt-1">
                                 <Badge
                                     text={application.status ? application.status.charAt(0).toUpperCase() + application.status.slice(1) : ''}
@@ -190,13 +206,14 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
 
                         <View className="mb-4">
                             <Text className="text-xs text-slate-700 uppercase font-semibold mb-1">Job Description</Text>
-                            <Text className="text-sm text-slate-600 leading-5">{application.job?.description || 'Walang ibinigay na deskripsyon para sa trabahong ito.'}</Text>
+                            <Text className="text-sm text-slate-600 leading-5">{application.job?.description || 'No Description.'}</Text>
                         </View>
 
                         <View className="mb-6">
                             <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Applied Date</Text>
                             <Text className="text-sm text-slate-600">{formatDate(application.created_at)}</Text>
                         </View>
+                        
                         {/* Requirements Section */}
                         {application.job?.requirements && (
                             <View className="mb-4">
@@ -220,7 +237,6 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                             </View>
                         )}
 
-                        {/* Skills Section */}
                         {application.job?.skills && (
                             <View className="mb-4">
                                 <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Skills Needed</Text>
@@ -262,7 +278,7 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                                 <Text className="text-red-500 font-semibold text-sm">
                                     {cancelling ? 'Loading...' : 'Cancel Application'}
                                 </Text>
-                            </TouchableOpacity>  
+                            </TouchableOpacity> 
                         )}
                     </ScrollView>
                 </View>

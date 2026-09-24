@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -74,6 +74,16 @@ export default function ApplicationsScreen() {
     setModalVisible(true);
   };
 
+  // Helper para kumuha ng initials kung sakaling walang avatar
+  const getInitials = (name: string) => {
+    if (!name) return 'CP';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  };
+
   return (
     <View className="flex-1 bg-[#F8FAFC]">
       <View className="px-6 pt-12 pb-4">
@@ -114,72 +124,87 @@ export default function ApplicationsScreen() {
         ) : filteredApplications.length === 0 ? (
           <EmptyState icon="inbox" title={`No ${activeTab} Applications`} message={`You don't have any ${activeTab.toLowerCase()} applications yet.`} />
         ) : (
-          filteredApplications.map((app) => (
-            <TouchableOpacity 
-              key={app.id} 
-              activeOpacity={0.7}
-              onPress={() => handleCardPress(app)}
-              className="bg-white rounded-2xl p-4 mb-4 shadow-sm"
-            >
-              <View className="flex-row items-center mb-3">
-                <View className="w-10 h-10 rounded-full overflow-hidden mr-4 bg-gray-100 items-center justify-center">
-                  <MaterialIcons name="work" size={20} color="#64748b" />
-                </View>
-                <View 
-                  style={{ backgroundColor: app.status === 'interview' ? '#f59e0b' : getStatusColor(app.status) }} 
-                  className="w-3 h-3 rounded-full mr-3" 
-                />
-                <View className="flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">{app.job?.title || 'Job Opening'}</Text>
-                  <Text className="text-xs text-slate-500 mt-0.5">{app.job?.category || 'General'}</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={20} color="#94a3b8" />
-              </View>
-              
-              <View className="flex-row gap-6 mb-3 ml-[52px]">
-                <View className="flex-row items-center gap-1">
-                  <MaterialIcons name="attach-money" size={14} color={Colors.textLight} />
-                  <Text className="text-xs text-slate-500">₱{app.job?.salary || '0.00'}</Text>
-                </View>
-                <View className="flex-row items-center gap-1">
-                  <MaterialIcons name="calendar-today" size={14} color={Colors.textLight} />
-                  <Text className="text-xs text-slate-500">{formatDate(app.created_at)}</Text>
-                </View>
-                <View className="flex-row items-center gap-1">
-                  <MaterialIcons 
-                    name={app.status === 'interview' ? 'event-available' : (getStatusIcon(app.status) as any)} 
-                    size={14} 
-                    color={app.status === 'interview' ? '#f59e0b' : getStatusColor(app.status)} 
-                  />
-                  <Text 
-                    style={{ color: app.status === 'interview' ? '#f59e0b' : getStatusColor(app.status) }} 
-                    className="text-xs font-semibold"
-                  >
-                    {app.status === 'interview' ? 'For Interview' : app.status ? app.status.charAt(0).toUpperCase() + app.status.slice(1) : ''}
-                  </Text>
-                </View>
-              </View>
+          filteredApplications.map((app) => {
+            const jobInfo = app.job || {};
+            const companyName = jobInfo.household?.household_name || jobInfo.employer?.employer_name || 'Employer';
+            const rawAvatar = jobInfo.household?.avatar || jobInfo.employer?.avatar || '';
+            const companyAvatar = rawAvatar
+              ? (rawAvatar.startsWith('http') ? rawAvatar : `http://192.168.1.2:8000/storage/${rawAvatar}`)
+              : '';
+            const initials = getInitials(companyName);
 
-              <View className="flex-row items-center justify-between border-t border-gray-100 pt-3">
-                <Badge 
-                  text={app.status === 'interview' ? 'For Interview' : app.status ? app.status.charAt(0).toUpperCase() + app.status.slice(1) : ''} 
-                  variant={
-                    app.status === 'rejected' || app.status === 'cancelled' 
-                      ? 'error' 
-                      : app.status === 'accepted' || app.status === 'completed' 
-                      ? 'success' 
-                      : app.status === 'interview'
-                      ? 'warning'
-                      : app.status === 'pending' 
-                      ? 'warning' 
-                      : 'info'
-                  } 
-                  size="small" 
-                />
-                <Text className="text-xs text-slate-400">ID: {app.job_id}</Text>
-              </View>
-            </TouchableOpacity>
-          ))
+            return (
+              <TouchableOpacity 
+                key={app.id} 
+                activeOpacity={0.7}
+                onPress={() => handleCardPress(app)}
+                className="bg-white rounded-2xl p-4 mb-4 shadow-sm"
+              >
+                <View className="flex-row items-center mb-3">
+                  <View className="w-10 h-10 rounded-full overflow-hidden mr-4 bg-red-50 items-center justify-center">
+                    {companyAvatar ? (
+                      <Image source={{ uri: companyAvatar }} className="w-10 h-10 rounded-full" />
+                    ) : (
+                      <Text className="text-xs font-bold text-red-600">{initials}</Text>
+                    )}
+                  </View>
+
+                  <View 
+                    style={{ backgroundColor: app.status === 'interview' ? '#f59e0b' : getStatusColor(app.status) }} 
+                    className="w-3 h-3 rounded-full mr-3" 
+                  />
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-slate-900">{app.job?.title || 'Job Opening'}</Text>
+                    <Text className="text-xs text-slate-500 mt-0.5">{app.job?.category || 'General'}</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color="#94a3b8" />
+                </View>
+                
+                <View className="flex-row gap-6 mb-3 ml-[52px]">
+                  <View className="flex-row items-center gap-1">
+                    <MaterialIcons name="attach-money" size={14} color={Colors.textLight} />
+                    <Text className="text-xs text-slate-500">₱{app.job?.salary || '0.00'}</Text>
+                  </View>
+                  <View className="flex-row items-center gap-1">
+                    <MaterialIcons name="calendar-today" size={14} color={Colors.textLight} />
+                    <Text className="text-xs text-slate-500">{formatDate(app.created_at)}</Text>
+                  </View>
+                  <View className="flex-row items-center gap-1">
+                    <MaterialIcons 
+                      name={app.status === 'interview' ? 'event-available' : (getStatusIcon(app.status) as any)} 
+                      size={14} 
+                      color={app.status === 'interview' ? '#f59e0b' : getStatusColor(app.status)} 
+                    />
+                    <Text 
+                      style={{ color: app.status === 'interview' ? '#f59e0b' : getStatusColor(app.status) }} 
+                      className="text-xs font-semibold"
+                    >
+                      {app.status === 'interview' ? 'For Interview' : app.status ? app.status.charAt(0).toUpperCase() + app.status.slice(1) : ''}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-row items-center justify-between border-t border-gray-100 pt-3">
+                  <Badge 
+                    text={app.status === 'interview' ? 'For Interview' : app.status ? app.status.charAt(0).toUpperCase() + app.status.slice(1) : ''} 
+                    variant={
+                      app.status === 'rejected' || app.status === 'cancelled' 
+                        ? 'error' 
+                        : app.status === 'accepted' || app.status === 'completed' 
+                        ? 'success' 
+                        : app.status === 'interview'
+                        ? 'warning'
+                        : app.status === 'pending' 
+                        ? 'warning' 
+                        : 'info'
+                    } 
+                    size="small" 
+                  />
+                  <Text className="text-xs text-slate-400">ID: {app.job_id}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
 

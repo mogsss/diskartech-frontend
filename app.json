@@ -42,7 +42,13 @@
           }
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Kailangan ng DiskarTech ang access sa lokasyon para sa pag-pin ng iyong address."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

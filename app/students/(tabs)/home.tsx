@@ -74,7 +74,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Helper para i-inject ang 'bookmarked' state base sa saved jobs list
   const formatJobsWithBookmark = (jobsList: any[], savedList: any[]) => {
     const savedIds = new Set(savedList.map((s: any) => s.id));
     return jobsList.map((job) => ({
@@ -340,42 +339,49 @@ export default function HomeScreen() {
               </Text>
             </View>
           ) : (
-            currentJobsList.map((job) => (
-              <View key={job.id} className="mb-3">
-                {activeTab === 'ai_match' && (
-                  <View className="bg-red-50 px-3 py-1 rounded-t-xl self-start border-t border-x border-red-200 flex-row items-center gap-1">
-                    <MaterialIcons name="auto-awesome" size={12} color="#dc2626" />
-                    <Text className="text-xs font-bold text-red-600">
-                      <Text>{job.match_percentage ?? 0}</Text>
-                      <Text>% Skills & Schedule Match</Text>
-                    </Text>
-                  </View>
-                )}
-                <JobCard
-                  job={{
-                    ...job,
-                    jobTitle: job.title,
-                    companyName: job.household?.household_name || job.employer?.employer_name || 'Employer',
-                    salary: `₱${job.salary}`,
-                    location: job.household?.location || job.employer?.location || 'Pinamalayan',
-                    distance: job.distance ? `${parseFloat(job.distance).toFixed(1)} km away` : 'Calculating...',
-                    schedule: getCleanSchedule(job),
-                    workingHours: getCleanSchedule(job),
-                    jobType: 'Part-time',
-                    category: job.category || 'General',
-                    requirements: parseJsonField(job.requirements),
-                    skills: parseJsonField(job.skills),
-                    bookmarked: job.bookmarked ?? false,
-                    // Dito na ipinapasa ang tunay na bilang galing sa withCount('applications')
-                    applicants: job.applications_count ?? 0,
-                    postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Recent',
-                  }}
-                  onPress={() => handleJobPress(job.id.toString())}
-                  onBookmark={() => handleToggleBookmark(job.id.toString())}
-                  onApply={() => router.push(`/students/job-details?id=${job.id}`)}
-                />
-              </View>
-            ))
+            currentJobsList.map((job) => {
+              const rawAvatar = job.household?.avatar || job.employer?.avatar || '';
+              const companyAvatar = rawAvatar
+                ? (rawAvatar.startsWith('http') ? rawAvatar : `http://192.168.1.2:8000/storage/${rawAvatar}`)
+                : '';
+
+              return (
+                <View key={job.id} className="mb-3">
+                  {activeTab === 'ai_match' && (
+                    <View className="bg-red-50 px-3 py-1 rounded-t-xl self-start border-t border-x border-red-200 flex-row items-center gap-1">
+                      <MaterialIcons name="auto-awesome" size={12} color="#dc2626" />
+                      <Text className="text-xs font-bold text-red-600">
+                        <Text>{job.match_percentage ?? 0}</Text>
+                        <Text>% Skills & Schedule Match</Text>
+                      </Text>
+                    </View>
+                  )}
+                  <JobCard
+                    job={{
+                      ...job,
+                      jobTitle: job.title,
+                      companyName: job.household?.household_name || job.employer?.employer_name || 'Employer',
+                      companyLogo: companyAvatar,
+                      salary: `₱${job.salary}`,
+                      location: job.household?.location || job.employer?.location || 'Pinamalayan',
+                      distance: job.distance ? `${parseFloat(job.distance).toFixed(1)} km away` : 'Calculating...',
+                      schedule: getCleanSchedule(job),
+                      workingHours: getCleanSchedule(job),
+                      jobType: 'Part-time',
+                      category: job.category || 'General',
+                      requirements: parseJsonField(job.requirements),
+                      skills: parseJsonField(job.skills),
+                      bookmarked: job.bookmarked ?? false,
+                      applicants: job.applications_count ?? 0,
+                      postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Recent',
+                    }}
+                    onPress={() => handleJobPress(job.id.toString())}
+                    onBookmark={() => handleToggleBookmark(job.id.toString())}
+                    onApply={() => router.push(`/students/job-details?id=${job.id}`)}
+                  />
+                </View>
+              );
+            })
           )}
         </View>
       </ScrollView>

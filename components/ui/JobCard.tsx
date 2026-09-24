@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 interface JobCardProps {
-  job: Job;
+  job: Job & { companyLogo?: string }; // Tiniyak nating tinatanggap nito ang companyLogo
   onPress: () => void;
   onBookmark?: () => void;
   onApply?: () => void;
@@ -40,6 +40,18 @@ export default function JobCard({ job, onPress, onBookmark, onApply, variant = '
   const isCompact = variant === 'compact';
   const isFeatured = variant === 'featured';
 
+  // Helper para kumuha ng initials mula sa pangalan ng kumpanya/household
+  const getInitials = (name: string) => {
+    if (!name) return 'CP';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  };
+
+  const initials = getInitials(job.companyName);
+
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
@@ -51,13 +63,16 @@ export default function JobCard({ job, onPress, onBookmark, onApply, variant = '
           isFeatured ? 'border-l-red-600' : 'border-l-transparent'
         }`}
       >
-        {/* Gradient top for featured */}
         {isFeatured && <View className="absolute top-0 left-0 right-0 h-1 bg-red-600 rounded-t-2xl" />}
 
         {/* Header */}
         <View className="flex-row items-center mb-3">
-          <View className="w-[52px] h-[52px] rounded-xl bg-slate-100 overflow-hidden mr-3">
-            <Image source={{ uri: job.companyLogo }} className="w-[52px] h-[52px] rounded-xl" />
+          <View className="w-[52px] h-[52px] rounded-xl bg-red-50 items-center justify-center overflow-hidden mr-3">
+            {job.companyLogo ? (
+              <Image source={{ uri: job.companyLogo }} className="w-[52px] h-[52px] rounded-xl" />
+            ) : (
+              <Text className="text-base font-bold text-red-600">{initials}</Text>
+            )}
           </View>
           <View className="flex-1 mr-3">
             <View className="flex-row items-center gap-1">

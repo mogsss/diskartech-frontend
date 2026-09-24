@@ -244,32 +244,40 @@ export default function SearchScreen() {
         {loading ? (
           <ActivityIndicator size="large" color="#dc2626" style={{ marginVertical: 40 }} />
         ) : filteredJobs.length > 0 ? (
-          filteredJobs.map((job) => (
-            <JobCard
-              key={job.id}
-              job={{
-                ...job,
-                jobTitle: job.title,
-                companyName: job.household?.household_name || job.employer?.employer_name || 'Employer',
-                salary: `₱${job.salary}`,
-                location: job.household?.location || job.employer?.location || 'Pinamalayan',
-                distance: job.distance ? `${parseFloat(job.distance).toFixed(1)} km away` : 'Calculating...',
-                schedule: getCleanSchedule(job),
-                workingHours: getCleanSchedule(job),
-                jobType: 'Part-time',
-                category: job.category || 'General',
-                requirements: parseJsonField(job.requirements),
-                skills: parseJsonField(job.skills),
-                bookmarked: savedJobs.some((saved: any) => saved.id === job.id),
-                // 👇 Idinagdag dito ang applicants count at posted date para maging consistent sa Home screen
-                applicants: job.applications_count ?? 0,
-                postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Recent',
-              }}
-              onPress={() => router.push(`/students/job-details?id=${job.id}`)}
-              onBookmark={() => handleToggleBookmark(job.id.toString())}
-              onApply={() => router.push(`/students/job-details?id=${job.id}`)}
-            />
-          ))
+          filteredJobs.map((job) => {
+            // 👇 Kinukuha at kino-convert ang avatar para maging companyLogo sa Search screen
+            const rawAvatar = job.household?.avatar || job.employer?.avatar || '';
+            const companyAvatar = rawAvatar
+              ? (rawAvatar.startsWith('http') ? rawAvatar : `http://192.168.1.2:8000/storage/${rawAvatar}`)
+              : '';
+
+            return (
+              <JobCard
+                key={job.id}
+                job={{
+                  ...job,
+                  jobTitle: job.title,
+                  companyName: job.household?.household_name || job.employer?.employer_name || 'Employer',
+                  companyLogo: companyAvatar, // 👈 Ipinapasa na natin ang logo o initials fallback
+                  salary: `₱${job.salary}`,
+                  location: job.household?.location || job.employer?.location || 'Pinamalayan',
+                  distance: job.distance ? `${parseFloat(job.distance).toFixed(1)} km away` : 'Calculating...',
+                  schedule: getCleanSchedule(job),
+                  workingHours: getCleanSchedule(job),
+                  jobType: 'Part-time',
+                  category: job.category || 'General',
+                  requirements: parseJsonField(job.requirements),
+                  skills: parseJsonField(job.skills),
+                  bookmarked: savedJobs.some((saved: any) => saved.id === job.id),
+                  applicants: job.applications_count ?? 0,
+                  postedDate: job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Recent',
+                }}
+                onPress={() => router.push(`/students/job-details?id=${job.id}`)}
+                onBookmark={() => handleToggleBookmark(job.id.toString())}
+                onApply={() => router.push(`/students/job-details?id=${job.id}`)}
+              />
+            );
+          })
         ) : (
           <Text className="text-slate-400 text-center py-8">No jobs found matching your criteria.</Text>
         )}
