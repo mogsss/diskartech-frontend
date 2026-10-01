@@ -9,7 +9,9 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
+  deleteDoc,
   onSnapshot,
   query,
   where,
@@ -173,6 +175,7 @@ export async function getPushDiagnosticInfo(): Promise<{
 
 /**
  * I-save ang Expo Push Token ng kasalukuyang user sa Firestore.
+ * Awtomatiko ring tatanggalin ang token na ito sa kahit anong lumang user na dating nag-login sa device na ito.
  */
 export async function registerAndSyncPushToken(userId: string | number): Promise<void> {
   try {
@@ -183,6 +186,16 @@ export async function registerAndSyncPushToken(userId: string | number): Promise
     if (!token || !token.startsWith('ExponentPushToken')) return;
 
     try {
+      // 1. I-unlink ang device token na ito sa kahit sinong ibang user na dating gumamit ng phone na ito
+      const q = query(collection(db, 'user_push_tokens'), where('push_token', '==', token));
+      const oldTokensSnap = await getDocs(q);
+      for (const oldDoc of oldTokensSnap.docs) {
+        if (oldDoc.id !== id) {
+          await deleteDoc(oldDoc.ref);
+        }
+      }
+
+      // 2. I-save sa kasalukuyang user
       await setDoc(
         doc(db, 'user_push_tokens', id),
         {
@@ -197,6 +210,19 @@ export async function registerAndSyncPushToken(userId: string | number): Promise
     }
   } catch (err) {
     console.error('Error syncing push token:', err);
+  }
+}
+
+/**
+ * Alisin ang push token kapag nag-logout para hindi makatanggap ng notification ng ibang tao.
+ */
+export async function clearPushToken(userId: string | number): Promise<void> {
+  try {
+    const id = String(userId).trim();
+    if (!id || id === 'unknown') return;
+    await deleteDoc(doc(db, 'user_push_tokens', id));
+  } catch (e) {
+    console.warn('Error clearing push token on logout:', e);
   }
 }
 

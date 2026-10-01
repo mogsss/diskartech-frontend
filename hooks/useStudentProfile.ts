@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { clearPushToken } from '@/utils/notifications';
 
 export function useStudentProfile() {
   const [studentName, setStudentName] = useState('Junnyl Mabini');
@@ -301,6 +302,16 @@ export function useStudentProfile() {
     } catch (error) {
       console.error('Error logging out from server:', error);
     } finally {
+      try {
+        const storedUser = await AsyncStorage.getItem('userData');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          if (user?.id) await clearPushToken(user.id);
+        }
+      } catch {
+        /* ignore */
+      }
+
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userProfile');
       await AsyncStorage.removeItem('userData');

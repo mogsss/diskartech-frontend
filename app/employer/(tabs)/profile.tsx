@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import api from '@/api/axios';
 import { useFocusEffect } from '@react-navigation/native';
+import { clearPushToken } from '@/utils/notifications';
 
 export default function EmployerProfileScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
@@ -216,6 +217,11 @@ export default function EmployerProfileScreen() {
   const handleMenuPress = async (route: string) => {
     if (route === '/auth/welcome') {
       try {
+        const storedUser = await AsyncStorage.getItem('userData');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          if (user?.id) await clearPushToken(user.id);
+        }
         await AsyncStorage.clear();
       } catch (error) {
         console.error('Error clearing storage on logout:', error);

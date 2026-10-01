@@ -9,6 +9,7 @@ import {
   scheduleDelayedSimulationNotification,
   sendTestCloudPushNotification,
   getPushDiagnosticInfo,
+  clearPushToken,
 } from '@/utils/notifications';
 
 export default function SettingsScreen() {
@@ -38,22 +39,19 @@ export default function SettingsScreen() {
             try {
               setLoading(true);
 
-              // 1. Kunin ang nakaimbak na token (Palitan kung iba ang ginamit mong storage o variable name)
-              // const token = await AsyncStorage.getItem('user_token');
+              const storedUser = await AsyncStorage.getItem('userData');
+              if (storedUser) {
+                const user = JSON.parse(storedUser);
+                if (user?.id) await clearPushToken(user.id);
+              }
 
-              // 2. Tawagin ang Laravel Logout API (Palitan ang IP kung kinakailangan)
-              // await axios.post('http://192.168.1.2:8000/api/logout', {}, {
-              //   headers: { Authorization: `Bearer ${token}` }
-              // });
+              await AsyncStorage.removeItem('userToken');
+              await AsyncStorage.removeItem('userProfile');
+              await AsyncStorage.removeItem('userData');
 
-              // 3. Burahin ang token sa device storage
-              // await AsyncStorage.removeItem('user_token');
-
-              // 4. Dalhin pabalik sa Welcome o Login screen
-              router.replace('/auth/welcome'); // O kaya ay '/auth/login'
+              router.replace('/auth/welcome');
             } catch (error) {
               console.error(error);
-              // Kahit magka-error sa network, i-force pa rin ang pag-redirect sa welcome screen
               router.replace('/auth/welcome');
             } finally {
               setLoading(false);
