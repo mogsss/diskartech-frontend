@@ -1,18 +1,18 @@
 import '../global.css';
 
 import { Colors } from '@/constants/colors';
+import { getLoggedInUserId } from '@/utils/chat';
+import {
+  registerAndSyncPushToken,
+  registerForPushNotificationsAsync,
+  subscribeToAppNotifications,
+  subscribeToIncomingChatNotifications,
+} from '@/utils/notifications';
+import * as Notifications from 'expo-notifications';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import {
-  registerForPushNotificationsAsync,
-  registerAndSyncPushToken,
-  subscribeToIncomingChatNotifications,
-  subscribeToAppNotifications,
-} from '@/utils/notifications';
-import { getLoggedInUserId } from '@/utils/chat';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -59,8 +59,6 @@ export default function RootLayout() {
     };
 
     setupListeners();
-
-    // Regular na tignan kung nag-login na ang user kapag kakabukas pa lang
     const interval = setInterval(() => {
       if (!unsubscribeChats || !unsubscribeApps) {
         setupListeners();
@@ -107,7 +105,7 @@ export default function RootLayout() {
         <Stack.Screen name="employer/job-posting" />
         <Stack.Screen name="employer/applicant-details" />
         <Stack.Screen name="employer/verification-status" />
-        
+
         {/* Shared screens */}
         <Stack.Screen name="chat" />
         <Stack.Screen name="notifications" />
