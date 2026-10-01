@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { redirectUserByRole } from '@/utils/authNavigation';
+import { registerAndSyncPushToken } from '@/utils/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 
@@ -177,6 +178,10 @@ export default function VerifyEmailScreen() {
 
         await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
         const targetRole = resolvedRole;
+
+        if (updatedUser?.id) {
+          registerAndSyncPushToken(updatedUser.id);
+        }
 
         // Fetch profile updates silently in the background
         try {

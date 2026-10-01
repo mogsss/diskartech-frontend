@@ -41,29 +41,42 @@ export default function RootLayout() {
     });
 
     // 3. Makinig sa mga bagong mensahe at application updates sa Firestore
+    let activeUserId: string | null = null;
     let unsubscribeChats: (() => void) | null = null;
     let unsubscribeApps: (() => void) | null = null;
     let isCancelled = false;
 
-    const setupListeners = async () => {
+    const syncUserAndListeners = async () => {
+      if (isCancelled) return;
       const uid = await getLoggedInUserId();
-      if (!isCancelled && uid && uid !== 'unknown') {
-        registerAndSyncPushToken(uid);
-        if (!unsubscribeChats) {
-          unsubscribeChats = subscribeToIncomingChatNotifications(uid);
+
+      // Kapag nag-logout o walang naka-login
+      if (!uid || uid === 'unknown') {
+        if (activeUserId !== null) {
+          activeUserId = null;
+          if (unsubscribeChats) { unsubscribeChats(); unsubscribeChats = null; }
+          if (unsubscribeApps) { unsubscribeApps(); unsubscribeApps = null; }
         }
-        if (!unsubscribeApps) {
+        return;
+      }
+
+      // Kapag may bagong nag-login o lumipat ng account
+      if (uid !== activeUserId) {
+        activeUserId = uid;
+
+        if (unsubscribeChats) { unsubscribeChats(); unsubscribeChats = null; }
+        if (unsubscribeApps) { unsubscribeApps(); unsubscribeApps = null; }
+
+        await registerAndSyncPushToken(uid);
+        if (!isCancelled) {
+          unsubscribeChats = subscribeToIncomingChatNotifications(uid);
           unsubscribeApps = subscribeToAppNotifications(uid);
         }
       }
     };
 
-    setupListeners();
-    const interval = setInterval(() => {
-      if (!unsubscribeChats || !unsubscribeApps) {
-        setupListeners();
-      }
-    }, 3000);
+    syncUserAndListeners();
+    const interval = setInterval(syncUserAndListeners, 2000);
 
     return () => {
       isCancelled = true;

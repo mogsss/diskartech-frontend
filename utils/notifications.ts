@@ -28,7 +28,38 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
+    shouldShowAlert: true,
   }),
+});
+
+// Cache para maiwasan ang duplicate notifications kapag parehong nag-trigger ang remote push at local listener
+const recentNotificationsCache = new Map<string, number>();
+
+export function shouldShowNotification(key: string, cooldownMs: number = 8000): boolean {
+  const now = Date.now();
+  for (const [k, time] of recentNotificationsCache.entries()) {
+    if (now - time > 30000) {
+      recentNotificationsCache.delete(k);
+    }
+  }
+
+  const lastTime = recentNotificationsCache.get(key);
+  if (lastTime && now - lastTime < cooldownMs) {
+    return false;
+  }
+
+  recentNotificationsCache.set(key, now);
+  return true;
+}
+
+// Makinig sa mga pumasok na remote push para i-marka sa cache na nai-display na
+Notifications.addNotificationReceivedListener((notification) => {
+  const content = notification.request.content;
+  const data = content.data as Record<string, any> | undefined;
+  const key = data?.chatId
+    ? `chat_${data.chatId}_${content.body}`
+    : `notif_${content.title}_${content.body}`;
+  recentNotificationsCache.set(key, Date.now());
 });
 
 /**
@@ -367,6 +398,18 @@ export function subscribeToIncomingChatNotifications(
             raw.student_name ||
             'DiskarTech User';
 
+          const notifKey = `chat_${chatId}_${lastMessage}`;
+          if (currentActiveChatId !== chatId && shouldShowNotification(notifKey)) {
+            await sendLocalNotification({
+              title: senderName,
+              body: lastMessage,
+              data: {
+                chatId,
+                url: `/chat?id=${chatId}`,
+              },
+            });
+          }
+
           if (onNotificationTriggered) {
             onNotificationTriggered(chatId);
           }
@@ -461,6 +504,19 @@ export function subscribeToAppNotifications(
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added') {
           const raw = change.doc.data();
+          const notifKey = `app_${raw.target_id || ''}_${raw.title}_${raw.body}`;
+          if (shouldShowNotification(notifKey)) {
+            await sendLocalNotification({
+              title: raw.title || 'DiskarTech Notification',
+              body: raw.body || '',
+              data: {
+                type: raw.type,
+                targetId: raw.target_id,
+                url: '/notifications',
+              },
+            });
+          }
+
           if (onNotificationTriggered) {
             onNotificationTriggered(raw);
           }
