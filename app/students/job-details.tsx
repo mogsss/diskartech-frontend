@@ -136,6 +136,7 @@ export default function JobDetailsScreen() {
         try {
           const owner = resolveOwnerFromJob(job);
           const student = await getStudentParticipantFromStorage();
+          const createdAppId = response.data?.application?.id || response.data?.application_id || response.data?.id || job.id;
           if (owner.owner_user_id && owner.owner_user_id !== 'unknown') {
             await sendAppNotification({
               recipientId: owner.owner_user_id,
@@ -144,7 +145,7 @@ export default function JobDetailsScreen() {
               title: 'New Applicant',
               body: `${student.student_name || 'A student'} applied for "${job.title || 'Job'}".`,
               type: 'application',
-              targetId: job.id,
+              targetId: createdAppId,
             });
           }
         } catch (notifErr) {

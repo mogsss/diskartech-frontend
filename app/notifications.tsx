@@ -359,24 +359,88 @@ export default function NotificationsScreen() {
     };
   }, [currentUserId, userRole]);
 
-  // Pagsamahin at i-sort chronologically: Pinakabago / Newest First!
+function getNotificationDedupeKey(n: any): string {
+  let text = '';
+  if (typeof n.message === 'string') {
+    // Alisin ang lahat ng spaces, quotes, at punctuation para sigurado ang match sa iba't ibang formatting
+    text = n.message.toLowerCase().replace(/[^a-z0-9]/g, '');
+  } else if (n.rawApplication) {
+    text = `app_${n.rawApplication.id}_${n.rawApplication.status || ''}`;
+  }
+
+  const title = (n.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const type = (n.type || '').trim().toLowerCase();
+
+  if (text) {
+    return `${type}|${title}|${text}`;
+  }
+  if (n.targetId) {
+    return `${type}|${title}|${n.targetId}`;
+  }
+  return n.id;
+}
+
+  // Pagsamahin at i-sort chronologically: Pinakabago / Newest First nang walang duplicates!
   const combinedNotifications = useMemo(() => {
     const map = new Map<string, any>();
 
     // 1. Backend API notifications
-    apiNotifications.forEach((n) => map.set(n.id, n));
-
-    // 2. Live Firestore App notifications
-    liveAppNotifications.forEach((n) => {
-      // Kung may duplicate targetId sa application, gamitin ang live notification para laging updated
-      if (n.targetId && map.has(`app_${n.targetId}`)) {
-        map.delete(`app_${n.targetId}`);
+    apiNotifications.forEach((n) => {
+      const key = getNotificationDedupeKey(n);
+      if (map.has(key)) {
+        const existing = map.get(key);
+        map.set(key, {
+          ...existing,
+          ...n,
+          targetId: existing.targetId || n.targetId,
+          rawApplication: existing.rawApplication || n.rawApplication,
+          mergedIds: Array.from(new Set([...(existing.mergedIds || [existing.id]), n.id])),
+        });
+      } else {
+        map.set(key, { ...n, mergedIds: [n.id] });
       }
-      map.set(n.id, n);
+    });
+
+    // 2. Live Firestore App notifications (i-merge sa existing para updated pero walang doble)
+    liveAppNotifications.forEach((n) => {
+      const key = getNotificationDedupeKey(n);
+      if (map.has(key)) {
+        const existing = map.get(key);
+        const mergedIds = Array.from(
+          new Set([...(existing.mergedIds || [existing.id]), ...(n.mergedIds || [n.id])])
+        );
+        map.set(key, {
+          ...existing,
+          ...n,
+          id: existing.id || n.id,
+          mergedIds,
+          targetId: existing.targetId || n.targetId,
+          rawApplication: existing.rawApplication || n.rawApplication,
+          read: existing.read || n.read,
+          // Panatilihin ang pinakabagong timestamp
+          timestampMs: Math.max(existing.timestampMs || 0, n.timestampMs || 0),
+          timestamp: (existing.timestampMs || 0) > (n.timestampMs || 0) ? existing.timestamp : n.timestamp,
+        });
+      } else {
+        map.set(key, { ...n, mergedIds: [n.id] });
+      }
     });
 
     // 3. Chat notifications
-    chatNotifications.forEach((n) => map.set(n.id, n));
+    chatNotifications.forEach((n) => {
+      const key = getNotificationDedupeKey(n);
+      if (map.has(key)) {
+        const existing = map.get(key);
+        map.set(key, {
+          ...existing,
+          ...n,
+          targetId: existing.targetId || n.targetId,
+          mergedIds: Array.from(new Set([...(existing.mergedIds || [existing.id]), n.id])),
+        });
+      } else {
+        map.set(key, { ...n, mergedIds: [n.id] });
+      }
+    });
 
     const list = Array.from(map.values());
 
@@ -410,21 +474,35 @@ export default function NotificationsScreen() {
   const updateCount = combinedNotifications.filter((n) => n.type === 'verification' || n.type === 'general').length;
 
   const handleNotificationPress = async (notification: any) => {
+    const idsToMark: string[] = notification.mergedIds || [notification.id];
     try {
       const readNotifsString = await AsyncStorage.getItem('read_notifications');
       const readNotifsIds: string[] = readNotifsString ? JSON.parse(readNotifsString) : [];
 
-      if (!readNotifsIds.includes(notification.id)) {
-        readNotifsIds.push(notification.id);
+      let changed = false;
+      idsToMark.forEach((id) => {
+        if (!readNotifsIds.includes(id)) {
+          readNotifsIds.push(id);
+          changed = true;
+        }
+      });
+
+      if (changed) {
         await AsyncStorage.setItem('read_notifications', JSON.stringify(readNotifsIds));
       }
     } catch (e) {
       console.error('Error saving read notification status:', e);
     }
 
-    setApiNotifications((prev) => prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
-    setLiveAppNotifications((prev) => prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
-    setChatNotifications((prev) => prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)));
+    setApiNotifications((prev) =>
+      prev.map((n) => (idsToMark.includes(n.id) ? { ...n, read: true } : n))
+    );
+    setLiveAppNotifications((prev) =>
+      prev.map((n) => (idsToMark.includes(n.id) ? { ...n, read: true } : n))
+    );
+    setChatNotifications((prev) =>
+      prev.map((n) => (idsToMark.includes(n.id) ? { ...n, read: true } : n))
+    );
 
     if (notification.type === 'message') {
       if (currentUserId) {
@@ -463,8 +541,15 @@ export default function NotificationsScreen() {
 
   const handleMarkAllRead = async () => {
     try {
-      const allIds = combinedNotifications.map((n) => n.id);
-      await AsyncStorage.setItem('read_notifications', JSON.stringify(allIds));
+      const allIds: string[] = [];
+      combinedNotifications.forEach((n) => {
+        if (Array.isArray(n.mergedIds)) {
+          allIds.push(...n.mergedIds);
+        } else if (n.id) {
+          allIds.push(n.id);
+        }
+      });
+      await AsyncStorage.setItem('read_notifications', JSON.stringify(Array.from(new Set(allIds))));
     } catch (e) {
       console.error('Error marking all as read:', e);
     }
