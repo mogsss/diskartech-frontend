@@ -367,15 +367,6 @@ export function subscribeToIncomingChatNotifications(
             raw.student_name ||
             'DiskarTech User';
 
-          await sendLocalNotification({
-            title: senderName,
-            body: lastMessage,
-            data: {
-              chatId,
-              url: `/chat?id=${chatId}`,
-            },
-          });
-
           if (onNotificationTriggered) {
             onNotificationTriggered(chatId);
           }
@@ -470,16 +461,6 @@ export function subscribeToAppNotifications(
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added') {
           const raw = change.doc.data();
-          await sendLocalNotification({
-            title: raw.title || 'DiskarTech Notification',
-            body: raw.body || '',
-            data: {
-              type: raw.type,
-              targetId: raw.target_id,
-              url: '/notifications',
-            },
-          });
-
           if (onNotificationTriggered) {
             onNotificationTriggered(raw);
           }
