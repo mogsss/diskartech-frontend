@@ -369,7 +369,8 @@ function getNotificationDedupeKey(n: any): string {
   }
 
   const title = (n.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const type = (n.type || '').trim().toLowerCase();
+  let type = (n.type || '').trim().toLowerCase();
+  if (type === 'application_status') type = 'application';
 
   if (text) {
     return `${type}|${title}|${text}`;
