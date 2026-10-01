@@ -42,3 +42,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Private Service Account Keys
+*-service-account.json
+firebase-service-account.json

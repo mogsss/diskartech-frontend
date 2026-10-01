@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Keyboard } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { redirectUserByRole } from '@/utils/authNavigation';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Colors } from '@/constants/colors';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 
 export default function VerifyEmailScreen() {
   const { email } = useLocalSearchParams();
@@ -13,12 +13,21 @@ export default function VerifyEmailScreen() {
   
   // State para sa 6 na individual digits
   const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // Auto-send OTP kapag binuksan ang screen (May kasamang retry para hindi maunahan ng AsyncStorage write)
+  // States para sa ating Reusable Modal
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState<any>({});
+
+  // Helper para madaling magpakita ng modal
+  const showModal = (config: any) => {
+    setModalConfig(config);
+    setModalVisible(true);
+  };
+
   useEffect(() => {
     checkTokenAndSendOtp();
   }, []);
@@ -28,7 +37,6 @@ export default function VerifyEmailScreen() {
       setSending(true);
       let token = await AsyncStorage.getItem('userToken');
 
-      // Kung wala pang nahanap na token, bigyan ng konting segundo ang AsyncStorage na tapusin ang pagsulat
       if (!token && retries > 0) {
         console.log(`Token not found yet, retrying... (${retries} left)`);
         setTimeout(() => checkTokenAndSendOtp(retries - 1), 500);
@@ -36,16 +44,42 @@ export default function VerifyEmailScreen() {
       }
 
       if (!token) {
-        Alert.alert('Error', 'Session expired. Please log in again.');
-        router.replace('/auth/login' as any);
+        showModal({
+          title: 'Session Expired',
+          message: 'Please log in again to verify your email.',
+          iconName: 'timer-off',
+          iconColor: '#ef4444',
+          iconBgColor: 'bg-red-50',
+          primaryButtonText: 'Go to Login',
+          onPrimaryPress: () => {
+            setModalVisible(false);
+            router.replace('/auth/login' as any);
+          },
+        });
         return;
       }
 
       const response = await api.post('/email/send-otp');
-      Alert.alert('Success', response.data.message || 'OTP has been sent to your email address.');
+      showModal({
+        title: 'OTP Sent',
+        message: response.data.message || 'Verification code has been sent to your email address.',
+        iconName: 'mark-email-read',
+        iconColor: '#16a34a', // Green
+        iconBgColor: 'bg-green-50',
+        primaryButtonText: 'Got it',
+        onPrimaryPress: () => setModalVisible(false),
+      });
     } catch (error: any) {
       console.error('Error sending OTP:', error.response?.data || error.message);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to send OTP.');
+      showModal({
+        title: 'Sending Failed',
+        message: error.response?.data?.message || 'Failed to send OTP. Please check your connection.',
+        iconName: 'error-outline',
+        iconColor: '#ef4444',
+        iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: () => setModalVisible(false),
+      });
     } finally {
       setSending(false);
     }
@@ -55,27 +89,40 @@ export default function VerifyEmailScreen() {
     try {
       setSending(true);
       const response = await api.post('/email/send-otp');
-      Alert.alert('Success', response.data.message || 'OTP has been sent to your email address.');
+      showModal({
+        title: 'OTP Resent',
+        message: response.data.message || 'A new verification code has been sent to your email.',
+        iconName: 'mark-email-read',
+        iconColor: '#16a34a',
+        iconBgColor: 'bg-green-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: () => setModalVisible(false),
+      });
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to send OTP.');
+      showModal({
+        title: 'Resend Failed',
+        message: error.response?.data?.message || 'Failed to resend OTP. Please try again.',
+        iconName: 'error-outline',
+        iconColor: '#ef4444',
+        iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: () => setModalVisible(false),
+      });
     } finally {
       setSending(false);
     }
   };
 
-  // Handler para sa pag-type sa bawat box (May kasamang Auto-Submit)
   const handleOtpChange = (text: string, index: number) => {
     const newOtp = [...otpValues];
     newOtp[index] = text;
     setOtpValues(newOtp);
 
-    // Auto-focus sa susunod na input kapag may inilagay
     if (text && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit kapag napuno na ang 6 na kahon
     if (index === 5 && text) {
       Keyboard.dismiss();
       const fullOtp = newOtp.join('');
@@ -85,7 +132,6 @@ export default function VerifyEmailScreen() {
     }
   };
 
-  // Handler para sa pag-backspace
   const handleKeyPress = (e: any, index: number) => {
     if (e.nativeEvent.key === 'Backspace' && !otpValues[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
@@ -96,54 +142,82 @@ export default function VerifyEmailScreen() {
     const otpCode = overrideOtp || otpValues.join('');
     
     if (otpCode.length !== 6) {
-      Alert.alert('Error', 'Please enter a complete 6-digit OTP code.');
+      showModal({
+        title: 'Incomplete Code',
+        message: 'Please enter a complete 6-digit OTP code.',
+        iconName: 'dialpad',
+        iconColor: '#ef4444',
+        iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: () => setModalVisible(false),
+      });
       return;
     }
 
     try {
       setLoading(true);
-      console.log('Sending request to /email/verify-otp with code:', otpCode);
 
       const response = await api.post('/email/verify-otp', { otp_code: otpCode });
-      console.log('Verify OTP Response Received:', response.data);
 
       if (response.data.status === 'success') {
-        Alert.alert('Success!', 'Your email has been successfully verified.');
-        
         const storedUser = await AsyncStorage.getItem('userData');
+        let targetRole = null;
+
         if (storedUser) {
           const user = JSON.parse(storedUser);
           user.isEmailVerified = true;
           await AsyncStorage.setItem('userData', JSON.stringify(user));
+          targetRole = user.role;
 
+          // Fetch profile updates silently in the background
           try {
             if (user.role === 'student') {
               const profileRes = await api.get('/student/profile');
               const profileData = profileRes.data.profile || profileRes.data;
-              if (profileData) {
-                await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
-              }
+              if (profileData) await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
             } else if (user.role === 'employer' || user.role === 'household') {
               const profileRes = await api.get('/user/profile');
               const profileData = profileRes.data.profile || profileRes.data;
-              if (profileData) {
-                await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
-              }
+              if (profileData) await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
             }
           } catch (profileErr: any) {
             console.log('Error fetching profile block:', profileErr.response?.data || profileErr.message);
           }
-
-          setTimeout(() => {
-            redirectUserByRole(user.role);
-          }, 100);
-        } else {
-          router.replace('/auth/login' as any);
         }
+
+        // Show Success Modal that redirects upon button press
+        showModal({
+          title: 'Verified Successfully!',
+          message: 'Your email has been successfully verified. Welcome to DiskarTech!',
+          iconName: 'verified',
+          iconColor: '#16a34a', // Green success icon
+          iconBgColor: 'bg-green-50',
+          primaryButtonText: 'Continue to Dashboard',
+          onPrimaryPress: () => {
+            setModalVisible(false);
+            if (targetRole) {
+              redirectUserByRole(targetRole);
+            } else {
+              router.replace('/auth/login' as any);
+            }
+          },
+        });
       }
     } catch (error: any) {
       console.error('CATCH ERROR IN VERIFY OTP:', error.response?.data || error.message);
-      Alert.alert('Verification Failed', error.response?.data?.message || 'Invalid or expired OTP code.');
+      showModal({
+        title: 'Verification Failed',
+        message: error.response?.data?.message || 'Invalid or expired OTP code. Please try again.',
+        iconName: 'error-outline',
+        iconColor: '#ef4444',
+        iconBgColor: 'bg-red-50',
+        primaryButtonText: 'Try Again',
+        onPrimaryPress: () => {
+          setModalVisible(false);
+          setOtpValues(['', '', '', '', '', '']); // Optional: Clear boxes on error
+          inputRefs.current[0]?.focus();
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -162,12 +236,12 @@ export default function VerifyEmailScreen() {
         </Text>
       </View>
 
-      {/* 6 Individual OTP Boxes Container (Ligtas sa CssInterop warning) */}
+      {/* 6 Individual OTP Boxes Container */}
       <View className="flex-row justify-between items-center px-2 my-8">
         {otpValues.map((value, index) => (
           <TextInput
             key={index}
-            ref={(el) => (inputRefs.current[index] = el)}
+            ref={(el: TextInput | null) => { inputRefs.current[index] = el; }}
             className="w-12 h-14 border-2 rounded-2xl text-center text-xl font-bold text-slate-900"
             style={{
               borderColor: value ? '#DC2626' : '#E2E8F0',
@@ -218,6 +292,20 @@ export default function VerifyEmailScreen() {
       >
         <Text className="text-sm font-semibold text-slate-400">Back to Login</Text>
       </TouchableOpacity>
+
+      {/* REUSABLE NOTIFICATION MODAL */}
+      <NotificationModal 
+        visible={modalVisible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        iconName={modalConfig.iconName}
+        iconColor={modalConfig.iconColor}
+        iconBgColor={modalConfig.iconBgColor}
+        primaryButtonText={modalConfig.primaryButtonText}
+        onPrimaryPress={modalConfig.onPrimaryPress}
+        secondaryButtonText={modalConfig.secondaryButtonText}
+        onSecondaryPress={modalConfig.onSecondaryPress}
+      />
     </View>
   );
 }

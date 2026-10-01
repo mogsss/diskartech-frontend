@@ -5,9 +5,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState, } from 'react';
 import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, Alert } from 'react-native';
 import api from '@/api/axios';
-import { db } from '@/utils/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ensureChatRoom,
+  getStudentParticipantFromStorage,
+  isGenericName,
+  resolveOwnerFromJob,
+} from '@/utils/chat';
+import { sendAppNotification } from '@/utils/notifications';
 
 export default function JobDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -77,11 +82,11 @@ export default function JobDetailsScreen() {
       const response = await api.post('/student/toggle-save-job', { job_id: id });
       if (response.data && response.data.status === 'success') {
         setIsBookmarked(!isBookmarked);
-        Alert.alert('Tagumpay', response.data.message);
+        Alert.alert('Success', response.data.message);
       }
     } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      Alert.alert('Paalala', 'Hindi ma-save ang trabaho sa ngayon.');
+      Alert.alert('Notice', 'Unable to save job at this time.');
     }
   };
 
@@ -104,7 +109,15 @@ export default function JobDetailsScreen() {
     );
   }
 
-  const companyName = job.household?.household_name || job.employer?.employer_name ;
+  const companyName =
+    job.household?.household_name ||
+    job.employer?.employer_name ||
+    job.employer?.business_name ||
+    job.employer?.company_name ||
+    job.company_name ||
+    job.companyName ||
+    job.business_name ||
+    'Employer';
   const location = job.household?.location || job.employer?.location ;
   const requirements = parseJsonField(job.requirements);
   const skills = parseJsonField(job.skills);
@@ -117,91 +130,56 @@ export default function JobDetailsScreen() {
       });
 
       if (response.data && response.data.status === 'success') {
-        Alert.alert('Tagumpay! 🎉', 'Matagumpay kang nakapag-apply sa trabahong ito.');
+        Alert.alert('Success', 'You have successfully applied for this job.');
+
+        // Live notification para kay employer/household
+        try {
+          const owner = resolveOwnerFromJob(job);
+          const student = await getStudentParticipantFromStorage();
+          if (owner.owner_user_id && owner.owner_user_id !== 'unknown') {
+            await sendAppNotification({
+              recipientId: owner.owner_user_id,
+              senderId: student.student_user_id,
+              senderName: student.student_name,
+              title: 'New Applicant',
+              body: `${student.student_name || 'A student'} applied for "${job.title || 'Job'}".`,
+              type: 'application',
+              targetId: job.id,
+            });
+          }
+        } catch (notifErr) {
+          console.error('Error sending application notification:', notifErr);
+        }
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'May naganap na error sa pag-apply.';
-      Alert.alert('Paalala', errorMessage);
+      const errorMessage = error.response?.data?.message || 'An error occurred while applying.';
+      Alert.alert('Notice', errorMessage);
     }
   };
 
-  // Handler para magsimula ng chat sa employer na may natatanging chatId para sa bawat estudyante
+  // Handler para magsimula ng chat sa employer o household
   const handleSendMessage = async () => {
     try {
-      const ownerId = job.employer_id || job.household_id || job.user_id || 'employer_default';
-
-      let studentId = 'student_default';
-      let studentName = 'Student Applicant';
-      let studentAvatar = '';
-
-      try {
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        const storedUser = await AsyncStorage.getItem('userData');
-
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          studentId = user.id?.toString() || 'student_default';
-        }
-
-        if (storedProfile) {
-          const parsedProfile = JSON.parse(storedProfile);
-          if (parsedProfile.student_name) {
-            studentName = parsedProfile.student_name;
-          }
-          if (parsedProfile.avatar) {
-            const baseUrl = 'http://192.168.1.2:8000/storage/';
-            parsedProfile.avatar.startsWith('http')
-              ? (studentAvatar = parsedProfile.avatar)
-              : (studentAvatar = `http://192.168.1.2:8000/storage/${parsedProfile.avatar}`);
-          }
-        }
-      } catch (e) {
-        console.error('Error reading user storage:', e);
+      if (!job) return;
+      const student = await getStudentParticipantFromStorage();
+      let owner = resolveOwnerFromJob(job);
+      if (isGenericName(owner.owner_name) && companyName && !isGenericName(companyName)) {
+        owner = {
+          ...owner,
+          owner_name: companyName,
+        };
       }
-
-      // Ginawa nating kasama ang studentId sa chatId para hiwalay ang room ng bawat estudyante
-      const chatId = `job_${job.id}_employer_${ownerId}_student_${studentId}`;
-      const chatRef = doc(db, 'chats', chatId);
-
-      // Kunin ang avatar ng employer o household mula sa job details kung mayroon
-      const rawEmployerAvatar = job.household?.avatar || job.employer?.avatar || '';
-      let employerAvatar = '';
-      if (rawEmployerAvatar) {
-        rawEmployerAvatar.startsWith('http')
-          ? (employerAvatar = rawEmployerAvatar)
-          : (employerAvatar = `http://192.168.1.2:8000/storage/${rawEmployerAvatar}`);
-      }
-
-      const chatSnap = await getDoc(chatRef);
-
-      if (!chatSnap.exists()) {
-        await setDoc(chatRef, {
-          studentId: studentId,
-          ownerId: ownerId,
-          senderName: studentName,
-          employerName: companyName,
-          senderAvatar: studentAvatar,
-          employerAvatar: employerAvatar,
-          online: true,
-          lastMessage: '',
-          timestamp: '',
-          unread: false, // Bagong gawa pa lang ang chat room, kaya walang unread notification muna
-        });
-      } else {
-        await setDoc(chatRef, {
-          studentId: studentId,
-          ownerId: ownerId,
-          senderName: studentName,
-          employerName: companyName,
-          senderAvatar: studentAvatar,
-          employerAvatar: employerAvatar,
-        }, { merge: true });
-      }
+      const chatId = await ensureChatRoom({
+        jobId: job.id,
+        jobTitle: job.title || 'Job Position',
+        owner,
+        student,
+      });
 
       router.push(`/chat?id=${chatId}` as any);
     } catch (error) {
       console.error('Error starting chat:', error);
-      Alert.alert('Paalala', 'Hindi mabuksan ang chat sa ngayon.');
+      Alert.alert('Notice', 'Unable to open chat at this time.');
     }
   };
 

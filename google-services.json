@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "408355828373",
+    "project_id": "diskartech-2bf71",
+    "storage_bucket": "diskartech-2bf71.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408355828373:android:d4ff4071482f7acfd7a19c",
+        "android_client_info": {
+          "package_name": "com.diskartech.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDuDE6YhviliwIOqoELnLwvNkY0haozHoA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

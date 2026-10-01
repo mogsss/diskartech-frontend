@@ -1,16 +1,19 @@
+import React from 'react';
+import { ScrollView, Text, TouchableOpacity, View, Image } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { Colors } from '@/constants/colors';
+import { router } from 'expo-router';
+
 import Avatar from '@/components/ui/Avatar';
 import Badge from '@/components/ui/Badge';
-import AddSkillModal from '@/components/modals/student/AddSkillModal';
-import EditAvailabilityModal from '@/components/modals/student/EditAvailabilityModal';
-import { Colors } from '@/constants/colors';
-import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useState, useEffect } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, Image } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import DocumentPlaceholderCard from '@/components/ui/student/DocumentPlaceholderCard';
-import * as ImagePicker from 'expo-image-picker';
+import AddSkillModal from '@/components/student/modals/AddSkillModal';
+import EditAvailabilityModal from '@/components/student/modals/EditAvailabilityModal';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
+import DocumentCard from '@/components/student/DocumentCard'; 
+import InfoRow from '@/components/ui/InfoRow'; 
+
+// Custom Hook natin!
+import { useStudentProfile } from '@/hooks/useStudentProfile'; 
 
 const menuItems = [
   { icon: 'settings', label: 'Settings', route: '/settings' },
@@ -20,297 +23,15 @@ const menuItems = [
 ];
 
 export default function ProfileScreen() {
-  // 1. States para sa Student Profile Data
-  const [studentName, setStudentName] = useState('Junnyl Mabini');
-  const [studentEmail, setStudentEmail] = useState('junnyl.mabini@example.com');
-  const [school, setSchool] = useState('Not specified');
-  const [course, setCourse] = useState('Not specified');
-  const [yearLevel, setYearLevel] = useState('Not specified');
-  const [location, setLocation] = useState('Not specified');
-  const [isVerified, setIsVerified] = useState(false);
-  
-  // 👇 IDINAGDAG NATIN ITO: State para sa Profile Picture URI
-  const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
-
-  // States para sa Skills
-  const [skills, setSkills] = useState<string[]>([]);
-  const [isAddSkillModalVisible, setAddSkillModalVisible] = useState(false);
-
-  // States para sa Availability
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState('');
-  const [isAvailabilityModalVisible, setAvailabilityModalVisible] = useState(false);
-
-  // 2. Global fetch function para madaling ma-refresh ang data
-  const fetchStudentProfile = async () => {
-    try {
-      const storedProfile = await AsyncStorage.getItem('userProfile');
-      const storedUser = await AsyncStorage.getItem('userData');
-
-      if (storedProfile && storedProfile !== 'null' && storedProfile !== 'undefined') {
-        const profile = JSON.parse(storedProfile);
-
-        if (profile.student_name) setStudentName(profile.student_name);
-        if (profile.student_school_name) setSchool(profile.student_school_name);
-        if (profile.course) setCourse(profile.course);
-        if (profile.year_level) setYearLevel(profile.year_level);
-        if (profile.location) setLocation(profile.location);
-        if (profile.isVerified !== undefined) setIsVerified(profile.isVerified);
-
-        // 👇 IDINAGDAG NATIN ITO: Kunin ang avatar kung meron man sa profile
-        if (profile.avatar) {
-          const fullAvatarUrl = profile.avatar.startsWith('http')
-            ? profile.avatar
-            : `http://192.168.1.2:8000/storage/${profile.avatar}`;
-          setProfilePicUri(fullAvatarUrl);
-        }
-
-        if (profile.skillset && Array.isArray(profile.skillset)) {
-          setSkills(profile.skillset);
-        } else {
-          setSkills([]);
-        }
-
-        if (profile.available_days) setSelectedDays(profile.available_days);
-        if (profile.time_slot) setSelectedTimeSlot(profile.time_slot);
-      }
-
-      if (storedUser && storedUser !== 'null' && storedUser !== 'undefined') {
-        const user = JSON.parse(storedUser);
-        if (user.email) setStudentEmail(user.email);
-      }
-    } catch (error) {
-      console.error('Error loading student profile from storage:', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchStudentProfile();
-  }, []);
-
-  // Function para i-save ang availability sa backend API
-  const handleSaveAvailability = async (days: string[], timeSlot: string) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-
-      const response = await fetch('http://192.168.1.2:8000/api/student/update-availability', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          days: days,
-          time_slot: timeSlot,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSelectedDays(days);
-        setSelectedTimeSlot(timeSlot);
-        setAvailabilityModalVisible(false);
-        alert('Availability updated successfully!');
-
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          profile.available_days = days;
-          profile.time_slot = timeSlot;
-          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-        }
-      } else {
-        alert(data.message || 'Failed to update availability');
-      }
-    } catch (error) {
-      console.error('Error saving availability:', error);
-      alert('Network error. Please try again.');
-    }
-  };
-
-  // Function para i-save ang skills sa backend API
-  const handleSaveSkills = async (updatedSkills: string[]) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-
-      const response = await fetch('http://192.168.1.2:8000/api/student/update-skills', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          skills: updatedSkills,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSkills(updatedSkills);
-        setAddSkillModalVisible(false);
-
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          profile.skillset = updatedSkills;
-          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-        }
-      } else {
-        alert(data.message || 'Failed to update skills');
-      }
-    } catch (error) {
-      console.error('Error saving skills:', error);
-      alert('Network error. Please try again.');
-    }
-  };
-
-  // Function para sa document upload (Resume, School ID, COR)
-  const handleUploadDocument = async (documentType: string, title: string) => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const fileToUpload = result.assets[0];
-      const formData = new FormData();
-      formData.append('document_type', documentType);
-      formData.append('file', {
-        uri: fileToUpload.uri,
-        name: fileToUpload.name,
-        type: fileToUpload.mimeType || 'application/pdf',
-      } as any);
-
-      const token = await AsyncStorage.getItem('userToken');
-
-      const response = await fetch('http://192.168.1.2:8000/api/student/upload-doc', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(`${title} has been uploaded and saved successfully!`);
-        fetchStudentProfile();
-      } else {
-        alert(data.message || `Failed to upload ${title}. Please try again.`);
-      }
-    } catch (error) {
-      console.error('Error uploading document:', error);
-      alert('An error occurred while uploading.');
-    }
-  };
-
-  // Function para sa Logout
-  const handleLogout = async () => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-
-      await fetch('http://192.168.1.2:8000/api/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch (error) {
-      console.error('Error logging out from server:', error);
-    } finally {
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userProfile');
-      await AsyncStorage.removeItem('userData');
-
-      router.replace('/auth/welcome' as any);
-    }
-  };
-
-  // Function para mag-upload ng Profile Picture
-  const handleUploadProfilePic = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const fileToUpload = result.assets[0];
-      const formData = new FormData();
-      
-      formData.append('document_type', 'profile_picture'); 
-      formData.append('file', {
-        uri: fileToUpload.uri,
-        name: fileToUpload.fileName || 'profile.jpg',
-        type: fileToUpload.mimeType || 'image/jpeg',
-      } as any);
-
-      const token = await AsyncStorage.getItem('userToken');
-
-      const response = await fetch('http://192.168.1.2:8000/api/student/upload-doc', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const responseText = await response.text();
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error('Server returned HTML instead of JSON:', responseText);
-        alert('Server Error: Nagbalik ang Laravel ng HTML error page. Tingnan ang console.');
-        return;
-      }
-
-      if (response.ok) {
-        alert('Profile picture uploaded successfully!');
-        
-        // 👇 DITO INAYOS NATIN PARA AGAD LUMITAW ANG LITRATO:
-        const newPath = data.file_path || data.profile_picture;
-        const fullUrl = `http://192.168.1.2:8000/storage/${newPath}`;
-        
-        setProfilePicUri(fullUrl); // I-update ang state
-
-        // I-save din sa AsyncStorage para hindi mawala kapag nire-refresh
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          profile.avatar = newPath;
-          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-        }
-
-        fetchStudentProfile(); 
-      } else {
-        alert(data.message || 'Failed to upload profile picture');
-      }
-    } catch (error) {
-      console.error('Error uploading profile picture:', error);
-      alert('An error occurred while uploading profile picture.');
-    }
-  };
-
-  // Format para sa display ng schedule
-  const formatScheduleText = () => {
-    if (!selectedDays || selectedDays.length === 0) return 'No days selected';
-    return `${selectedDays.join(', ')} | ${selectedTimeSlot || ''}`;
-  };
+  // Hinatak natin palabas lahat ng data at functions galing sa Custom Hook
+  const {
+    studentName, studentEmail, school, course, yearLevel, location, isVerified, profilePicUri, uploadedDocs,
+    skills, isAddSkillModalVisible, setAddSkillModalVisible, handleSaveSkills,
+    selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
+    isLogoutModalVisible, setLogoutModalVisible, handleLogout,
+    alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
+    handleUploadDocument, handleUploadProfilePic
+  } = useStudentProfile();
 
   return (
     <ScrollView className="flex-1 bg-[#F8FAFC]" showsVerticalScrollIndicator={false}>
@@ -322,11 +43,11 @@ export default function ProfileScreen() {
       {/* Profile Card */}
       <View className="bg-white mx-6 rounded-2xl p-6 items-center shadow-md mb-4">
         <View className="relative mb-4">
-        {profilePicUri ? (
+          {profilePicUri ? (
             <Image 
               source={{ uri: profilePicUri }} 
               style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#e2e8f0' }} 
-              onError={(e) => console.log('Image Load Error:', e.nativeEvent.error)} // 👈 Idinagdag natin ito
+              onError={(e) => console.log('Image Load Error:', e.nativeEvent.error)} 
             />
           ) : (
             <Avatar
@@ -350,25 +71,27 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {/* Document Upload Placeholders  */}
+      {/* Documents & Verification */}
       <View className="bg-white mx-6 rounded-2xl p-6 shadow-sm mb-4">
         <Text className="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-gray-100">Documents & Verification</Text>
-        <DocumentPlaceholderCard
+        
+        {/* 👇 PINALITAN ANG isUploaded NG filename */}
+        <DocumentCard
           icon="description"
           title="Resume"
-          status="Not uploaded yet"
+          filename={uploadedDocs.student_resume}
           onUpload={() => handleUploadDocument('student_resume', 'Resume')}
         />
-        <DocumentPlaceholderCard
+        <DocumentCard
           icon="badge"
           title="School ID"
-          status="Not uploaded yet"
+          filename={uploadedDocs.school_id}
           onUpload={() => handleUploadDocument('school_id', 'School ID')}
         />
-        <DocumentPlaceholderCard
+        <DocumentCard
           icon="insert-drive-file"
-          title="COR (Certificate of Registration)"
-          status="Not uploaded yet"
+          title="COR (Certificate of Reg.)"
+          filename={uploadedDocs.coe}
           onUpload={() => handleUploadDocument('coe', 'COR')}
         />
       </View>
@@ -416,7 +139,10 @@ export default function ProfileScreen() {
         <TouchableOpacity
           onPress={() => {
             if (skills.length >= 5) {
-              alert('You can only add up to 5 skills.');
+              showAlertModal({
+                title: 'Limit Reached', message: 'You can only add up to 5 skills.', iconName: 'warning',
+                iconColor: '#f59e0b', iconBgColor: 'bg-amber-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
+              });
               return;
             }
             setAddSkillModalVisible(true);
@@ -450,7 +176,7 @@ export default function ProfileScreen() {
             }`}
             onPress={() => {
               if (item.route === '/auth/welcome') {
-                handleLogout();
+                setLogoutModalVisible(true);
               } else if (item.route !== '#') {
                 router.push(item.route as any);
               }
@@ -484,24 +210,32 @@ export default function ProfileScreen() {
         onClose={() => setAvailabilityModalVisible(false)}
         currentDays={selectedDays}
         currentTimeSlot={selectedTimeSlot}
-        onSave={(days, timeSlot) => {
-          handleSaveAvailability(days, timeSlot);
-        }}
+        onSave={(days, timeSlot) => handleSaveAvailability(days, timeSlot)}
+      />
+
+      <NotificationModal
+        visible={alertModalVisible}
+        title={alertModalConfig.title}
+        message={alertModalConfig.message}
+        iconName={alertModalConfig.iconName}
+        iconColor={alertModalConfig.iconColor}
+        iconBgColor={alertModalConfig.iconBgColor}
+        primaryButtonText={alertModalConfig.primaryButtonText}
+        onPrimaryPress={alertModalConfig.onPrimaryPress}
+      />
+
+      <NotificationModal
+        visible={isLogoutModalVisible}
+        title="Log Out"
+        message="Are you sure you want to log out of your account?"
+        iconName="logout"
+        iconColor="#DC2626"
+        iconBgColor="bg-red-50"
+        primaryButtonText="Yes, Log Out"
+        onPrimaryPress={handleLogout}
+        secondaryButtonText="Cancel"
+        onSecondaryPress={() => setLogoutModalVisible(false)}
       />
     </ScrollView>
-  );
-}
-
-function InfoRow({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: any }) {
-  return (
-    <View className="flex-row items-start gap-4 mb-4">
-      <MaterialIcons name={icon} size={18} color={Colors.gray500} />
-      <View className="flex-1">
-        <Text className="text-xs text-slate-400">{String(label || '')}</Text>
-        <Text className="text-sm font-medium text-slate-900 mt-[2px]">
-          {String(value !== undefined && value !== null ? value : 'Not specified')}
-        </Text>
-      </View>
-    </View>
   );
 }

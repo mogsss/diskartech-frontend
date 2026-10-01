@@ -33,7 +33,7 @@ export default function EmployerTabLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="dashboard" size={size} color={color} />
+            <MaterialIcons name="home" size={size} color={color} />
           ),
         }}
         initialParams={{ type }}

@@ -1,16 +1,23 @@
 import Avatar from '@/components/ui/Avatar';
 import Badge from '@/components/ui/Badge';
 import PrimaryButton from '@/components/ui/PrimaryButton';
-import InterviewModal from '@/components/modals/employer/InterviewModal';
+import InterviewModal from '@/components/employer/modals/InterviewModal';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios';
-import { db } from '@/utils/firebase';
-import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ensureChatRoom,
+  getOwnerParticipantFromStorage,
+  isGenericName,
+  resolveOwnerFromJob,
+  resolveStudentFromRecord,
+  sendChatMessage,
+} from '@/utils/chat';
+import { sendAppNotification } from '@/utils/notifications';
 
 export default function ApplicantDetailsScreen() {
   const { applicationId } = useLocalSearchParams<{ applicationId?: string }>();
@@ -82,6 +89,26 @@ export default function ApplicantDetailsScreen() {
       if (response.data && response.data.status === 'success') {
         Alert.alert('Success', `Application has been ${newStatus}.`);
         setApplication((prev: any) => ({ ...prev, status: newStatus }));
+
+        // Live notification para kay student
+        try {
+          const student = resolveStudentFromRecord(application.student || {});
+          const jobTitle = job?.title || application.job?.title || 'Job';
+          if (student.student_user_id && student.student_user_id !== 'unknown') {
+            const isApproved = newStatus === 'accepted';
+            await sendAppNotification({
+              recipientId: student.student_user_id,
+              title: isApproved ? 'Application Approved' : 'Application Update',
+              body: isApproved 
+                ? `Congratulations! Your application for "${jobTitle}" has been APPROVED.`
+                : `Your application for "${jobTitle}" was not accepted.`,
+              type: 'application_status',
+              targetId: applicationId,
+            });
+          }
+        } catch (notifErr) {
+          console.error('Error sending application status notification:', notifErr);
+        }
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -105,79 +132,54 @@ export default function ApplicantDetailsScreen() {
         setApplication((prev: any) => ({ ...prev, status: 'interview' }));
         setIsInterviewModalVisible(false);
 
-        // KAININ ANG EXACT CURRENT USER ID MULA SA ASYNCSTORAGE (Tulad ng ginagawa ng ChatScreen)
-        let loggedInUserId = '39'; // Fallback
-        try {
-          const storedProfile = await AsyncStorage.getItem('userProfile');
-          if (storedProfile) {
-            const profile = JSON.parse(storedProfile);
-            loggedInUserId = profile.id?.toString() || profile.email || '39';
-          }
-        } catch (storageErr) {
-          console.error('Error reading userProfile from AsyncStorage:', storageErr);
+        const student = resolveStudentFromRecord(application.student || {});
+        let owner = resolveOwnerFromJob(job);
+        if (isGenericName(owner.owner_name) || owner.owner_user_id === 'unknown' || !owner.owner_avatar) {
+          const storedOwner = await getOwnerParticipantFromStorage();
+          owner = {
+            owner_user_id: owner.owner_user_id !== 'unknown' ? owner.owner_user_id : storedOwner.owner_user_id,
+            owner_role: storedOwner.owner_role || owner.owner_role,
+            owner_name: !isGenericName(owner.owner_name) ? owner.owner_name : storedOwner.owner_name,
+            owner_avatar: owner.owner_avatar || storedOwner.owner_avatar,
+          };
         }
+        const jobId = job.id || application.job_id || 'job';
+        const jobTitle = job.title || 'Job Position';
 
-        const student = application.student || {};
-        const job = application.job || {};
-        const ownerId = String(job.employer_id || job.household_id || job.user_id || loggedInUserId);
+        const inviteMessage = `Hello ${student.student_name}! You are invited for a ${interviewType.toUpperCase()} interview for "${jobTitle}".\n\nDate: ${date}\nTime: ${time}\n${interviewType === 'walk-in' ? 'Address' : 'Link'}: ${location}`;
 
-        let companyName = job.household?.household_name || job.employer?.employer_name || 'Employer';
-        try {
-          const profileRes = await api.get('/user/profile');
-          if (profileRes.data && profileRes.data.status === 'success' && profileRes.data.profile) {
-            const profile = profileRes.data.profile;
-            companyName = profile.employer_name || profile.household_name || profile.hirer_name || companyName;
-          }
-        } catch (profileErr) {
-          console.error('Error fetching profile details for chat:', profileErr);
-        }
-
-        const jobId = job.id || application.job_id;
-        const studentChatId = student.user_id ? student.user_id.toString() : (student.id?.toString() || 'student_default');
-        const studentName = student.student_name || 'Student Applicant';
-
-        let studentAvatar = student.avatar ? (student.avatar.startsWith('http') ? student.avatar : `${STORAGE_URL}${student.avatar}`) : '';
-        let employerAvatar = (job.household?.avatar || job.employer?.avatar) ? (job.household?.avatar || job.employer?.avatar) : '';
-        if (employerAvatar && !employerAvatar.startsWith('http')) {
-          employerAvatar = `${STORAGE_URL}${employerAvatar}`;
-        }
-
-        const chatId = `job_${jobId}_employer_${ownerId}_student_${studentChatId}`;
-        const chatRef = doc(db, 'chats', chatId);
-        const chatSnap = await getDoc(chatRef);
-
-        const inviteMessage = `Hello ${studentName}! You are invited for a ${interviewType.toUpperCase()} interview for "${job.title || 'Job'}".\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📍 ${interviewType === 'walk-in' ? 'Address' : 'Link'}: ${location}`;
-
-        if (!chatSnap.exists()) {
-          await setDoc(chatRef, {
-            studentId: studentChatId,
-            ownerId: loggedInUserId, // Gamitin ang loggedInUserId para mag-match sa ChatScreen
-            employerName: companyName,
-            studentName: studentName,
-            employerAvatar: employerAvatar,
-            studentAvatar: studentAvatar,
-            lastMessage: inviteMessage,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            unreadByStudent: true,
-            unreadByEmployer: false,
-            createdAt: new Date(),
-          });
-        } else {
-          await setDoc(chatRef, {
-            lastMessage: inviteMessage,
-            employerName: companyName,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            unreadByStudent: true,
-          }, { merge: true });
-        }
-
-        // GAMITIN ANG loggedInUserId BILANG senderId PARA MAG-MATCH SA `currentUserId` NG CHAT SCREEN
-        await addDoc(collection(db, 'chats', chatId, 'messages'), {
-          text: inviteMessage,
-          senderId: loggedInUserId, // Dito magtutugma ang data.senderId === currentUserId sa ChatScreen!
-          senderName: companyName,
-          createdAt: new Date(),
+        const chatId = await ensureChatRoom({
+          jobId,
+          jobTitle,
+          owner,
+          student,
+          initiatorRole: 'owner',
         });
+
+        await sendChatMessage({
+          chatId,
+          senderId: owner.owner_user_id,
+          senderName: owner.owner_name,
+          senderAvatar: owner.owner_avatar,
+          receiverId: student.student_user_id,
+          receiverName: student.student_name,
+          text: inviteMessage,
+        });
+
+        // Live notification para kay student
+        try {
+          if (student.student_user_id && student.student_user_id !== 'unknown') {
+            await sendAppNotification({
+              recipientId: student.student_user_id,
+              title: 'Interview Invitation',
+              body: `You are invited for an interview for "${jobTitle}".`,
+              type: 'application_status',
+              targetId: applicationId,
+            });
+          }
+        } catch (notifErr) {
+          console.error('Error sending interview notification:', notifErr);
+        }
 
         Alert.alert('Success', 'Interview invitation sent successfully and message was delivered to chat!');
       }
@@ -226,40 +228,32 @@ export default function ApplicantDetailsScreen() {
   const handleStartChat = async () => {
     try {
       if (!application) return;
-      const student = application.student || {};
-      const jobId = job.id || application.job_id;
-      const ownerId = job.employer_id || job.household_id || job.user_id || 'employer_default';
-      const studentChatId = student.user_id ? student.user_id.toString() : (student.id?.toString() || 'student_default');
-      const studentName = student.student_name || 'Student Applicant';
-      const companyName = job.household?.household_name || job.employer?.employer_name || 'Employer';
-
-      let studentAvatar = student.avatar ? (student.avatar.startsWith('http') ? student.avatar : `${STORAGE_URL}${student.avatar}`) : '';
-      let employerAvatar = (job.household?.avatar || job.employer?.avatar) ? (job.household?.avatar || job.employer?.avatar) : '';
-      if (employerAvatar && !employerAvatar.startsWith('http')) {
-        employerAvatar = `${STORAGE_URL}${employerAvatar}`;
+      const student = resolveStudentFromRecord(application.student || {});
+      let owner = resolveOwnerFromJob(job);
+      if (isGenericName(owner.owner_name) || owner.owner_user_id === 'unknown' || !owner.owner_avatar) {
+        const storedOwner = await getOwnerParticipantFromStorage();
+        owner = {
+          owner_user_id: owner.owner_user_id !== 'unknown' ? owner.owner_user_id : storedOwner.owner_user_id,
+          owner_role: storedOwner.owner_role || owner.owner_role,
+          owner_name: !isGenericName(owner.owner_name) ? owner.owner_name : storedOwner.owner_name,
+          owner_avatar: owner.owner_avatar || storedOwner.owner_avatar,
+        };
       }
+      const jobId = job.id || application.job_id || 'job';
+      const jobTitle = job.title || 'Job Position';
 
-      const chatId = `job_${jobId}_employer_${ownerId}_student_${studentChatId}`;
-      const chatRef = doc(db, 'chats', chatId);
-      const chatSnap = await getDoc(chatRef);
-
-      if (!chatSnap.exists()) {
-        await setDoc(chatRef, {
-          studentId: studentChatId,
-          ownerId: ownerId,
-          employerName: companyName,
-          studentName: studentName,
-          employerAvatar: employerAvatar,
-          studentAvatar: studentAvatar,
-          online: true,
-          createdAt: new Date(),
-        });
-      }
+      const chatId = await ensureChatRoom({
+        jobId,
+        jobTitle,
+        owner,
+        student,
+        initiatorRole: 'owner',
+      });
 
       router.push(`/chat?id=${chatId}` as any);
     } catch (error) {
       console.error('Error starting chat:', error);
-      Alert.alert('Paalala', 'Hindi mabuksan ang chat sa ngayon.');
+      Alert.alert('Notice', 'Unable to open chat at this time.');
     }
   };
 

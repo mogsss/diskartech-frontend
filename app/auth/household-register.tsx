@@ -1,6 +1,6 @@
-import BaseRegisterScreen from '@/components/BaseRegisterScreen';
-import LocationPickerModal from '@/components/LocationPickerModal';
-import GenderModal from '@/components/GenderModal';
+import BaseRegisterScreen from '@/components/ui/BaseRegisterScreen';
+import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
+import GenderModal from '@/components/ui/modals/GenderModal';
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';

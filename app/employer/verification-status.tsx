@@ -1,5 +1,5 @@
 import PrimaryButton from '@/components/ui/PrimaryButton';
-import LoadingModal from '@/components/LoadingModal';
+import LoadingModal from '@/components/ui/modals/LoadingModal';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';

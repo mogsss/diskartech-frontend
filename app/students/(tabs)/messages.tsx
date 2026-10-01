@@ -5,59 +5,104 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '@/utils/firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { collection, onSnapshot, query, where, or } from 'firebase/firestore';
+import {
+  CHATS_COLLECTION,
+  formatChatListTime,
+  getLoggedInUserId,
+  getOtherParticipant,
+  isChatUnreadForUser,
+  normalizeChatFields,
+} from '@/utils/chat';
 
 export default function MessagesScreen() {
-  const [conversationsList, setConversationsList] = useState<any[]>([]);
+  const [conversationsList, setConversationsList] = useState<
+    {
+      id: string;
+      otherUserId: string;
+      senderName: string;
+      senderAvatar: string;
+      lastMessage: string;
+      timestamp: string;
+      unread: boolean;
+      lastMessageAt: any;
+    }[]
+  >([]);
   const [currentStudentId, setCurrentStudentId] = useState<string | null>(null);
 
-  // Kunin ang ID ng nakalogin na estudyante mula sa AsyncStorage
   useEffect(() => {
-    const fetchCurrentStudent = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem('userData');
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          setCurrentStudentId(user.id?.toString());
-        }
-      } catch (e) {
-        console.error('Error fetching student data:', e);
-      }
-    };
-    fetchCurrentStudent();
+    getLoggedInUserId().then((id) => {
+      if (id !== 'unknown') setCurrentStudentId(id);
+    });
   }, []);
 
-  // Real-time listener na naka-filter sa studentId para hindi magkahalo ang mga mensahe
   useEffect(() => {
     if (!currentStudentId) return;
 
-    // Gumamit ng query at where clause para sa kaukulang estudyante lamang
-    const q = query(
-      collection(db, 'chats'),
-      where('studentId', '==', currentStudentId)
-    );
+    const unsubscribe = onSnapshot(
+      collection(db, CHATS_COLLECTION),
+      (snapshot) => {
+        const myId = String(currentStudentId);
+        const matchedDocs = snapshot.docs.filter((docSnap) => {
+          const raw = docSnap.data();
+          const sId = String(raw.sender_id ?? raw.student_user_id ?? raw.studentId ?? '');
+          const rId = String(raw.receiver_id ?? raw.owner_user_id ?? raw.ownerId ?? '');
+          const pIds: string[] = Array.isArray(raw.participant_ids)
+            ? raw.participant_ids.map(String)
+            : [];
+          return pIds.includes(myId) || sId === myId || rId === myId;
+        });
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const firestoreConvs = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ownerId: data.ownerId?.toString(),
-          senderName: data.employerName || data.senderName || 'Employer / Store',
-          senderAvatar: data.employerAvatar || '', 
-          online: data.online ?? true,
-          lastMessage: data.lastMessage || 'Tap to chat',
-          timestamp: data.timestamp || '',
-          // Dito natin pinalitan: binabasa na nito ang unreadByStudent para sa panig ng estudyante
-          unread: data.unreadByStudent || false,
-        };
-      });
-      
-      setConversationsList(firestoreConvs);
-    }, (error) => {
-      console.error("Error fetching conversations: ", error);
-    });
+        const firestoreConvs = matchedDocs.map((docSnap) => {
+          const chat = normalizeChatFields(docSnap.data(), docSnap.id);
+          const other = getOtherParticipant(chat, currentStudentId);
+          const isUnread = isChatUnreadForUser(chat, currentStudentId, 'student');
+
+          return {
+            id: docSnap.id,
+            otherUserId: other.id,
+            senderName: other.name,
+            senderAvatar: other.avatar,
+            lastMessage: chat.last_message || 'Tap to chat',
+            timestamp: formatChatListTime(chat.last_message_at),
+            unread: isUnread,
+            lastMessageAt: chat.last_message_at,
+          };
+        });
+
+        // Sort descending: most recent message at the top
+        firestoreConvs.sort((a, b) => {
+          const timeA = a.lastMessageAt?.toMillis ? a.lastMessageAt.toMillis() : 0;
+          const timeB = b.lastMessageAt?.toMillis ? b.lastMessageAt.toMillis() : 0;
+          return timeB - timeA;
+        });
+
+        // 1-on-1 thread deduplication: iisa lang ang card bawat kausap!
+        const seenIds = new Set<string>();
+        const seenNames = new Set<string>();
+
+        const uniqueConvs = firestoreConvs.filter((conv) => {
+          const id = conv.otherUserId ? String(conv.otherUserId).trim() : '';
+          const name = conv.senderName ? conv.senderName.trim().toLowerCase() : '';
+
+          const hasSeenId = Boolean(id && id !== 'unknown' && seenIds.has(id));
+          const hasSeenName = Boolean(name && seenNames.has(name));
+
+          if (hasSeenId || hasSeenName) {
+            return false;
+          }
+
+          if (id && id !== 'unknown') seenIds.add(id);
+          if (name) seenNames.add(name);
+          return true;
+        });
+
+        setConversationsList(uniqueConvs);
+      },
+      (error) => {
+        console.error('Error fetching conversations: ', error);
+      }
+    );
 
     return () => unsubscribe();
   }, [currentStudentId]);
@@ -68,12 +113,10 @@ export default function MessagesScreen() {
 
   return (
     <View className="flex-1 bg-[#F8FAFC]">
-      {/* Header */}
       <View className="px-6 pt-12 pb-4 flex-row justify-between items-center">
         <Text className="text-2xl font-bold text-slate-900">Messages</Text>
       </View>
 
-      {/* Conversations List */}
       <ScrollView
         className="flex-1"
         contentContainerClassName="p-6 pb-20"
@@ -98,30 +141,27 @@ export default function MessagesScreen() {
               activeOpacity={0.7}
             >
               <View className="mr-4">
-                <Avatar
-                  uri={conv.senderAvatar}
-                  name={conv.senderName}
-                  size={52}
-                  online={conv.online}
-                />
+                <Avatar uri={conv.senderAvatar} name={conv.senderName} size={52} online />
               </View>
               <View className="flex-1 justify-center">
                 <View className="flex-row justify-between items-center mb-1">
-                  <Text 
-                    className={`text-sm text-slate-900 flex-1 mr-2 ${
-                      conv.unread ? 'font-bold text-slate-900' : 'font-semibold'
-                    }`} 
-                    numberOfLines={1}
-                  >
-                    {conv.senderName}
-                  </Text>
+                  <View className="flex-1 mr-2 flex-row items-center gap-1.5 flex-wrap">
+                    <Text
+                      className={`text-sm text-slate-900 ${
+                        conv.unread ? 'font-bold text-slate-900' : 'font-semibold'
+                      }`}
+                      numberOfLines={1}
+                    >
+                      {conv.senderName}
+                    </Text>
+                  </View>
                   <Text className="text-xs text-slate-400">{conv.timestamp}</Text>
                 </View>
                 <View className="flex-row items-center gap-2">
-                  <Text 
+                  <Text
                     className={`text-sm text-slate-500 flex-1 ${
                       conv.unread ? 'font-bold text-slate-900' : ''
-                    }`} 
+                    }`}
                     numberOfLines={1}
                   >
                     {conv.lastMessage}

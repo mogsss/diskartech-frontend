@@ -8,7 +8,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import { Colors } from '@/constants/colors';
 import { formatDate, getStatusColor, getStatusIcon } from '@/utils/helpers';
 import api from '@/api/axios';
-import ApplicationDetailsModal from '@/components/modals/student/ApplicationDetailsModal';
+import ApplicationDetailsModal from '@/components/student/modals/ApplicationDetailsModal';
 
 const tabs = ['Pending', 'Viewed', 'Shortlisted', 'Interview', 'Accepted', 'Rejected', 'Completed', 'Cancelled'] as const;
 

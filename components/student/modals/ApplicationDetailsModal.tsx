@@ -5,10 +5,12 @@ import { router } from 'expo-router';
 import Badge from '@/components/ui/Badge';
 import { Colors } from '@/constants/colors';
 import { formatDate } from '@/utils/helpers';
-import { db } from '@/utils/firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
+import {
+    ensureChatRoom,
+    getStudentParticipantFromStorage,
+    resolveOwnerFromJob,
+} from '@/utils/chat';
 
 interface ApplicationDetailsModalProps {
     visible: boolean;
@@ -76,48 +78,21 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
     const handleSendMessage = async () => {
         try {
             const job = application.job || {};
-            const jobId = application.job_id || job.id;
-
-            let studentId = 'student_default';
-            let studentName = 'Student Applicant';
-            let studentAvatar = '';
-
-            try {
-                const storedProfile = await AsyncStorage.getItem('userProfile');
-                const storedUser = await AsyncStorage.getItem('userData');
-
-                if (storedUser) {
-                    const user = JSON.parse(storedUser);
-                    studentId = user.id?.toString() || 'student_default';
-                }
-
-                if (storedProfile) {
-                    const parsedProfile = JSON.parse(storedProfile);
-                    if (parsedProfile.student_name) {
-                        studentName = parsedProfile.student_name;
-                    }
-                    if (parsedProfile.avatar) {
-                        parsedProfile.avatar.startsWith('http')
-                            ? (studentAvatar = parsedProfile.avatar)
-                            : (studentAvatar = `http://192.168.1.2:8000/storage/${parsedProfile.avatar}`);
-                    }
-                }
-            } catch (e) {
-                console.error('Error reading user storage:', e);
-            }
-
-            const chatId = `job_${jobId}_employer_${ownerId}_student_${studentId}`;
-            const chatRef = doc(db, 'chats', chatId);
-
-            await setDoc(chatRef, {
-                studentId: studentId,
-                ownerId: ownerId,
-                senderName: studentName,
-                employerName: companyName,
-                senderAvatar: studentAvatar,
-                employerAvatar: employerAvatar,
-                online: true,
-            }, { merge: true });
+            const jobId = application.job_id || job.id || 'job';
+            const student = await getStudentParticipantFromStorage();
+            const jobData = {
+                ...job,
+                id: jobId,
+                employer_id: ownerId,
+                employer: { employer_name: companyName, avatar: employerAvatar },
+            };
+            const owner = resolveOwnerFromJob(jobData);
+            const chatId = await ensureChatRoom({
+                jobId,
+                jobTitle: job.title || 'Job Application',
+                owner,
+                student,
+            });
 
             onClose();
             router.push(`/chat?id=${chatId}` as any);

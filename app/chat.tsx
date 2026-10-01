@@ -1,163 +1,165 @@
 import Avatar from '@/components/ui/Avatar';
-import ChatOptionsModal from '@/components/modals/student/ChatOptionsModal';
+import ChatOptionsModal from '@/components/ui/modals/ChatOptionsModal';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState, useEffect } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { db } from '@/utils/firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  doc,
+} from 'firebase/firestore';
+import {
+  CHATS_COLLECTION,
+  formatChatListTime,
+  getLoggedInUserId,
+  getMessageCreatedAt,
+  getMessageSenderId,
+  getOtherParticipant,
+  markChatAsRead,
+  normalizeChatFields,
+  sendChatMessage,
+} from '@/utils/chat';
+import { setActiveChatScreen } from '@/utils/notifications';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
-  const conversationId = Array.isArray(id) ? id[0] : (id || 'mcdonalds_hr'); 
-  
+  const conversationId = Array.isArray(id) ? id[0] : (id || '');
+
+  const [currentUserId, setCurrentUserId] = useState<string>('unknown');
   const [chatUser, setChatUser] = useState({
-    displayName: 'Loading...',
-    displayAvatar: '',
+    id: '',
+    name: 'Loading...',
+    avatar: '',
     online: true,
   });
 
   const [message, setMessage] = useState('');
-  const [messagesList, setMessagesList] = useState<any[]>([]);
+  const [messagesList, setMessagesList] = useState<
+    { id: string; sender: 'me' | 'other'; text: string; timestamp: string }[]
+  >([]);
   const [isOptionsModalVisible, setOptionsModalVisible] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string>('user_test');
-  const [isEmployerUser, setIsEmployerUser] = useState<boolean>(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Kunin ang user profile at tukuyin kung Student o Employer/Household ba ang nakalogin
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          setCurrentUserId(profile.id?.toString() || profile.email || 'user_test');
-          if (profile.role === 'employer' || profile.role === 'household' || profile.household_name || profile.employer_name) {
-            setIsEmployerUser(true);
-          }
-        }
-      } catch (e) {}
+    if (!conversationId) return;
+    setActiveChatScreen(conversationId);
+    return () => {
+      setActiveChatScreen(null);
     };
-    fetchUser();
+  }, [conversationId]);
+
+  useEffect(() => {
+    getLoggedInUserId().then((uid) => {
+      if (uid && uid !== 'unknown') setCurrentUserId(uid);
+    });
   }, []);
 
-  // Kunin ang chat details mula sa Firestore at itakda ang tamang pangalan at avatar sa header
+  // 1. Real-time listener para sa kabilang party (Pangalan at Avatar)
   useEffect(() => {
-    const fetchChatDetails = async () => {
-      try {
-        const chatDocRef = doc(db, 'chats', conversationId);
-        const chatDocSnap = await getDoc(chatDocRef);
-        if (chatDocSnap.exists()) {
-          const data = chatDocSnap.data();
-          
-          // MALINAW NA LOGIC:
-          // - Kung Employer ang nakalogin: Ipakita ang pangalan ng Estudyante (studentName) at avatar nito (studentAvatar)
-          // - Kung Student ang nakalogin: Ipakita ang pangalan ng Employer (employerName) at avatar nito (employerAvatar)
-          const nameToDisplay = isEmployerUser 
-            ? (data.studentName || 'Student Applicant') 
-            : (data.employerName || 'Employer / Store');
+    if (!conversationId || currentUserId === 'unknown') return;
 
-          const avatarToDisplay = isEmployerUser 
-            ? (data.studentAvatar || '') 
-            : (data.employerAvatar || '');
+    const chatDocRef = doc(db, CHATS_COLLECTION, conversationId);
+    const unsubscribe = onSnapshot(
+      chatDocRef,
+      (snap) => {
+        if (!snap.exists()) return;
+        const chat = normalizeChatFields(snap.data(), snap.id);
+        const other = getOtherParticipant(chat, currentUserId);
 
-          setChatUser({
-            displayName: nameToDisplay,
-            displayAvatar: avatarToDisplay,
-            online: data.online ?? true,
-          });
+        setChatUser({
+          id: other.id,
+          name: other.name,
+          avatar: other.avatar,
+          online: true,
+        });
 
-          // Iwasto ang pag-clear ng unread status
-          if (isEmployerUser) {
-            await setDoc(chatDocRef, { unreadByEmployer: false }, { merge: true });
-          } else {
-            await setDoc(chatDocRef, { unreadByStudent: false }, { merge: true });
-          }
-
-        } else {
-          setChatUser({
-            displayName: 'Chat User',
-            displayAvatar: '',
-            online: true,
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching chat details:', error);
+        markChatAsRead(conversationId, currentUserId);
+      },
+      (error) => {
+        console.error('Error listening to chat details:', error);
       }
-    };
-
-    if (conversationId) {
-      fetchChatDetails();
-    }
-  }, [conversationId, isEmployerUser]);
-
-  // Real-time listener para sa mga mensahe
-  useEffect(() => {
-    const q = query(
-      collection(db, 'chats', conversationId, 'messages'),
-      orderBy('createdAt', 'asc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedMessages = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data();
-        let timeString = '';
-        if (data.createdAt && data.createdAt.toDate) {
-          timeString = data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else {
-          timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
+    return () => unsubscribe();
+  }, [conversationId, currentUserId]);
 
-        const isMe = data.senderId === currentUserId;
+  // 2. Real-time listener para sa Messages subcollection
+  useEffect(() => {
+    if (!conversationId || currentUserId === 'unknown') return;
 
-        return {
-          id: docSnap.id,
-          sender: isMe ? 'me' : 'other',
-          text: data.text,
-          timestamp: timeString,
-        };
-      });
+    const q = query(
+      collection(db, CHATS_COLLECTION, conversationId, 'messages'),
+      orderBy('created_at', 'asc')
+    );
 
-      setMessagesList(fetchedMessages);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetched = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() as Record<string, unknown>;
+          const created = getMessageCreatedAt(data);
+          const timeString = created
+            ? created.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : formatChatListTime(data.timestamp);
+
+          const senderId = getMessageSenderId(data);
+          const isMe = String(senderId) === String(currentUserId);
+
+          return {
+            id: docSnap.id,
+            sender: isMe ? ('me' as const) : ('other' as const),
+            text: String(data.text ?? ''),
+            timestamp: timeString,
+          };
+        });
+
+        setMessagesList(fetched);
+      },
+      (error) => {
+        console.error('Error listening to messages:', error);
+      }
+    );
 
     return () => unsubscribe();
   }, [conversationId, currentUserId]);
 
   const handleSend = async () => {
-    if (!message.trim()) return;
-
     const textToSend = message.trim();
+    if (!textToSend || !conversationId) return;
+
     setMessage('');
 
     try {
-      const messagesRef = collection(db, 'chats', conversationId, 'messages');
-      
-      await addDoc(messagesRef, {
-        text: textToSend,
+      await sendChatMessage({
+        chatId: conversationId,
         senderId: currentUserId,
-        createdAt: serverTimestamp(),
+        receiverId: chatUser.id,
+        receiverName: chatUser.name,
+        receiverAvatar: chatUser.avatar,
+        text: textToSend,
       });
-
-      const convRef = doc(db, 'chats', conversationId);
-      
-      // I-update ang unread status batay sa kung sino ang nagpadala ng mensahe
-      await setDoc(convRef, {
-        lastMessage: textToSend,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        unreadByEmployer: isEmployerUser ? false : true,
-        unreadByStudent: isEmployerUser ? true : false,
-      }, { merge: true });
 
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (error) {
       console.error('Error sending message: ', error);
-      Alert.alert('Error', 'Hindi naipadala ang mensahe.');
+      Alert.alert('Error', 'Failed to send message.');
     }
   };
 
@@ -173,9 +175,11 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
             <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <Avatar uri={chatUser.displayAvatar} name={chatUser.displayName} size={40} online={chatUser.online} />
+          <Avatar uri={chatUser.avatar} name={chatUser.name} size={40} online={chatUser.online} />
           <View className="flex-1 ml-4">
-            <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>{chatUser.displayName}</Text>
+            <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>
+              {chatUser.name}
+            </Text>
             <Text className="text-xs text-emerald-600">{chatUser.online ? 'Online' : 'Offline'}</Text>
           </View>
           <TouchableOpacity onPress={() => setOptionsModalVisible(true)} className="p-2">
@@ -183,7 +187,7 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Messages Scroll Area */}
+        {/* Messages List */}
         <ScrollView
           ref={scrollViewRef}
           className="flex-1"
@@ -210,7 +214,7 @@ export default function ChatScreen() {
           ))}
         </ScrollView>
 
-        {/* Input Section */}
+        {/* Input Bar */}
         <View className="flex-row items-center px-3 py-3 bg-white border-t border-gray-100 gap-2">
           <TouchableOpacity className="p-2">
             <MaterialIcons name="attach-file" size={24} color={Colors.gray400} />
@@ -223,8 +227,8 @@ export default function ChatScreen() {
             onChangeText={setMessage}
             multiline
           />
-          <TouchableOpacity 
-            onPress={handleSend} 
+          <TouchableOpacity
+            onPress={handleSend}
             className={`w-10 h-10 rounded-full items-center justify-center ${
               message.trim() ? 'bg-red-600' : 'bg-gray-200'
             }`}
@@ -233,13 +237,13 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* CHAT OPTIONS MODAL */}
+        {/* Options Modal */}
         <ChatOptionsModal
           visible={isOptionsModalVisible}
           onClose={() => setOptionsModalVisible(false)}
           onViewProfile={() => {
             setOptionsModalVisible(false);
-            Alert.alert("View Profile", "Redirecting to profile...");
+            Alert.alert('View Profile', 'Redirecting to profile...');
           }}
           onClearChat={() => {
             setOptionsModalVisible(false);
@@ -247,7 +251,7 @@ export default function ChatScreen() {
           }}
           onBlockUser={() => {
             setOptionsModalVisible(false);
-            Alert.alert("Block User", "User has been blocked.");
+            Alert.alert('Block User', 'User has been blocked.');
           }}
         />
       </View>

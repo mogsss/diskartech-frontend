@@ -1,8 +1,8 @@
-import BaseRegisterScreen from '@/components/BaseRegisterScreen';
-import LocationPickerModal from '@/components/LocationPickerModal';
-import GenderModal from '@/components/GenderModal';
-import CourseModal from '@/components/modals/student/CourseModal';
-import YearLevelModal from '@/components/modals/student/YearLevelModal';
+import BaseRegisterScreen from '@/components/ui/BaseRegisterScreen';
+import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
+import GenderModal from '@/components/ui/modals/GenderModal';
+import CourseModal from '@/components/student/modals/CourseModal';
+import YearLevelModal from '@/components/student/modals/YearLevelModal';
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';

@@ -1,16 +1,28 @@
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
-import axios from 'axios';
-// Kung gumagamit ka ng AsyncStorage para sa pag-save ng token, i-uncomment ang susunod na line:
-// import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  sendTestNotification,
+  scheduleDelayedSimulationNotification,
+  sendTestCloudPushNotification,
+  getPushDiagnosticInfo,
+} from '@/utils/notifications';
 
 export default function SettingsScreen() {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('notifications_enabled').then((val) => {
+      if (val !== null) {
+        setNotifications(val === 'true');
+      }
+    });
+  }, []);
 
   // Function para sa Logout
   const handleLogout = async () => {
@@ -81,7 +93,78 @@ export default function SettingsScreen() {
         <Text className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-4 mb-2 px-1">Preferences</Text>
         <View className="bg-white rounded-2xl overflow-hidden shadow-sm">
           <SettingToggle icon="dark-mode" label="Dark Mode" value={darkMode} onValueChange={setDarkMode} />
-          <SettingToggle icon="notifications" label="Push Notifications" value={notifications} onValueChange={setNotifications} />
+          <SettingToggle 
+            icon="notifications" 
+            label="Push Notifications" 
+            value={notifications} 
+            onValueChange={async (val) => {
+              setNotifications(val);
+              await AsyncStorage.setItem('notifications_enabled', String(val));
+            }} 
+          />
+          <SettingItem 
+            icon="notifications-active" 
+            label="Test Notification" 
+            value="Send Now" 
+            onPress={async () => {
+              try {
+                await sendTestNotification();
+              } catch (err: any) {
+                Alert.alert('Permission Error', 'Please enable notifications in your device settings.');
+              }
+            }} 
+          />
+          <SettingItem 
+            icon="schedule" 
+            label="Test (Close App - 10s Delay)" 
+            value="Try Now" 
+            onPress={async () => {
+              try {
+                await scheduleDelayedSimulationNotification(10);
+                Alert.alert(
+                  'Test Scheduled',
+                  'You have 10 seconds. Minimize or swipe away the app to close it completely to see the notification banner.'
+                );
+              } catch (err: any) {
+                Alert.alert('Permission Error', 'Please enable notifications in your device settings.');
+              }
+            }} 
+          />
+          <SettingItem 
+            icon="cloud-queue" 
+            label="Test Cloud Push (5s Delay)" 
+            value="Send" 
+            onPress={async () => {
+              try {
+                await sendTestCloudPushNotification(5);
+                Alert.alert(
+                  'Cloud Push Scheduled',
+                  'Close or minimize the app now. A cloud push notification will be sent via Expo in 5 seconds.'
+                );
+              } catch (err: any) {
+                Alert.alert('Push Error', 'Could not send cloud push. Please check connection.');
+              }
+            }} 
+          />
+          <SettingItem 
+            icon="info-outline" 
+            label="Check Push Token Status" 
+            value="Diagnose" 
+            onPress={async () => {
+              const info = await getPushDiagnosticInfo();
+              if (info.status === 'ok') {
+                Alert.alert(
+                  'Push Token Active',
+                  `Your phone is ready for remote push notifications!\n\nToken:\n${info.token}`
+                );
+              } else {
+                Alert.alert(
+                  'Push Diagnostic Result',
+                  `Status: Failed to get push token\n\nReason:\n${info.error}`
+                );
+              }
+            }} 
+          />
           <SettingItem icon="language" label="Language" value="English" />
         </View>
 
@@ -118,15 +201,21 @@ export default function SettingsScreen() {
   );
 }
 
-function SettingItem({ icon, label, value, badge, badgeColor }: {
+function SettingItem({ icon, label, value, badge, badgeColor, onPress }: {
   icon: keyof typeof MaterialIcons.glyphMap;
   label: string;
   value?: string;
   badge?: string;
   badgeColor?: string;
+  onPress?: () => void;
 }) {
   return (
-    <TouchableOpacity className="flex-row items-center p-4 border-b border-gray-100 gap-4">
+    <TouchableOpacity 
+      onPress={onPress} 
+      disabled={!onPress} 
+      activeOpacity={onPress ? 0.7 : 1}
+      className="flex-row items-center p-4 border-b border-gray-100 gap-4"
+    >
       <MaterialIcons name={icon} size={22} color={Colors.text} />
       <Text className="text-base text-slate-900 flex-1">{label}</Text>
       <View className="flex-row items-center gap-2">

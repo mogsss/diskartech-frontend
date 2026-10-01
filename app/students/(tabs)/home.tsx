@@ -11,7 +11,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '@/constants/colors';
-import JobCard from '@/components/ui/JobCard';
+import JobCard from '@/components/student/JobCard';
 import SearchBar from '@/components/ui/SearchBar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
@@ -195,7 +195,7 @@ export default function HomeScreen() {
       }
     } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      Alert.alert('Paalala', 'Hindi ma-update ang saved jobs.');
+      Alert.alert('Notice', 'Unable to update saved jobs.');
     }
   };
 

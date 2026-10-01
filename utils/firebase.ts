@@ -1,6 +1,5 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore"; // <-- Idagdag ito para sa database/chat
-import { getAuth } from "firebase/auth";           // <-- Idagdag ito kung gagamitin din ang Firebase Auth
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeFirestore, getFirestore, Firestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -13,7 +12,16 @@ const firebaseConfig = {
   measurementId: "G-1X8NTJB56N"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);   // <-- Ito ang gagamitin natin para sa real-time chat messages
-// export const auth = getAuth(app); // <-- Ito ang gagamitin para sa authentication (optional)
+// Initialize Firebase (safely handling Fast Refresh)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+let firestoreDb: Firestore;
+try {
+  firestoreDb = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  });
+} catch {
+  firestoreDb = getFirestore(app);
+}
+
+export const db = firestoreDb;

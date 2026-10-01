@@ -18,6 +18,9 @@ const typeConfig: Record<string, { icon: any; color: string; bg: string }> = {
   verification_pending: { icon: 'hourglass-empty', color: '#F59E0B', bg: '#F59E0B15' },
   verification_required: { icon: 'assignment-late', color: '#64748B', bg: '#64748B15' },
   verification: { icon: 'verified-user', color: '#9C27B0', bg: '#F3E5F5' },
+  application: { icon: 'assignment-ind', color: '#2563EB', bg: '#EFF6FF' },
+  application_status: { icon: 'assignment-turned-in', color: '#7C3AED', bg: '#F5F3FF' },
+  general: { icon: 'notifications', color: '#64748B', bg: '#F1F5F9' },
 };
 
 export default function NotificationCard({ notification, onPress }: NotificationCardProps) {

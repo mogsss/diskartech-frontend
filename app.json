@@ -20,9 +20,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "package": "com.diskartech.app",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -30,6 +35,14 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#D32F2F"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -48,11 +61,25 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Kailangan ng DiskarTech ang access sa lokasyon para sa pag-pin ng iyong address."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b686c1c8-e796-4d0c-9bb4-87fa94802a3e"
+      }
     }
   }
 }

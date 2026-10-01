@@ -1,4 +1,4 @@
-import JobCard from '@/components/ui/JobCard';
+import JobCard from '@/components/student/JobCard';
 import SearchBar from '@/components/ui/SearchBar';
 import Chip from '@/components/ui/Chip';
 import { Colors } from '@/constants/colors';
@@ -104,7 +104,7 @@ export default function SearchScreen() {
       }
     } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      Alert.alert('Paalala', 'Hindi ma-update ang saved jobs.');
+      Alert.alert('Notice', 'Unable to update saved jobs.');
     }
   };
 
