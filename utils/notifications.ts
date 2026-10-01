@@ -21,15 +21,38 @@ export const CHATS_COLLECTION = 'chats';
 export const NOTIFICATION_CHANNEL_ID = 'diskartech-default';
 export const APP_NOTIFICATIONS_COLLECTION = 'app_notifications';
 
+// Subaybayan ang active conversation ID
+let currentActiveChatId: string | null = null;
+
+export function setActiveChatScreen(chatId: string | null) {
+  currentActiveChatId = chatId;
+}
+
 // 1. I-set ang foreground notification handler (ayon sa Expo SDK 54 guidelines)
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldShowAlert: true,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification?.request?.content?.data as Record<string, any> | undefined;
+    const incomingChatId = data?.chatId ? String(data.chatId) : null;
+
+    // Kung kasalukuyang binabasa ng user ang chat na ito, huwag mag-pop up ng banner
+    if (incomingChatId && currentActiveChatId && incomingChatId === currentActiveChatId) {
+      return {
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldShowAlert: false,
+      };
+    }
+
+    return {
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldShowAlert: true,
+    };
+  },
 });
 
 // Cache para maiwasan ang duplicate notifications kapag parehong nag-trigger ang remote push at local listener
@@ -328,12 +351,7 @@ export async function sendTestCloudPushNotification(delaySeconds: number = 5): P
   }, delaySeconds * 1000);
 }
 
-// Subaybayan ang active conversation ID
-let currentActiveChatId: string | null = null;
 
-export function setActiveChatScreen(chatId: string | null) {
-  currentActiveChatId = chatId;
-}
 
 /**
  * Real-time listener para sa mga pumapasok na chat messages sa Firestore.
@@ -397,18 +415,6 @@ export function subscribeToIncomingChatNotifications(
             raw.owner_name ||
             raw.student_name ||
             'DiskarTech User';
-
-          const notifKey = `chat_${chatId}_${lastMessage}`;
-          if (currentActiveChatId !== chatId && shouldShowNotification(notifKey)) {
-            await sendLocalNotification({
-              title: senderName,
-              body: lastMessage,
-              data: {
-                chatId,
-                url: `/chat?id=${chatId}`,
-              },
-            });
-          }
 
           if (onNotificationTriggered) {
             onNotificationTriggered(chatId);
@@ -504,19 +510,6 @@ export function subscribeToAppNotifications(
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added') {
           const raw = change.doc.data();
-          const notifKey = `app_${raw.target_id || ''}_${raw.title}_${raw.body}`;
-          if (shouldShowNotification(notifKey)) {
-            await sendLocalNotification({
-              title: raw.title || 'DiskarTech Notification',
-              body: raw.body || '',
-              data: {
-                type: raw.type,
-                targetId: raw.target_id,
-                url: '/notifications',
-              },
-            });
-          }
-
           if (onNotificationTriggered) {
             onNotificationTriggered(raw);
           }
