@@ -1,13 +1,7 @@
+import api from '@/api/axios';
+import ApplicationDetailsModal from '@/components/student/modals/ApplicationDetailsModal';
 import NotificationCard from '@/components/ui/NotificationCard';
 import { Colors } from '@/constants/colors';
-import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useState, useMemo } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import api from '@/api/axios';
-import { db } from '@/utils/firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   CHATS_COLLECTION,
   getOtherParticipant,
@@ -15,8 +9,14 @@ import {
   markChatAsRead,
   normalizeChatFields,
 } from '@/utils/chat';
+import { db } from '@/utils/firebase';
 import { APP_NOTIFICATIONS_COLLECTION } from '@/utils/notifications';
-import ApplicationDetailsModal from '@/components/student/modals/ApplicationDetailsModal';
+import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 type FilterTab = 'all' | 'applications' | 'messages' | 'updates';
 
@@ -94,8 +94,8 @@ export default function NotificationsScreen() {
     if (!currentUserId || !userRole) return;
 
     let isMounted = true;
-    let unsubscribeChats = () => {};
-    let unsubscribeAppNotifs = () => {};
+    let unsubscribeChats = () => { };
+    let unsubscribeAppNotifs = () => { };
 
     const loadData = async () => {
       setLoading(true);
@@ -359,27 +359,27 @@ export default function NotificationsScreen() {
     };
   }, [currentUserId, userRole]);
 
-function getNotificationDedupeKey(n: any): string {
-  let text = '';
-  if (typeof n.message === 'string') {
-    // Alisin ang lahat ng spaces, quotes, at punctuation para sigurado ang match sa iba't ibang formatting
-    text = n.message.toLowerCase().replace(/[^a-z0-9]/g, '');
-  } else if (n.rawApplication) {
-    text = `app_${n.rawApplication.id}_${n.rawApplication.status || ''}`;
-  }
+  function getNotificationDedupeKey(n: any): string {
+    let text = '';
+    if (typeof n.message === 'string') {
+      // Alisin ang lahat ng spaces, quotes, at punctuation para sigurado ang match sa iba't ibang formatting
+      text = n.message.toLowerCase().replace(/[^a-z0-9]/g, '');
+    } else if (n.rawApplication) {
+      text = `app_${n.rawApplication.id}_${n.rawApplication.status || ''}`;
+    }
 
-  const title = (n.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  let type = (n.type || '').trim().toLowerCase();
-  if (type === 'application_status') type = 'application';
+    const title = (n.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    let type = (n.type || '').trim().toLowerCase();
+    if (type === 'application_status') type = 'application';
 
-  if (text) {
-    return `${type}|${title}|${text}`;
+    if (text) {
+      return `${type}|${title}|${text}`;
+    }
+    if (n.targetId) {
+      return `${type}|${title}|${n.targetId}`;
+    }
+    return n.id;
   }
-  if (n.targetId) {
-    return `${type}|${title}|${n.targetId}`;
-  }
-  return n.id;
-}
 
   // Pagsamahin at i-sort chronologically: Pinakabago / Newest First nang walang duplicates!
   const combinedNotifications = useMemo(() => {
@@ -598,14 +598,12 @@ function getNotificationDedupeKey(n: any): string {
         >
           <TouchableOpacity
             onPress={() => setActiveTab('all')}
-            className={`px-3.5 py-1.5 rounded-full ${
-              activeTab === 'all' ? 'bg-red-600' : 'bg-gray-100'
-            }`}
+            className={`px-3.5 py-1.5 rounded-full ${activeTab === 'all' ? 'bg-red-600' : 'bg-gray-100'
+              }`}
           >
             <Text
-              className={`text-xs font-semibold ${
-                activeTab === 'all' ? 'text-white' : 'text-slate-600'
-              }`}
+              className={`text-xs font-semibold ${activeTab === 'all' ? 'text-white' : 'text-slate-600'
+                }`}
             >
               All ({combinedNotifications.length})
             </Text>
@@ -613,14 +611,12 @@ function getNotificationDedupeKey(n: any): string {
 
           <TouchableOpacity
             onPress={() => setActiveTab('applications')}
-            className={`px-3.5 py-1.5 rounded-full ${
-              activeTab === 'applications' ? 'bg-red-600' : 'bg-gray-100'
-            }`}
+            className={`px-3.5 py-1.5 rounded-full ${activeTab === 'applications' ? 'bg-red-600' : 'bg-gray-100'
+              }`}
           >
             <Text
-              className={`text-xs font-semibold ${
-                activeTab === 'applications' ? 'text-white' : 'text-slate-600'
-              }`}
+              className={`text-xs font-semibold ${activeTab === 'applications' ? 'text-white' : 'text-slate-600'
+                }`}
             >
               Applications {appCount > 0 ? `(${appCount})` : ''}
             </Text>
@@ -628,14 +624,12 @@ function getNotificationDedupeKey(n: any): string {
 
           <TouchableOpacity
             onPress={() => setActiveTab('messages')}
-            className={`px-3.5 py-1.5 rounded-full ${
-              activeTab === 'messages' ? 'bg-red-600' : 'bg-gray-100'
-            }`}
+            className={`px-3.5 py-1.5 rounded-full ${activeTab === 'messages' ? 'bg-red-600' : 'bg-gray-100'
+              }`}
           >
             <Text
-              className={`text-xs font-semibold ${
-                activeTab === 'messages' ? 'text-white' : 'text-slate-600'
-              }`}
+              className={`text-xs font-semibold ${activeTab === 'messages' ? 'text-white' : 'text-slate-600'
+                }`}
             >
               Messages {msgCount > 0 ? `(${msgCount})` : ''}
             </Text>
@@ -644,14 +638,12 @@ function getNotificationDedupeKey(n: any): string {
           {userRole !== 'student' && updateCount > 0 && (
             <TouchableOpacity
               onPress={() => setActiveTab('updates')}
-              className={`px-3.5 py-1.5 rounded-full ${
-                activeTab === 'updates' ? 'bg-red-600' : 'bg-gray-100'
-              }`}
+              className={`px-3.5 py-1.5 rounded-full ${activeTab === 'updates' ? 'bg-red-600' : 'bg-gray-100'
+                }`}
             >
               <Text
-                className={`text-xs font-semibold ${
-                  activeTab === 'updates' ? 'text-white' : 'text-slate-600'
-                }`}
+                className={`text-xs font-semibold ${activeTab === 'updates' ? 'text-white' : 'text-slate-600'
+                  }`}
               >
                 Updates ({updateCount})
               </Text>
@@ -690,13 +682,11 @@ function getNotificationDedupeKey(n: any): string {
           ))
         )}
       </ScrollView>
-
-      {/* Modal para sa Student Application Details */}
       <ApplicationDetailsModal
         visible={isAppModalVisible}
         onClose={() => setIsAppModalVisible(false)}
         application={selectedModalApp}
-        onApplicationCancelled={() => {}}
+        onApplicationCancelled={() => { }}
       />
     </View>
   );

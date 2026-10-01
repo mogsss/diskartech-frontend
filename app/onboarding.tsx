@@ -3,6 +3,7 @@ import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     Animated,
     Dimensions,
@@ -57,15 +58,17 @@ export default function OnboardingScreen() {
     setCurrentIndex(index);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentIndex < slides.length - 1) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
     } else {
+      await AsyncStorage.setItem('has_seen_onboarding', 'true');
       router.replace('/auth/welcome');
     }
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    await AsyncStorage.setItem('has_seen_onboarding', 'true');
     router.replace('/auth/welcome');
   };
 

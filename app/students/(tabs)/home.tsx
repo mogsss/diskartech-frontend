@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -17,6 +18,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 
 export default function HomeScreen() {
+  // Pigilan ang pagbalik sa login page kapag pinindot ang hardware back button sa root dashboard
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        BackHandler.exitApp();
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => subscription.remove();
+    }, [])
+  );
+
   const [studentName, setStudentName] = useState('Student');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'nearby' | 'ai_match' | 'saved'>('all');

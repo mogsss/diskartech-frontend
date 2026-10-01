@@ -3,10 +3,34 @@ import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { redirectUserByRole } from '@/utils/authNavigation';
 
 export default function WelcomeScreen() {
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const storedUser = await AsyncStorage.getItem('userData');
+        if (token && storedUser) {
+          const user = JSON.parse(storedUser);
+          const role =
+            user.role ||
+            (user.student_school_name
+              ? 'student'
+              : user.household_name
+              ? 'household'
+              : 'employer');
+          redirectUserByRole(role);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    checkAuth();
+  }, []);
   return (
     <View className="flex-1 bg-surface">
       <View className="absolute top-[-120px] left-[-100px] w-[260px] h-[260px] rounded-full bg-primary/10" />

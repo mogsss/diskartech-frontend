@@ -5,11 +5,24 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useCallback } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, BackHandler } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import api from '@/api/axios';
 
 export default function SharedDashboardScreen() {
+  // Pigilan ang pagbalik sa login page kapag pinindot ang hardware back button sa root dashboard
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        BackHandler.exitApp();
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => subscription.remove();
+    }, [])
+  );
+
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
 

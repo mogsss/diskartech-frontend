@@ -32,6 +32,29 @@ export default function LoginScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalConfig, setModalConfig] = useState<any>({});
 
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const storedUser = await AsyncStorage.getItem('userData');
+        if (token && storedUser) {
+          const user = JSON.parse(storedUser);
+          const role =
+            user.role ||
+            (user.student_school_name
+              ? 'student'
+              : user.household_name
+              ? 'household'
+              : 'employer');
+          redirectUserByRole(role);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    checkAuth();
+  }, []);
+
   const dismissKeyboard = () => Keyboard.dismiss();
 
   const handleLogin = async () => {

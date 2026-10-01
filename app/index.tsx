@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Dimensions, Text, View } from 'react-native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen() {
@@ -15,6 +17,44 @@ export default function SplashScreen() {
   const loadingWidth = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let targetRoute: string = '/onboarding';
+
+    // Suriin agad ang saved session habang tumatakbo ang splash animation
+    const checkAuthSession = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const storedUser = await AsyncStorage.getItem('userData');
+        const hasSeenOnboarding = await AsyncStorage.getItem('has_seen_onboarding');
+
+        if (token && storedUser) {
+          const user = JSON.parse(storedUser);
+          const role =
+            user.role ||
+            (user.student_school_name
+              ? 'student'
+              : user.household_name
+              ? 'household'
+              : 'employer');
+
+          if (role === 'student') {
+            targetRoute = '/students/(tabs)/home';
+          } else if (role === 'household') {
+            targetRoute = '/employer/(tabs)/dashboard?type=household';
+          } else {
+            targetRoute = '/employer/(tabs)/dashboard?type=business';
+          }
+        } else if (hasSeenOnboarding === 'true') {
+          targetRoute = '/auth/welcome';
+        } else {
+          targetRoute = '/onboarding';
+        }
+      } catch (e) {
+        targetRoute = '/onboarding';
+      }
+    };
+
+    checkAuthSession();
+
     Animated.sequence([
       Animated.parallel([
         Animated.spring(logoScale, {
@@ -41,8 +81,8 @@ export default function SplashScreen() {
       }),
     ]).start(() => {
       setTimeout(() => {
-        router.replace('/onboarding');
-      }, 300);
+        router.replace(targetRoute as any);
+      }, 200);
     });
   }, []);
 

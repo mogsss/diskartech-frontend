@@ -1,6 +1,14 @@
 import { router } from 'expo-router';
 
 export const redirectUserByRole = (role: string) => {
+  try {
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+  } catch {
+    /* ignore */
+  }
+
   if (role === 'student') {
     router.replace('/students/(tabs)/home');
   } else if (role === 'employer') {
