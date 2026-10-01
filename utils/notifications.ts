@@ -41,7 +41,6 @@ Notifications.setNotificationHandler({
         shouldSetBadge: false,
         shouldShowBanner: false,
         shouldShowList: false,
-        shouldShowAlert: false,
       };
     }
 
@@ -50,7 +49,6 @@ Notifications.setNotificationHandler({
       shouldSetBadge: true,
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldShowAlert: true,
     };
   },
 });
