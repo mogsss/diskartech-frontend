@@ -122,17 +122,21 @@ export default function RegisterStudentScreen() {
         if (token) {
           await AsyncStorage.setItem('userToken', token);
         }
-        if (user) {
-          await AsyncStorage.setItem('userData', JSON.stringify(user));
-        }
+        const userDataToSave = user || {
+          email: email,
+          role: 'student',
+          isEmailVerified: false,
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(userDataToSave));
+
         if (student_profile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(student_profile));
         }
 
-        // Diretsong pumunta sa Verify Email screen
+        // Diretsong pumunta sa Verify Email screen habang ipinapasa ang email at role
         router.replace({
           pathname: '/auth/verify-email',
-          params: { email: email },
+          params: { email: email, role: 'student' },
         });
       }
     } catch (error: any) {

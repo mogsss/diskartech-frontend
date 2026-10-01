@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 
 export default function VerifyEmailScreen() {
-  const { email } = useLocalSearchParams();
+  const { email, role: paramRole } = useLocalSearchParams<{ email: string; role?: string }>();
   const router = useRouter();
   
   // State para sa 6 na individual digits
@@ -161,28 +161,36 @@ export default function VerifyEmailScreen() {
 
       if (response.data.status === 'success') {
         const storedUser = await AsyncStorage.getItem('userData');
-        let targetRole = null;
+        const apiUser = response.data.user;
+        let parsedStoredUser = storedUser ? JSON.parse(storedUser) : null;
 
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          user.isEmailVerified = true;
-          await AsyncStorage.setItem('userData', JSON.stringify(user));
-          targetRole = user.role;
+        // Tiyakin ang tamang role: unahin ang mula sa API response, sunod ang paramRole, at huli ang parsedStoredUser
+        const resolvedRole = apiUser?.role || (paramRole as string) || parsedStoredUser?.role || 'employer';
 
-          // Fetch profile updates silently in the background
-          try {
-            if (user.role === 'student') {
-              const profileRes = await api.get('/student/profile');
-              const profileData = profileRes.data.profile || profileRes.data;
-              if (profileData) await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
-            } else if (user.role === 'employer' || user.role === 'household') {
-              const profileRes = await api.get('/user/profile');
-              const profileData = profileRes.data.profile || profileRes.data;
-              if (profileData) await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
-            }
-          } catch (profileErr: any) {
-            console.log('Error fetching profile block:', profileErr.response?.data || profileErr.message);
+        const updatedUser = {
+          ...(parsedStoredUser || {}),
+          ...(apiUser || {}),
+          email: (email as string) || apiUser?.email || parsedStoredUser?.email,
+          role: resolvedRole,
+          isEmailVerified: true,
+        };
+
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+        const targetRole = resolvedRole;
+
+        // Fetch profile updates silently in the background
+        try {
+          if (targetRole === 'student') {
+            const profileRes = await api.get('/student/profile');
+            const profileData = profileRes.data.profile || profileRes.data;
+            if (profileData) await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
+          } else if (targetRole === 'employer' || targetRole === 'household') {
+            const profileRes = await api.get('/user/profile');
+            const profileData = profileRes.data.profile || profileRes.data;
+            if (profileData) await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
           }
+        } catch (profileErr: any) {
+          console.log('Error fetching profile block:', profileErr.response?.data || profileErr.message);
         }
 
         // Show Success Modal that redirects upon button press

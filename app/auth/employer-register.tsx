@@ -106,15 +106,30 @@ export default function RegisterEmployerScreen() {
       });
 
       if (response.data.status === 'success') {
-        // Isinave natin bilang 'userToken' para magtugma sa global Axios interceptor
-        if (response.data.token) {
-          await AsyncStorage.setItem('userToken', response.data.token);
+        const { token, user, profile, employer_profile } = response.data;
+
+        if (token) {
+          await AsyncStorage.setItem('userToken', token);
         }
 
-        // I-redirect patungo sa Verify Email screen habang ipinapasa ang email
+        const userDataToSave = user || {
+          email: email,
+          role: 'employer',
+          first_name: firstName,
+          last_name: lastName,
+          isEmailVerified: false,
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(userDataToSave));
+
+        const profileData = profile || employer_profile;
+        if (profileData) {
+          await AsyncStorage.setItem('userProfile', JSON.stringify(profileData));
+        }
+
+        // I-redirect patungo sa Verify Email screen habang ipinapasa ang email at role
         router.replace({
           pathname: '/auth/verify-email', 
-          params: { email: email }
+          params: { email: email, role: 'employer' }
         });
       }
     } catch (error: any) {

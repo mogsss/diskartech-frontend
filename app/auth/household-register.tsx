@@ -114,17 +114,21 @@ export default function RegisterHouseholdScreen() {
         if (token) {
           await AsyncStorage.setItem('userToken', token);
         }
-        if (user) {
-          await AsyncStorage.setItem('userData', JSON.stringify(user));
-        }
+        const userDataToSave = user || {
+          email: email,
+          role: 'household',
+          isEmailVerified: false,
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(userDataToSave));
+
         if (profile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
 
-        // 💡 Diretsong i-redirect sa Verify Email screen habang ipinapasa ang email
+        // 💡 Diretsong i-redirect sa Verify Email screen habang ipinapasa ang email at role
         router.replace({
           pathname: '/auth/verify-email',
-          params: { email: email },
+          params: { email: email, role: 'household' },
         });
       }
     } catch (error: any) {
