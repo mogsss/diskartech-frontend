@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
@@ -14,6 +14,7 @@ interface InputFieldProps extends TextInputProps {
   label?: string;
   error?: string;
   icon?: keyof typeof MaterialIcons.glyphMap;
+  iconColor?: string;
   isPassword?: boolean;
   containerStyle?: ViewStyle;
 }
@@ -22,10 +23,12 @@ export default function InputField({
   label,
   error,
   icon,
+  iconColor,
   isPassword = false,
   containerStyle,
   ...props
 }: InputFieldProps) {
+  const { colors, isDark } = useDarkMode();
   const [showPassword, setShowPassword] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -37,7 +40,7 @@ export default function InputField({
   return (
     <View style={[{ marginBottom: 16 }, containerStyle]}>
       {label && (
-        <Text className="text-sm font-semibold text-slate-900 mb-2">
+        <Text className="text-sm font-semibold mb-2" style={{ color: colors.text }}>
           {label}
         </Text>
       )}
@@ -45,29 +48,42 @@ export default function InputField({
       <TouchableOpacity
         activeOpacity={1}
         onPress={handleContainerPress}
-        className={`flex-row items-center bg-white border-[1.5px] rounded-xl px-4 h-[52px] ${
-          isFocused ? 'border-red-600' : error ? 'border-red-500' : 'border-gray-300'
-        }`}
+        className="flex-row items-center border-[1.5px] rounded-xl px-4 h-[52px]"
+        style={{
+          backgroundColor: props.editable === false ? (isDark ? 'rgba(255,255,255,0.04)' : '#F1F5F9') : colors.surface,
+          borderColor: isFocused ? '#DC2626' : error ? '#EF4444' : colors.border,
+          opacity: props.editable === false ? 0.8 : 1,
+        }}
       >
         {icon && (
           <MaterialIcons
             name={icon}
             size={20}
-            color={isFocused ? '#dc2626' : '#6b7280'}
+            color={iconColor ?? (isFocused ? colors.accent : colors.textSecondary)}
             style={{ marginRight: 8 }}
           />
         )}
         
         <TextInput
           ref={inputRef}
-          className="flex-1 text-base text-slate-900 h-full p-0"
-          placeholderTextColor="#9ca3af"
+          className="flex-1 text-base h-full p-0"
+          style={[{ color: colors.text }, props.style]}
+          placeholderTextColor={colors.textSecondary}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           secureTextEntry={isPassword && !showPassword}
           autoCorrect={false}
           {...props}
         />
+
+        {props.editable === false && (
+          <MaterialIcons
+            name="lock"
+            size={16}
+            color={iconColor ?? colors.textSecondary}
+            style={{ marginLeft: 6 }}
+          />
+        )}
 
         {isPassword && (
           <TouchableOpacity
@@ -78,7 +94,7 @@ export default function InputField({
             <MaterialIcons
               name={showPassword ? 'visibility' : 'visibility-off'}
               size={20}
-              color="#6b7280"
+              color={iconColor ?? colors.textSecondary}
             />
           </TouchableOpacity>
         )}

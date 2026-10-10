@@ -6,7 +6,7 @@ import { LoggedInRole } from '@/types/chat';
 export function getStorageBaseUrl(): string {
   return api.defaults.baseURL
     ? api.defaults.baseURL.replace('/api', '/storage/')
-    : 'http://192.168.1.2:8000/storage/';
+    : 'https://diskartech-backend.onrender.com/storage/';
 }
 
 export function toAbsoluteStorageUrl(path: string | null | undefined): string {
@@ -320,4 +320,26 @@ export function getMessageCreatedAt(raw: Record<string, unknown>): Timestamp | n
     return ts as Timestamp;
   }
   return null;
+}
+
+export function getTimestampMs(val: unknown): number {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+  if (val instanceof Date) return val.getTime();
+  if (typeof val === 'object') {
+    if ('toMillis' in (val as any) && typeof (val as any).toMillis === 'function') {
+      return (val as any).toMillis();
+    }
+    if ('toDate' in (val as any) && typeof (val as any).toDate === 'function') {
+      return (val as any).toDate().getTime();
+    }
+    if ('seconds' in (val as any)) {
+      return Number((val as any).seconds) * 1000;
+    }
+  }
+  if (typeof val === 'string') {
+    const parsed = Date.parse(val);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
 }

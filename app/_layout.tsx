@@ -1,5 +1,13 @@
 import '../global.css';
 
+import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
+
+// Disable Reanimated strict-mode warnings for reading/writing shared values during component render
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false,
+});
+
 import { Colors } from '@/constants/colors';
 import { getLoggedInUserId } from '@/utils/chat';
 import {
@@ -8,11 +16,42 @@ import {
   subscribeToAppNotifications,
   subscribeToIncomingChatNotifications,
 } from '@/utils/notifications';
+import {
+  useFonts,
+  Poppins_300Light,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+  Poppins_900Black,
+} from '@expo-google-fonts/poppins';
 import * as Notifications from 'expo-notifications';
 import { Stack, router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Text, TextInput } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DarkModeProvider, useDarkMode } from '@/hooks/useDarkMode';
+
+// Prevent splash screen auto-hiding until custom fonts are ready
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Global default font family for all Text and TextInput components in the entire app
+// @ts-ignore
+if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
+// @ts-ignore
+const defaultTextStyle = (Text as any).defaultProps.style;
+// @ts-ignore
+(Text as any).defaultProps.style = [{ fontFamily: 'Poppins' }, defaultTextStyle];
+
+// @ts-ignore
+if ((TextInput as any).defaultProps == null) (TextInput as any).defaultProps = {};
+// @ts-ignore
+const defaultInputStyle = (TextInput as any).defaultProps.style;
+// @ts-ignore
+(TextInput as any).defaultProps.style = [{ fontFamily: 'Poppins' }, defaultInputStyle];
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -25,6 +64,30 @@ const stackScreenOptions = {
 };
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Poppins_300Light,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+    Poppins_900Black,
+    'Poppins': Poppins_400Regular,
+    'Poppins-Light': Poppins_300Light,
+    'Poppins-Regular': Poppins_400Regular,
+    'Poppins-Medium': Poppins_500Medium,
+    'Poppins-SemiBold': Poppins_600SemiBold,
+    'Poppins-Bold': Poppins_700Bold,
+    'Poppins-ExtraBold': Poppins_800ExtraBold,
+    'Poppins-Black': Poppins_900Black,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontError]);
+
   useEffect(() => {
     // 1. Humingi ng permiso sa phone at i-configure ang Android notification channel
     registerForPushNotificationsAsync();
@@ -90,9 +153,24 @@ export default function RootLayout() {
       }
     };
   }, []);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
-    <>
-      <StatusBar style="dark" />
+    <DarkModeProvider>
+      <RootLayoutNav />
+    </DarkModeProvider>
+  );
+}
+
+function RootLayoutNav() {
+  const { isDark } = useDarkMode();
+
+  return (
+    <SafeAreaProvider>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={stackScreenOptions}>
         {/* Splash & onboarding */}
         <Stack.Screen name="index" />
@@ -112,6 +190,9 @@ export default function RootLayout() {
         <Stack.Screen name="students/schedule" />
         <Stack.Screen name="students/earnings" />
         <Stack.Screen name="students/reviews" />
+        <Stack.Screen name="students/accepted-job" />
+        <Stack.Screen name="students/application-details" />
+        <Stack.Screen name="students/verification-status" />
 
         {/* Employer app — tabs group + stack screens */}
         <Stack.Screen name="employer/(tabs)" options={{ headerShown: false }} />
@@ -123,7 +204,11 @@ export default function RootLayout() {
         <Stack.Screen name="chat" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="terms-and-conditions" />
+        <Stack.Screen name="privacy-policy" />
+        <Stack.Screen name="help-center" />
+        <Stack.Screen name="about-diskartech" />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

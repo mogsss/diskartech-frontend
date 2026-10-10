@@ -1,8 +1,11 @@
 import BaseRegisterScreen from '@/components/ui/BaseRegisterScreen';
 import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 import BusinessTypeModal from '@/components/employer/modals/BusinessTypeModal';
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
+import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
+import { GoogleAuthProfile } from '@/utils/googleAuth';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -13,6 +16,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterEmployerScreen() {
   const [step, setStep] = useState(1);
+
+  // Google OAuth Link State
+  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   // Step 1: Business Info & Owner/Contact Person Name
   const [businessName, setBusinessName] = useState('');
@@ -37,7 +44,19 @@ export default function RegisterEmployerScreen() {
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
-  
+  const [registrationError, setRegistrationError] = useState('');
+
+  const handleGoogleProfile = (profile: GoogleAuthProfile) => {
+    if (profile.firstName) setFirstName(profile.firstName);
+    if (profile.lastName) setLastName(profile.lastName);
+    setEmail(profile.email);
+    if (profile.photoUrl) setAvatarUrl(profile.photoUrl);
+    const generatedPwd = `G_${Math.random().toString(36).slice(-5).toUpperCase()}${Math.floor(100 + Math.random() * 900)}!x`;
+    setPassword(generatedPwd);
+    setConfirmPassword(generatedPwd);
+    setIsGoogleLinked(true);
+  };
+
   const hasUpper = /[A-Z]/.test(password);
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
@@ -74,14 +93,16 @@ export default function RegisterEmployerScreen() {
       hasError = true;
     }
 
-    if (!hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar) {
-      setPasswordError('Please meet all password requirements.');
-      hasError = true;
-    }
+    if (!isGoogleLinked) {
+      if (!hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar) {
+        setPasswordError('Please meet all password requirements.');
+        hasError = true;
+      }
 
-    if (password !== confirmPassword) {
-      setConfirmPasswordError('Passwords do not match.');
-      hasError = true;
+      if (password !== confirmPassword) {
+        setConfirmPasswordError('Passwords do not match.');
+        hasError = true;
+      }
     }
 
     if (hasError) return;
@@ -103,6 +124,7 @@ export default function RegisterEmployerScreen() {
         longitude: longitude,
         email: email,
         password: password,
+        avatar: avatarUrl || null,
       });
 
       if (response.data.status === 'success') {
@@ -128,18 +150,22 @@ export default function RegisterEmployerScreen() {
 
         // I-redirect patungo sa Verify Email screen habang ipinapasa ang email at role
         router.replace({
-          pathname: '/auth/verify-email', 
+          pathname: '/auth/verify-email',
           params: { email: email, role: 'employer' }
         });
       }
     } catch (error: any) {
-      console.error(error);
-
       if (error.response && error.response.status === 422) {
-        const errors = error.response.data.errors;
+        const errors: Record<string, string[]> = error.response.data?.errors ?? {};
         if (errors.email) setEmailError(errors.email[0]);
         if (errors.password) setPasswordError(errors.password[0]);
+        setRegistrationError(
+          Object.values(errors).flat().join('\n')
+          || error.response.data?.message
+          || 'Please review your information and try again.'
+        );
       } else {
+        console.error(error);
         const errorMsg = error.response?.data?.message || error.message;
         Alert.alert('Registration Failed', errorMsg);
       }
@@ -165,6 +191,19 @@ export default function RegisterEmployerScreen() {
       {/* --- STEP 1: BUSINESS & OWNER DETAILS --- */}
       {step === 1 && (
         <View>
+          <GoogleRegisterButton
+            onGoogleProfileLoaded={handleGoogleProfile}
+            linkedEmail={isGoogleLinked ? email : undefined}
+            linkedName={isGoogleLinked ? `${firstName} ${lastName}`.trim() : undefined}
+            linkedPhoto={isGoogleLinked ? avatarUrl : undefined}
+            onUnlink={() => {
+              setIsGoogleLinked(false);
+              setAvatarUrl('');
+              setPassword('');
+              setConfirmPassword('');
+            }}
+          />
+
           <InputField label="Business Name" placeholder="Enter business name" icon="business" value={businessName} onChangeText={setBusinessName} />
 
           <View className="mb-4">
@@ -181,10 +220,14 @@ export default function RegisterEmployerScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text className="text-base font-bold text-slate-900 mt-5 mb-3">Contact Person / HR</Text>
-          <InputField label="First Name" placeholder="Contact person first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-          <InputField label="Middle Name (Optional)" placeholder="Contact person middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-          <InputField label="Last Name" placeholder="Contact person last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+          {!isGoogleLinked && (
+            <>
+              <Text className="text-base font-bold text-slate-900 mt-5 mb-3">Contact Person / HR</Text>
+              <InputField label="First Name" placeholder="Contact person first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
+              <InputField label="Middle Name (Optional)" placeholder="Contact person middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField label="Last Name" placeholder="Contact person last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+            </>
+          )}
 
           <TouchableOpacity onPress={handleNext} className="bg-red-600 rounded-2xl py-4 items-center justify-center mt-6 shadow-sm">
             <Text className="text-white font-bold text-base">NEXT</Text>
@@ -228,89 +271,100 @@ export default function RegisterEmployerScreen() {
       {/* --- STEP 3: SECURITY --- */}
       {step === 3 && (
         <View>
-          <InputField
-            label="Email Address"
-            placeholder="Enter business email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            icon="email"
-            value={email}
-            onChangeText={(text) => { setEmail(text); setEmailError(''); }}
-            error={emailError} 
-          />
-
-          <InputField
-            label="Password"
-            placeholder="Create a password"
-            isPassword
-            icon="lock"
-            value={password}
-            onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
-            error={passwordError} 
-          />
-
-          {/* Live requirement checklist */}
-          <View className="mb-4 px-1 gap-1">
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasMinLength ? "#16a34a" : "#9ca3af"}
+          {isGoogleLinked ? (
+            <GoogleRegisterButton
+              onGoogleProfileLoaded={handleGoogleProfile}
+              linkedEmail={email}
+              linkedName={`${firstName} ${lastName}`.trim()}
+              linkedPhoto={avatarUrl}
+            />
+          ) : (
+            <>
+              <InputField
+                label="Email Address"
+                placeholder="Enter business email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                icon="email"
+                value={email}
+                onChangeText={(text) => { setEmail(text); setEmailError(''); }}
+                error={emailError}
               />
-              <Text className={`text-xs ${hasMinLength ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                At least 8 characters long
-              </Text>
-            </View>
 
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasNumber ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasNumber ? "#16a34a" : "#9ca3af"}
+              <InputField
+                label="Password"
+                placeholder="Create a password"
+                isPassword
+                icon="lock"
+                value={password}
+                onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
+                error={passwordError}
               />
-              <Text className={`text-xs ${hasNumber ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                Contains at least one number (0-9)
-              </Text>
-            </View>
 
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasUpper ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasUpper ? "#16a34a" : "#9ca3af"}
+              {/* Live requirement checklist */}
+              <View className="mb-4 px-1 gap-1">
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasMinLength ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasMinLength ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    At least 8 characters long
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasNumber ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasNumber ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasNumber ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    Contains at least one number (0-9)
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasUpper ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasUpper ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasUpper ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    Contains an Uppercase Letter
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasSpecialChar ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasSpecialChar ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasSpecialChar ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    Contains a special character (e.g., @, #, $)
+                  </Text>
+                </View>
+              </View>
+
+              <InputField
+                label="Confirm Password"
+                placeholder="Confirm your password"
+                isPassword
+                icon="lock"
+                value={confirmPassword}
+                onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
+                error={confirmPasswordError}
               />
-              <Text className={`text-xs ${hasUpper ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                Contains an Uppercase Letter
-              </Text>
-            </View>
-
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasSpecialChar ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasSpecialChar ? "#16a34a" : "#9ca3af"}
-              />
-              <Text className={`text-xs ${hasSpecialChar ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                Contains a special character (e.g., @, #, $)
-              </Text>
-            </View>
-          </View>
-
-          <InputField
-            label="Confirm Password"
-            placeholder="Confirm your password"
-            isPassword
-            icon="lock"
-            value={confirmPassword}
-            onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
-            error={confirmPasswordError}
-          />
+            </>
+          )}
 
           <PrimaryButton
-            title={loading ? "Creating Account..." : "CREATE ACCOUNT"}
+            title={loading ? "Creating Account..." : isGoogleLinked ? "Verify Email" : "CREATE ACCOUNT"}
             onPress={handleRegister}
-            size="large"
-            style={{ marginTop: 24, backgroundColor: '#DC2626' }}
+            size={isGoogleLinked ? 'medium' : 'large'}
+            style={{ marginTop: isGoogleLinked ? 8 : 24, backgroundColor: '#DC2626' }}
             disabled={loading}
           />
         </View>
@@ -332,6 +386,13 @@ export default function RegisterEmployerScreen() {
           setLatitude(data.latitude);
           setLongitude(data.longitude);
         }}
+      />
+      <NotificationModal
+        visible={!!registrationError}
+        title="Registration Failed"
+        message={registrationError}
+        iconName="error-outline"
+        onPrimaryPress={() => setRegistrationError('')}
       />
     </BaseRegisterScreen>
   );

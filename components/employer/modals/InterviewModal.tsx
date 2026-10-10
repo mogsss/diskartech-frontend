@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Modal, Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Colors } from '@/constants/colors';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface InterviewModalProps {
   visible: boolean;
@@ -15,6 +15,9 @@ interface InterviewModalProps {
   location: string;
   setLocation: (val: string) => void;
   defaultAddress: string;
+  initialType?: 'walk-in' | 'online';
+  loading?: boolean;
+  notification?: React.ReactNode;
 }
 
 export default function InterviewModal({
@@ -28,29 +31,47 @@ export default function InterviewModal({
   location,
   setLocation,
   defaultAddress,
+  initialType = 'walk-in',
+  loading = false,
+  notification,
 }: InterviewModalProps) {
+  const { colors, isDark } = useDarkMode();
   const [interviewType, setInterviewType] = useState<'walk-in' | 'online'>('walk-in');
+  const wasVisible = useRef(false);
+  const locationDrafts = useRef({ 'walk-in': '', online: '' });
 
   // States para sa pagpapakita ng Native Date/Time Pickers
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
+  useEffect(() => {
+    if (!visible) {
+      wasVisible.current = false;
+      setShowDatePicker(false);
+      setShowTimePicker(false);
+      return;
+    }
+    if (wasVisible.current) return;
+    wasVisible.current = true;
+    setInterviewType(initialType);
+    locationDrafts.current = {
+      'walk-in': initialType === 'walk-in' ? location : defaultAddress,
+      online: initialType === 'online' ? location : '',
+    };
+  }, [visible, initialType, location, defaultAddress]);
 
   const handleTypeChange = (type: 'walk-in' | 'online') => {
+    if (loading || type === interviewType) return;
+    locationDrafts.current[interviewType] = location;
     setInterviewType(type);
-    if (type === 'walk-in') {
-      setLocation(defaultAddress);
-    } else {
-      setLocation('');
-    }
+    setLocation(locationDrafts.current[type]);
   };
 
   // I-handle ang pagpili ng Date mula sa Native Calendar
   const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios'); // Sa iOS nananatili habang pinipili
+    setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setTempDate(selectedDate);
-      // I-format ang petsa patungong readable string (halimbawa: September 15, 2026)
       const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' };
       setDate(selectedDate.toLocaleDateString('en-US', options));
     }
@@ -60,7 +81,6 @@ export default function InterviewModal({
   const onTimeChange = (event: any, selectedTime?: Date) => {
     setShowTimePicker(Platform.OS === 'ios');
     if (selectedTime) {
-      // I-format ang oras patungong 12-hour format na may AM/PM
       const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
       setTime(selectedTime.toLocaleTimeString('en-US', options));
     }
@@ -71,57 +91,141 @@ export default function InterviewModal({
       visible={visible}
       transparent={true}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => { if (!loading) onClose(); }}
     >
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 bg-black/60 justify-end"
+        style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'flex-end' }}
       >
-        <View className="bg-white rounded-t-[32px] p-6 w-full shadow-2xl max-h-[85%]">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-xl font-bold text-slate-900">Schedule Interview</Text>
-            <TouchableOpacity onPress={onClose} className="p-1">
-              <MaterialIcons name="close" size={24} color={Colors.gray400} />
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 32,
+            borderTopRightRadius: 32,
+            padding: 24,
+            width: '100%',
+            maxHeight: '85%',
+            borderTopWidth: 1,
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 10,
+            elevation: 10,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>Schedule Interview</Text>
+            <TouchableOpacity onPress={onClose} disabled={loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <MaterialIcons name="close" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           
-          <Text className="text-xs text-slate-500 mb-5">This will send an invite and automatically message the student via chat.</Text>
+          <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 20 }}>
+            This will send an invite and automatically message the student via chat.
+          </Text>
           
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Interview Type Selector */}
-            <Text className="text-xs font-semibold text-slate-700 mb-2">Interview Type</Text>
-            <View className="flex-row gap-3 mb-4">
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
+              Interview Type
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
               <TouchableOpacity
                 onPress={() => handleTypeChange('walk-in')}
-                className={`flex-1 flex-row items-center justify-center py-3 rounded-2xl border ${
-                  interviewType === 'walk-in' ? 'bg-red-50 border-red-600' : 'bg-slate-50 border-gray-200'
-                }`}
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 12,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  backgroundColor: interviewType === 'walk-in'
+                    ? (isDark ? 'rgba(220, 38, 38, 0.18)' : '#FEF2F2')
+                    : (isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC'),
+                  borderColor: interviewType === 'walk-in' ? '#DC2626' : colors.border,
+                }}
               >
-                <MaterialIcons name="store" size={18} color={interviewType === 'walk-in' ? '#DC2626' : Colors.gray400} style={{ marginRight: 6 }} />
-                <Text className={`text-xs font-bold ${interviewType === 'walk-in' ? 'text-red-600' : 'text-slate-600'}`}>Walk-In</Text>
+                <MaterialIcons
+                  name="store"
+                  size={18}
+                  color={interviewType === 'walk-in' ? '#DC2626' : colors.textSecondary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    color: interviewType === 'walk-in' ? (isDark ? colors.accent : '#DC2626') : colors.text,
+                  }}
+                >
+                  Walk-In
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => handleTypeChange('online')}
-                className={`flex-1 flex-row items-center justify-center py-3 rounded-2xl border ${
-                  interviewType === 'online' ? 'bg-red-50 border-red-600' : 'bg-slate-50 border-gray-200'
-                }`}
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 12,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  backgroundColor: interviewType === 'online'
+                    ? (isDark ? 'rgba(220, 38, 38, 0.18)' : '#FEF2F2')
+                    : (isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC'),
+                  borderColor: interviewType === 'online' ? '#DC2626' : colors.border,
+                }}
               >
-                <MaterialIcons name="videocam" size={18} color={interviewType === 'online' ? '#DC2626' : Colors.gray400} style={{ marginRight: 6 }} />
-                <Text className={`text-xs font-bold ${interviewType === 'online' ? 'text-red-600' : 'text-slate-600'}`}>Online</Text>
+                <MaterialIcons
+                  name="videocam"
+                  size={18}
+                  color={interviewType === 'online' ? '#DC2626' : colors.textSecondary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    color: interviewType === 'online' ? (isDark ? colors.accent : '#DC2626') : colors.text,
+                  }}
+                >
+                  Online
+                </Text>
               </TouchableOpacity>
             </View>
 
             {/* Interview Date Picker Trigger */}
-            <Text className="text-xs font-semibold text-slate-700 mb-1.5">Interview Date</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>
+              Interview Date
+            </Text>
             <TouchableOpacity 
               onPress={() => setShowDatePicker(true)}
-              className="bg-slate-50 border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 flex-row items-center justify-between"
+              disabled={loading}
+              style={{
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC',
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                marginBottom: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
             >
-              <Text className={`text-sm ${date ? 'text-slate-900' : 'text-gray-400'}`}>
+              <Text style={{ fontSize: 14, color: date ? colors.text : colors.textSecondary }}>
                 {date || 'Select interview date'}
               </Text>
-              <MaterialIcons name="calendar-today" size={20} color={Colors.primary} />
+              <MaterialIcons name="calendar-today" size={20} color={colors.accent} />
             </TouchableOpacity>
 
             {showDatePicker && (
@@ -135,15 +239,29 @@ export default function InterviewModal({
             )}
 
             {/* Interview Time Picker Trigger */}
-            <Text className="text-xs font-semibold text-slate-700 mb-1.5">Interview Time</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>
+              Interview Time
+            </Text>
             <TouchableOpacity 
               onPress={() => setShowTimePicker(true)}
-              className="bg-slate-50 border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 flex-row items-center justify-between"
+              disabled={loading}
+              style={{
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC',
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                marginBottom: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
             >
-              <Text className={`text-sm ${time ? 'text-slate-900' : 'text-gray-400'}`}>
+              <Text style={{ fontSize: 14, color: time ? colors.text : colors.textSecondary }}>
                 {time || 'Select interview time'}
               </Text>
-              <MaterialIcons name="access-time" size={20} color={Colors.primary} />
+              <MaterialIcons name="access-time" size={20} color={colors.accent} />
             </TouchableOpacity>
 
             {showTimePicker && (
@@ -156,26 +274,48 @@ export default function InterviewModal({
             )}
 
             {/* Location / Venue Input */}
-            <Text className="text-xs font-semibold text-slate-700 mb-1.5">
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>
               {interviewType === 'walk-in' ? 'Office Address / Venue' : 'Google Meet / Zoom Link'}
             </Text>
             <TextInput
+              editable={!loading}
               placeholder={interviewType === 'walk-in' ? 'Employer address' : 'e.g., https://meet.google.com/abc-xyz'}
-              placeholderTextColor={Colors.gray400}
+              placeholderTextColor={colors.textSecondary}
               value={location}
               onChangeText={setLocation}
-              className="bg-slate-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-sm text-slate-900 mb-6"
+              style={{
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC',
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                fontSize: 14,
+                color: colors.text,
+                marginBottom: 24,
+              }}
             />
 
             <TouchableOpacity
               onPress={() => onSubmit(interviewType, date, time, location)}
-              className="w-full bg-red-600 py-4 rounded-2xl items-center shadow-md shadow-red-200 mb-4"
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: loading, busy: loading }}
+              style={{
+                width: '100%',
+                backgroundColor: '#DC2626',
+                paddingVertical: 16,
+                borderRadius: 16,
+                alignItems: 'center',
+                marginBottom: 16,
+              }}
             >
-              <Text className="text-sm font-bold text-white">Send Interview Invite</Text>
+              {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#FFFFFF' }}>Send Interview Invite</Text>}
             </TouchableOpacity>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      {notification}
     </Modal>
   );
 }

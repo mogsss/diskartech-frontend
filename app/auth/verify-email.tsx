@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Keyboard } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7,8 +7,10 @@ import { redirectUserByRole } from '@/utils/authNavigation';
 import { registerAndSyncPushToken } from '@/utils/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 export default function VerifyEmailScreen() {
+  const { isDark, colors } = useDarkMode();
   const { email, role: paramRole } = useLocalSearchParams<{ email: string; role?: string }>();
   const router = useRouter();
   
@@ -18,32 +20,84 @@ export default function VerifyEmailScreen() {
 
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [resendAt, setResendAt] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const sendingRef = useRef(false);
+  const resendAtRef = useRef(0);
 
   // States para sa ating Reusable Modal
   const [modalVisible, setModalVisible] = useState(false);
   const [modalConfig, setModalConfig] = useState<any>({});
 
-  // Helper para madaling magpakita ng modal
-  const showModal = (config: any) => {
+  const showModal = useCallback((config: any) => {
     setModalConfig(config);
     setModalVisible(true);
-  };
-
-  useEffect(() => {
-    checkTokenAndSendOtp();
   }, []);
 
-  const checkTokenAndSendOtp = async (retries = 3) => {
+  const startCooldown = useCallback((seconds: unknown) => {
+    const duration = Number(seconds);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const deadline = Date.now() + Math.ceil(duration) * 1000;
+    resendAtRef.current = deadline;
+    setResendAt(deadline);
+    setCooldownSeconds(Math.ceil(duration));
+  }, []);
+
+  useEffect(() => {
+    if (!resendAt) return;
+    const updateCountdown = () => {
+      setCooldownSeconds(Math.max(0, Math.ceil((resendAt - Date.now()) / 1000)));
+    };
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [resendAt]);
+
+  const requestOtp = useCallback(async (title: string) => {
+    if (sendingRef.current || resendAtRef.current > Date.now()) return;
+    sendingRef.current = true;
+    setSending(true);
     try {
-      setSending(true);
-      let token = await AsyncStorage.getItem('userToken');
-
-      if (!token && retries > 0) {
-        console.log(`Token not found yet, retrying... (${retries} left)`);
-        setTimeout(() => checkTokenAndSendOtp(retries - 1), 500);
-        return;
+      const response = await api.post('/email/send-otp');
+      if (response.data.status !== 'success' || response.data.mail_sent !== true) {
+        throw new Error('The verification email could not be sent. Please try again later.');
       }
+      startCooldown(response.data.retry_after || 60);
+      showModal({
+        title,
+        message: response.data.message || 'Verification email sent. Please check your inbox and spam folder.',
+        iconName: 'mark-email-read',
+        iconColor: '#16a34a',
+        iconBgColor: 'bg-green-50',
+        primaryButtonText: 'Got it',
+        onPrimaryPress: () => setModalVisible(false),
+      });
+    } catch (error: any) {
+      startCooldown(error.response?.data?.retry_after || error.response?.headers?.['retry-after']);
+      showModal({
+        title: error.response?.status === 429 ? 'Please Wait' : 'Sending Failed',
+        message: error.response?.data?.message || error.message || 'Failed to send OTP. Please try again.',
+        iconName: 'error-outline',
+        iconColor: '#ef4444',
+        iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: () => setModalVisible(false),
+      });
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
+  }, [showModal, startCooldown]);
 
+  useEffect(() => {
+    let active = true;
+    const sendInitialOtp = async () => {
+      let token = await AsyncStorage.getItem('userToken');
+      for (let attempt = 0; !token && attempt < 3 && active; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        token = await AsyncStorage.getItem('userToken');
+      }
+      if (!active) return;
       if (!token) {
         showModal({
           title: 'Session Expired',
@@ -59,61 +113,13 @@ export default function VerifyEmailScreen() {
         });
         return;
       }
+      await requestOtp('OTP Sent');
+    };
+    void sendInitialOtp();
+    return () => { active = false; };
+  }, [requestOtp, router, showModal]);
 
-      const response = await api.post('/email/send-otp');
-      showModal({
-        title: 'OTP Sent',
-        message: response.data.message || 'Verification code has been sent to your email address.',
-        iconName: 'mark-email-read',
-        iconColor: '#16a34a', // Green
-        iconBgColor: 'bg-green-50',
-        primaryButtonText: 'Got it',
-        onPrimaryPress: () => setModalVisible(false),
-      });
-    } catch (error: any) {
-      console.error('Error sending OTP:', error.response?.data || error.message);
-      showModal({
-        title: 'Sending Failed',
-        message: error.response?.data?.message || 'Failed to send OTP. Please check your connection.',
-        iconName: 'error-outline',
-        iconColor: '#ef4444',
-        iconBgColor: 'bg-red-50',
-        primaryButtonText: 'OK',
-        onPrimaryPress: () => setModalVisible(false),
-      });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const sendOtpCode = async () => {
-    try {
-      setSending(true);
-      const response = await api.post('/email/send-otp');
-      showModal({
-        title: 'OTP Resent',
-        message: response.data.message || 'A new verification code has been sent to your email.',
-        iconName: 'mark-email-read',
-        iconColor: '#16a34a',
-        iconBgColor: 'bg-green-50',
-        primaryButtonText: 'OK',
-        onPrimaryPress: () => setModalVisible(false),
-      });
-    } catch (error: any) {
-      console.error(error);
-      showModal({
-        title: 'Resend Failed',
-        message: error.response?.data?.message || 'Failed to resend OTP. Please try again.',
-        iconName: 'error-outline',
-        iconColor: '#ef4444',
-        iconBgColor: 'bg-red-50',
-        primaryButtonText: 'OK',
-        onPrimaryPress: () => setModalVisible(false),
-      });
-    } finally {
-      setSending(false);
-    }
-  };
+  const sendOtpCode = () => requestOtp('OTP Resent');
 
   const handleOtpChange = (text: string, index: number) => {
     const newOtp = [...otpValues];
@@ -237,15 +243,21 @@ export default function VerifyEmailScreen() {
   };
 
   return (
-    <View className="flex-1 justify-between p-8 bg-white pt-16 pb-12">
+    <View
+      style={{ backgroundColor: colors.background }}
+      className="flex-1 justify-between p-8 pt-16 pb-12"
+    >
       {/* Top Header Section */}
       <View className="items-center mt-6">
-        <View className="w-16 h-16 bg-red-50 rounded-2xl items-center justify-center mb-6">
-          <MaterialIcons name="mark-email-unread" size={32} color="#DC2626" />
+        <View
+          style={{ backgroundColor: isDark ? colors.surface : '#FEF2F2' }}
+          className="w-16 h-16 rounded-2xl items-center justify-center mb-6"
+        >
+          <MaterialIcons name="mark-email-unread" size={32} color={colors.accent} />
         </View>
-        <Text className="text-2xl font-bold text-slate-900 mb-2 text-center">Verify Your Email</Text>
-        <Text className="text-center text-slate-500 text-sm leading-relaxed px-4">
-          We’ve sent a secure 6-digit verification code to <Text className="font-semibold text-slate-800">{email}</Text>. Enter the code below to continue.
+        <Text style={{ color: colors.text }} className="text-2xl font-bold mb-2 text-center">Verify Your Email</Text>
+        <Text style={{ color: colors.textSecondary }} className="text-center text-sm leading-relaxed px-4">
+          Verify <Text style={{ color: colors.text }} className="font-semibold">{email}</Text> using a 6-digit code. Once the email arrives, enter it below to continue.
         </Text>
       </View>
 
@@ -255,10 +267,11 @@ export default function VerifyEmailScreen() {
           <TextInput
             key={index}
             ref={(el: TextInput | null) => { inputRefs.current[index] = el; }}
-            className="w-12 h-14 border-2 rounded-2xl text-center text-xl font-bold text-slate-900"
+            className="w-12 h-14 border-2 rounded-2xl text-center text-xl font-bold"
             style={{
-              borderColor: value ? '#DC2626' : '#E2E8F0',
-              backgroundColor: value ? '#FFFFFF' : '#F8FAFC',
+              borderColor: value ? '#DC2626' : colors.border,
+              backgroundColor: isDark ? colors.surface : (value ? '#FFFFFF' : '#F8FAFC'),
+              color: colors.text,
             }}
             keyboardType="number-pad"
             maxLength={1}
@@ -289,10 +302,10 @@ export default function VerifyEmailScreen() {
 
         {/* Resend OTP */}
         <View className="flex-row justify-center items-center mt-2">
-          <Text className="text-slate-400 text-xs">Didn't receive code? </Text>
-          <TouchableOpacity onPress={sendOtpCode} disabled={sending}>
+          <Text style={{ color: colors.textSecondary }} className="text-xs">Didn&apos;t receive code? </Text>
+          <TouchableOpacity onPress={sendOtpCode} disabled={sending || cooldownSeconds > 0}>
             <Text className="text-red-600 font-bold text-xs">
-              {sending ? 'Sending...' : 'Resend Code'}
+              {sending ? 'Sending...' : cooldownSeconds > 0 ? `Resend in ${cooldownSeconds}s` : 'Resend Code'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -303,7 +316,7 @@ export default function VerifyEmailScreen() {
         onPress={() => router.replace('/auth/login' as any)}
         className="items-center mt-4"
       >
-        <Text className="text-sm font-semibold text-slate-400">Back to Login</Text>
+        <Text style={{ color: colors.textSecondary }} className="text-sm font-semibold">Back to Login</Text>
       </TouchableOpacity>
 
       {/* REUSABLE NOTIFICATION MODAL */}

@@ -1,12 +1,15 @@
 import Avatar from '@/components/ui/Avatar';
 import ChatOptionsModal from '@/components/ui/modals/ChatOptionsModal';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
+import UserProfileModal, { UserProfileData } from '@/components/ui/modals/UserProfileModal';
+import SafeStatusBar from '@/components/ui/SafeStatusBar';
+import api, { STORAGE_URL } from '@/api/axios';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState, useEffect } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   Text,
@@ -14,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { db } from '@/utils/firebase';
 import {
   collection,
@@ -24,18 +28,23 @@ import {
 } from 'firebase/firestore';
 import {
   CHATS_COLLECTION,
+  clearChatConversation,
   formatChatListTime,
   getLoggedInUserId,
   getMessageCreatedAt,
   getMessageSenderId,
   getOtherParticipant,
+  getTimestampMs,
   markChatAsRead,
   normalizeChatFields,
   sendChatMessage,
 } from '@/utils/chat';
 import { setActiveChatScreen } from '@/utils/notifications';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 export default function ChatScreen() {
+  const { colors, isDark } = useDarkMode();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const conversationId = Array.isArray(id) ? id[0] : (id || '');
 
@@ -45,6 +54,7 @@ export default function ChatScreen() {
     name: 'Loading...',
     avatar: '',
     online: true,
+    isVerified: false,
   });
 
   const [message, setMessage] = useState('');
@@ -52,11 +62,77 @@ export default function ChatScreen() {
     { id: string; sender: 'me' | 'other'; text: string; timestamp: string }[]
   >([]);
   const [isOptionsModalVisible, setOptionsModalVisible] = useState(false);
+  const [isProfileModalVisible, setProfileModalVisible] = useState(false);
+  const [profileModalLoading, setProfileModalLoading] = useState(false);
+  const [viewedProfile, setViewedProfile] = useState<UserProfileData | null>(null);
+  const [clearedAtMs, setClearedAtMs] = useState<number>(0);
+
+  const handleOpenUserProfile = () => {
+    if (!chatUser.id) {
+      setNotification({
+        visible: true,
+        title: 'User Not Found',
+        message: 'Unable to view profile because user information is still loading.',
+        iconName: 'info',
+        iconColor: '#2563EB',
+        iconBgColor: 'bg-blue-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: closeNotification,
+      });
+      return;
+    }
+    setViewedProfile({
+      id: chatUser.id,
+      name: chatUser.name,
+      avatar: chatUser.avatar,
+      isVerified: chatUser.isVerified,
+    });
+    setProfileModalLoading(true);
+    setProfileModalVisible(true);
+    api.get(`/user/${chatUser.id}/public-profile`)
+      .then((res) => {
+        if (res.data?.status === 'success' && res.data?.user) {
+          setViewedProfile(res.data.user);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load profile details:', err);
+      })
+      .finally(() => {
+        setProfileModalLoading(false);
+      });
+  };
+
+  const [notification, setNotification] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    iconName?: keyof typeof MaterialIcons.glyphMap;
+    iconColor?: string;
+    iconBgColor?: string;
+    primaryButtonText?: string;
+    onPrimaryPress: () => void;
+    secondaryButtonText?: string;
+    onSecondaryPress?: () => void;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    onPrimaryPress: () => {},
+  });
+
+  const closeNotification = () => setNotification((prev) => ({ ...prev, visible: false }));
 
   const scrollViewRef = useRef<ScrollView>(null);
+  const isInitialLoad = useRef(true);
+
+  const scrollToBottom = (animated = false) => {
+    scrollViewRef.current?.scrollToEnd({ animated });
+  };
 
   useEffect(() => {
     if (!conversationId) return;
+    isInitialLoad.current = true;
     setActiveChatScreen(conversationId);
     return () => {
       setActiveChatScreen(null);
@@ -78,15 +154,30 @@ export default function ChatScreen() {
       chatDocRef,
       (snap) => {
         if (!snap.exists()) return;
-        const chat = normalizeChatFields(snap.data(), snap.id);
+        const data = snap.data();
+        const chat = normalizeChatFields(data, snap.id);
         const other = getOtherParticipant(chat, currentUserId);
 
-        setChatUser({
+        const rawData = (data || {}) as Record<string, unknown>;
+        const clearedVal =
+          rawData[`cleared_at_for_${currentUserId}`] ??
+          (rawData.cleared_at as Record<string, unknown> | undefined)?.[currentUserId];
+        const cMs = getTimestampMs(clearedVal);
+        setClearedAtMs(cMs);
+
+        const isVerifiedDoc =
+          String(data.student_user_id) === String(other.id)
+            ? Boolean(data.student_is_verified)
+            : Boolean(data.owner_is_verified);
+
+        setChatUser((prev) => ({
+          ...prev,
           id: other.id,
           name: other.name,
           avatar: other.avatar,
           online: true,
-        });
+          isVerified: isVerifiedDoc || prev.isVerified,
+        }));
 
         markChatAsRead(conversationId, currentUserId);
       },
@@ -98,7 +189,41 @@ export default function ChatScreen() {
     return () => unsubscribe();
   }, [conversationId, currentUserId]);
 
-  // 2. Real-time listener para sa Messages subcollection
+  // Kumuha ng live verification status para sa kachat mula sa backend
+  useEffect(() => {
+    if (!chatUser.id || chatUser.id === 'unknown') return;
+
+    let isMounted = true;
+    api
+      .get(`/user/${chatUser.id}/public-profile`)
+      .then((res) => {
+        if (isMounted && res.data?.status === 'success') {
+          const user = res.data.user;
+          const verified = Boolean(user?.isVerified);
+          const liveName = user?.name;
+          const liveAvatar = user?.avatar;
+          const avatarUrl = liveAvatar
+            ? (liveAvatar.startsWith('http') ? liveAvatar : `${STORAGE_URL}${liveAvatar}`)
+            : undefined;
+
+          setChatUser((prev) => ({
+            ...prev,
+            isVerified: verified,
+            name: liveName || prev.name,
+            avatar: avatarUrl || prev.avatar,
+          }));
+        }
+      })
+      .catch(() => {
+        // Fallback: panatilihin ang existing status
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chatUser.id]);
+
+  // 2. Real-time listener para sa Messages subcollection (Clear for me filtering)
   useEffect(() => {
     if (!conversationId || currentUserId === 'unknown') return;
 
@@ -110,23 +235,31 @@ export default function ChatScreen() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const fetched = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() as Record<string, unknown>;
-          const created = getMessageCreatedAt(data);
-          const timeString = created
-            ? created.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : formatChatListTime(data.timestamp);
+        const fetched = snapshot.docs
+          .filter((docSnap) => {
+            if (!clearedAtMs) return true;
+            const data = docSnap.data() as Record<string, unknown>;
+            const msgMs = getTimestampMs(data.created_at || data.createdAt || data.timestamp);
+            if (msgMs === 0 && !data.created_at) return true;
+            return msgMs > clearedAtMs;
+          })
+          .map((docSnap) => {
+            const data = docSnap.data() as Record<string, unknown>;
+            const created = getMessageCreatedAt(data);
+            const timeString = created
+              ? created.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : (data.timestamp ? formatChatListTime(data.timestamp) : 'Just now');
 
-          const senderId = getMessageSenderId(data);
-          const isMe = String(senderId) === String(currentUserId);
+            const senderId = getMessageSenderId(data);
+            const isMe = String(senderId) === String(currentUserId);
 
-          return {
-            id: docSnap.id,
-            sender: isMe ? ('me' as const) : ('other' as const),
-            text: String(data.text ?? ''),
-            timestamp: timeString,
-          };
-        });
+            return {
+              id: docSnap.id,
+              sender: isMe ? ('me' as const) : ('other' as const),
+              text: String(data.text ?? ''),
+              timestamp: timeString,
+            };
+          });
 
         setMessagesList(fetched);
       },
@@ -136,7 +269,58 @@ export default function ChatScreen() {
     );
 
     return () => unsubscribe();
-  }, [conversationId, currentUserId]);
+  }, [conversationId, currentUserId, clearedAtMs]);
+
+  // Always scroll to latest message when messages load or change
+  useEffect(() => {
+    if (messagesList.length > 0) {
+      if (isInitialLoad.current) {
+        // Immediate scroll to bottom
+        scrollToBottom(false);
+
+        // Sequence of ticks to catch layout finish, keyboard, and navigation transition
+        const t1 = setTimeout(() => scrollToBottom(false), 50);
+        const t2 = setTimeout(() => scrollToBottom(false), 150);
+        const t3 = setTimeout(() => scrollToBottom(false), 300);
+        const t4 = setTimeout(() => {
+          scrollToBottom(false);
+          isInitialLoad.current = false;
+        }, 500);
+
+        return () => {
+          clearTimeout(t1);
+          clearTimeout(t2);
+          clearTimeout(t3);
+          clearTimeout(t4);
+        };
+      } else {
+        // Subsequent new messages: smooth scroll down
+        scrollToBottom(true);
+        const t = setTimeout(() => scrollToBottom(true), 80);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [messagesList]);
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // Auto-scroll at pag-track ng eksaktong keyboard height (gaya sa DARA AI Chat)
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      setTimeout(() => scrollToBottom(true), 80);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleSend = async () => {
     const textToSend = message.trim();
@@ -155,59 +339,120 @@ export default function ChatScreen() {
       });
 
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        scrollToBottom(true);
       }, 100);
     } catch (error) {
       console.error('Error sending message: ', error);
-      Alert.alert('Error', 'Failed to send message.');
+      setNotification({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to send message. Please try again.',
+        iconName: 'error-outline',
+        iconColor: '#DC2626',
+        iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        onPrimaryPress: closeNotification,
+      });
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.surface,
+        paddingBottom: keyboardHeight > 0 ? keyboardHeight + (Platform.OS === 'android' ? 14 : 4) : 0,
+      }}
     >
-      <View className="flex-1 bg-[#F8FAFC]">
-        {/* Header */}
-        <View className="flex-row items-center px-4 pt-12 pb-4 bg-white border-b border-gray-100">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4">
-            <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Avatar uri={chatUser.avatar} name={chatUser.name} size={40} online={chatUser.online} />
-          <View className="flex-1 ml-4">
-            <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>
-              {chatUser.name}
-            </Text>
-            <Text className="text-xs text-emerald-600">{chatUser.online ? 'Online' : 'Offline'}</Text>
+      <SafeStatusBar backgroundColor={colors.surface} style={isDark ? 'light' : 'dark'} withSpacer={false} />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingTop: insets.top + 8,
+              paddingBottom: 14,
+              backgroundColor: colors.surface,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+            }}
+          >
+            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
+              <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleOpenUserProfile}
+              activeOpacity={0.7}
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+            >
+              <Avatar uri={chatUser.avatar} name={chatUser.name} size={40} online={chatUser.online} />
+              <View style={{ flex: 1, marginLeft: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, flexShrink: 1 }} numberOfLines={1}>
+                    {chatUser.name}
+                  </Text>
+                  {chatUser.isVerified && (
+                    <MaterialIcons name="verified" size={17} color="#10B981" />
+                  )}
+                </View>
+                <Text style={{ fontSize: 12, color: chatUser.online ? '#10B981' : colors.textSecondary }}>
+                  {chatUser.online ? 'Online' : 'Offline'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setOptionsModalVisible(true)} style={{ padding: 8 }}>
+              <MaterialIcons name="more-vert" size={24} color={colors.text} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => setOptionsModalVisible(true)} className="p-2">
-            <MaterialIcons name="more-vert" size={24} color={Colors.text} />
-          </TouchableOpacity>
-        </View>
 
         {/* Messages List */}
         <ScrollView
           ref={scrollViewRef}
-          className="flex-1"
-          contentContainerStyle={{ padding: 24, paddingBottom: 20 }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+          onLayout={() => {
+            scrollToBottom(false);
+          }}
+          onContentSizeChange={(_w, _h) => {
+            scrollToBottom(!isInitialLoad.current);
+          }}
         >
           {messagesList.map((msg) => (
             <View
               key={msg.id}
-              className={`max-w-[80%] p-4 rounded-2xl mb-2 ${
-                msg.sender === 'me'
-                  ? 'bg-red-600 self-end rounded-br-[4px]'
-                  : 'bg-white self-start rounded-bl-[4px] shadow-sm'
-              }`}
+              style={{
+                maxWidth: '80%',
+                padding: 16,
+                borderRadius: 16,
+                marginBottom: 10,
+                alignSelf: msg.sender === 'me' ? 'flex-end' : 'flex-start',
+                borderBottomRightRadius: msg.sender === 'me' ? 4 : 16,
+                borderBottomLeftRadius: msg.sender === 'me' ? 16 : 4,
+                backgroundColor: msg.sender === 'me' ? '#DC2626' : colors.surface,
+                borderWidth: msg.sender === 'me' ? 0 : 1,
+                borderColor: msg.sender === 'me' ? 'transparent' : colors.border,
+              }}
             >
-              <Text className={`text-sm leading-5 ${msg.sender === 'me' ? 'text-white' : 'text-slate-900'}`}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color: msg.sender === 'me' ? '#FFFFFF' : colors.text,
+                }}
+              >
                 {msg.text}
               </Text>
-              <Text className={`text-xs mt-1 text-right ${msg.sender === 'me' ? 'text-white/70' : 'text-slate-500'}`}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  marginTop: 4,
+                  textAlign: 'right',
+                  color: msg.sender === 'me' ? 'rgba(255, 255, 255, 0.75)' : colors.textSecondary,
+                }}
+              >
                 {msg.timestamp}
               </Text>
             </View>
@@ -215,25 +460,58 @@ export default function ChatScreen() {
         </ScrollView>
 
         {/* Input Bar */}
-        <View className="flex-row items-center px-3 py-3 bg-white border-t border-gray-100 gap-2">
-          <TouchableOpacity className="p-2">
-            <MaterialIcons name="attach-file" size={24} color={Colors.gray400} />
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingTop: 10,
+            paddingBottom: keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 12),
+            backgroundColor: colors.surface,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            gap: 8,
+          }}
+        >
+          <TouchableOpacity style={{ padding: 8 }}>
+            <MaterialIcons name="attach-file" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <TextInput
-            className="flex-1 bg-gray-100 rounded-full px-4 py-3 text-base text-slate-900 max-h-[120px]"
+            style={{
+              flex: 1,
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9',
+              borderRadius: 24,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              fontSize: 14,
+              color: colors.text,
+              maxHeight: 120,
+            }}
             placeholder="Type a message..."
-            placeholderTextColor={Colors.gray400}
+            placeholderTextColor={colors.textSecondary}
             value={message}
             onChangeText={setMessage}
+            onFocus={() => {
+              setTimeout(() => scrollToBottom(true), 150);
+            }}
             multiline
           />
           <TouchableOpacity
             onPress={handleSend}
-            className={`w-10 h-10 rounded-full items-center justify-center ${
-              message.trim() ? 'bg-red-600' : 'bg-gray-200'
-            }`}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: message.trim() ? '#DC2626' : (isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0'),
+            }}
           >
-            <MaterialIcons name="send" size={20} color={message.trim() ? Colors.white : Colors.gray400} />
+            <MaterialIcons
+              name="send"
+              size={20}
+              color={message.trim() ? '#FFFFFF' : colors.textSecondary}
+            />
           </TouchableOpacity>
         </View>
 
@@ -243,18 +521,102 @@ export default function ChatScreen() {
           onClose={() => setOptionsModalVisible(false)}
           onViewProfile={() => {
             setOptionsModalVisible(false);
-            Alert.alert('View Profile', 'Redirecting to profile...');
+            handleOpenUserProfile();
           }}
           onClearChat={() => {
             setOptionsModalVisible(false);
-            setMessagesList([]);
+            setNotification({
+              visible: true,
+              title: 'Clear Chat',
+              message: 'Sigurado ka ba na nais mong burahin ang mga mensahe sa iyong account? Hindi ito mabubura sa iyong kausap.',
+              iconName: 'delete-outline',
+              iconColor: '#DC2626',
+              iconBgColor: 'bg-red-50',
+              primaryButtonText: 'Oo, Burahin',
+              secondaryButtonText: 'Kanselahin',
+              onSecondaryPress: closeNotification,
+              onPrimaryPress: async () => {
+                closeNotification();
+                try {
+                  await clearChatConversation(conversationId, currentUserId);
+                  setMessagesList([]);
+                  setNotification({
+                    visible: true,
+                    title: 'Chat Cleared',
+                    message: 'Matagumpay na nabura ang mga mensahe sa iyong account.',
+                    iconName: 'check-circle',
+                    iconColor: '#16A34A',
+                    iconBgColor: 'bg-emerald-50',
+                    primaryButtonText: 'OK',
+                    onPrimaryPress: closeNotification,
+                  });
+                } catch (err) {
+                  console.error('Error clearing chat:', err);
+                  setNotification({
+                    visible: true,
+                    title: 'Error',
+                    message: 'Hindi nabura ang chat. Pakisubukang muli.',
+                    iconName: 'error-outline',
+                    iconColor: '#DC2626',
+                    iconBgColor: 'bg-red-50',
+                    primaryButtonText: 'OK',
+                    onPrimaryPress: closeNotification,
+                  });
+                }
+              },
+            });
           }}
           onBlockUser={() => {
             setOptionsModalVisible(false);
-            Alert.alert('Block User', 'User has been blocked.');
+            setNotification({
+              visible: true,
+              title: 'Block User',
+              message: `Are you sure you want to block ${chatUser.name}?`,
+              iconName: 'block',
+              iconColor: '#DC2626',
+              iconBgColor: 'bg-red-50',
+              primaryButtonText: 'Yes, Block',
+              secondaryButtonText: 'Cancel',
+              onSecondaryPress: closeNotification,
+              onPrimaryPress: () => {
+                closeNotification();
+                setNotification({
+                  visible: true,
+                  title: 'User Blocked',
+                  message: `${chatUser.name} has been blocked.`,
+                  iconName: 'check-circle',
+                  iconColor: '#16A34A',
+                  iconBgColor: 'bg-emerald-50',
+                  primaryButtonText: 'Done',
+                  onPrimaryPress: closeNotification,
+                });
+              },
+            });
           }}
         />
+
+        {/* User Profile Modal */}
+        <UserProfileModal
+          visible={isProfileModalVisible}
+          onClose={() => setProfileModalVisible(false)}
+          loading={profileModalLoading}
+          user={viewedProfile}
+        />
+
+        {/* Notification Modal */}
+        <NotificationModal
+          visible={notification.visible}
+          title={notification.title}
+          message={notification.message}
+          iconName={notification.iconName}
+          iconColor={notification.iconColor}
+          iconBgColor={notification.iconBgColor}
+          primaryButtonText={notification.primaryButtonText}
+          onPrimaryPress={notification.onPrimaryPress}
+          secondaryButtonText={notification.secondaryButtonText}
+          onSecondaryPress={notification.onSecondaryPress}
+        />
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

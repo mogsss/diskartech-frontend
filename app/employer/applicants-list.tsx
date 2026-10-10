@@ -1,50 +1,66 @@
 import Avatar from '@/components/ui/Avatar';
 import Badge from '@/components/ui/Badge';
-import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import React, { useState, useCallback } from 'react';
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios'; 
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 const FILTER_TABS = ['All', 'Pending', 'Viewed', 'Interview', 'Accepted', 'Rejected', 'Cancelled'] as const;
 
 export default function ApplicantsListScreen() {
+  const { isDark, colors } = useDarkMode();
   const { jobId, jobTitle } = useLocalSearchParams<{ jobId?: string; jobTitle?: string }>();
   
   const [applicants, setApplicants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
 
-  const STORAGE_URL = api.defaults.baseURL ? api.defaults.baseURL.replace('/api', '/storage/') : 'http://192.168.1.2:8000/storage/';
+  const STORAGE_URL = api.defaults.baseURL ? api.defaults.baseURL.replace('/api', '/storage/') : 'https://diskartech-backend.onrender.com/storage/';
+
+  const fetchApplicants = async (isBackground = false) => {
+    try {
+      if (!isBackground) setLoading(true);
+      const url = jobId ? `/employer/jobs/${jobId}/applicants` : '/employer/applicants';
+      const response = await api.get(url);
+
+      if (response.data && response.data.status === 'success') {
+        setApplicants(response.data.applicants || []);
+      }
+    } catch (error) {
+      if (!isBackground) console.error('Error fetching applicants:', error);
+    } finally {
+      if (!isBackground) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      const fetchApplicants = async () => {
-        try {
-          const url = jobId ? `/employer/jobs/${jobId}/applicants` : '/employer/applicants';
-          const response = await api.get(url);
+      fetchApplicants(false);
 
-          if (isMounted && response.data && response.data.status === 'success') {
-            setApplicants(response.data.applicants || []);
-          }
-        } catch (error) {
-          console.error('Error fetching applicants:', error);
-        } finally {
-          if (isMounted) {
-            setLoading(false);
-          }
-        }
-      };
+      // Live auto-polling bawat 2.5 seconds para hindi na kailangang mag-back
+      const pollInterval = setInterval(() => {
+        if (isMounted) fetchApplicants(true);
+      }, 2500);
 
-      fetchApplicants();
       return () => {
         isMounted = false;
+        clearInterval(pollInterval);
       };
     }, [jobId])
   );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchApplicants(false);
+  };
 
   // Filter logic
   const filteredApplicants = applicants.filter((app) => {
@@ -62,38 +78,48 @@ export default function ApplicantsListScreen() {
   });
 
   return (
-    <View className="flex-1 bg-[#F8FAFC]">
+    <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {/* Header */}
-      <View className="px-6 pt-12 pb-4 bg-white border-b border-gray-100">
+      <View 
+        className="px-6 pt-12 pb-4 border-b"
+        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+      >
         <View className="flex-row items-center mb-3">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3"
+            className="w-10 h-10 rounded-full items-center justify-center mr-3"
+            style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9' }}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-xl font-bold text-slate-900" numberOfLines={1}>
+            <Text className="text-xl font-bold" numberOfLines={1} style={{ color: colors.text }}>
               {jobTitle ? `Applicants for ${jobTitle}` : 'All Applicants'}
             </Text>
-            <Text className="text-xs text-slate-500 mt-[2px]">Manage and review job candidates</Text>
           </View>
         </View>
 
         {/* Search Bar */}
-        <View className="flex-row items-center bg-slate-50 rounded-xl px-4 py-2.5 border border-gray-200 mt-2">
-          <MaterialIcons name="search" size={20} color={Colors.gray400} style={{ marginRight: 8 }} />
+        <View 
+          className="flex-row items-center rounded-xl px-4 py-2.5 border mt-2"
+          style={{ 
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC',
+            borderColor: colors.border 
+          }}
+        >
+          <MaterialIcons name="search" size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
           <TextInput
             placeholder="Search by name or position..."
-            placeholderTextColor={Colors.gray400}
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            className="flex-1 text-sm text-slate-900 p-0"
+            className="flex-1 text-sm p-0"
+            style={{ color: colors.text }}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialIcons name="close" size={18} color={Colors.gray400} />
+              <MaterialIcons name="close" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -112,15 +138,26 @@ export default function ApplicantsListScreen() {
                 key={filter}
                 onPress={() => setSelectedFilter(filter)}
                 activeOpacity={0.7}
-                className={`flex-row items-center px-4 py-2 rounded-full border gap-1.5 ${
-                  isActive ? 'bg-red-600 border-red-600' : 'bg-white border-gray-200'
-                }`}
+                className="flex-row items-center px-4 py-2 rounded-full border gap-1.5"
+                style={{
+                  backgroundColor: isActive ? '#DC2626' : (isDark ? 'rgba(255, 255, 255, 0.05)' : '#FFFFFF'),
+                  borderColor: isActive ? '#DC2626' : colors.border,
+                }}
               >
-                <Text className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-slate-600'}`}>
+                <Text 
+                  className="text-xs font-semibold"
+                  style={{ color: isActive ? '#FFFFFF' : colors.textSecondary }}
+                >
                   {filter}
                 </Text>
-                <View className={`rounded-full px-1.5 py-0.5 ${isActive ? 'bg-white/30' : 'bg-gray-100'}`}>
-                  <Text className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-slate-600'}`}>
+                <View 
+                  className="rounded-full px-1.5 py-0.5"
+                  style={{ backgroundColor: isActive ? 'rgba(255, 255, 255, 0.3)' : (isDark ? 'rgba(255, 255, 255, 0.1)' : '#F1F5F9') }}
+                >
+                  <Text 
+                    className="text-[10px] font-bold"
+                    style={{ color: isActive ? '#FFFFFF' : colors.textSecondary }}
+                  >
                     {count}
                   </Text>
                 </View>
@@ -135,6 +172,7 @@ export default function ApplicantsListScreen() {
         className="flex-1"
         contentContainerClassName="p-6 pb-10"
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#dc2626']} tintColor={isDark ? '#FFFFFF' : '#DC2626'} />}
       >
         {loading ? (
           <View className="py-20 items-center justify-center">
@@ -150,7 +188,8 @@ export default function ApplicantsListScreen() {
             return (
               <TouchableOpacity
                 key={app.id}
-                className="flex-row bg-white rounded-2xl p-4 mb-3 shadow-sm items-center border border-gray-100"
+                className="flex-row rounded-2xl p-4 mb-3 shadow-sm items-center border"
+                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 onPress={() => router.push(`/employer/applicant-details?applicationId=${app.id}` as any)}
                 activeOpacity={0.7}
               >
@@ -163,13 +202,13 @@ export default function ApplicantsListScreen() {
                 </View>
 
                 <View className="flex-1 justify-center pr-2">
-                  <Text className="text-base font-bold text-slate-900" numberOfLines={1}>
+                  <Text className="text-base font-bold" numberOfLines={1} style={{ color: colors.text }}>
                     {app.student?.student_name || 'Unknown Candidate'}
                   </Text>
-                  <Text className="text-xs text-red-600 font-semibold mt-0.5" numberOfLines={1}>
+                  <Text className="text-xs font-semibold mt-0.5" numberOfLines={1} style={{ color: isDark ? colors.accent : '#DC2626' }}>
                     {app.job?.title || 'General Application'}
                   </Text>
-                  <Text className="text-xs text-slate-400 mt-1" numberOfLines={1}>
+                  <Text className="text-xs mt-1" numberOfLines={1} style={{ color: colors.textSecondary }}>
                     {app.student?.student_school_name || 'No school specified'}
                   </Text>
                 </View>
@@ -186,21 +225,27 @@ export default function ApplicantsListScreen() {
                         ? 'warning'
                         : currentStatus === 'accepted' || currentStatus === 'completed'
                         ? 'success' 
-                        : 'error' // Sasalo sa rejected at cancelled para maging kulay pula/error
+                        : 'error'
                     }
                   />
-                  <MaterialIcons name="chevron-right" size={20} color={Colors.gray400} />
+                  <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
                 </View>
               </TouchableOpacity>
             );
           })
         ) : (
-          <View className="items-center justify-center py-24 bg-white rounded-2xl border border-dashed border-gray-200 mt-4">
-            <View className="w-14 h-14 rounded-full bg-slate-50 items-center justify-center mb-3">
-              <MaterialIcons name="person-off" size={28} color={Colors.gray400} />
+          <View 
+            className="items-center justify-center py-24 rounded-2xl border border-dashed mt-4"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          >
+            <View 
+              className="w-14 h-14 rounded-full items-center justify-center mb-3"
+              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC' }}
+            >
+              <MaterialIcons name="person-off" size={28} color={colors.textSecondary} />
             </View>
-            <Text className="text-base font-bold text-slate-800">No applicants found</Text>
-            <Text className="text-xs text-slate-400 mt-1 text-center px-6">
+            <Text className="text-base font-bold" style={{ color: colors.text }}>No applicants found</Text>
+            <Text className="text-xs mt-1 text-center px-6" style={{ color: colors.textSecondary }}>
               {searchQuery ? 'Try checking your search spelling or filter criteria.' : 'There are no applicants under this category yet.'}
             </Text>
           </View>

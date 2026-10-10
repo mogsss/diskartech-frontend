@@ -4,7 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, Text, View } from 'react-native';
+import { Animated, Dimensions, Image, Text, View } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -61,22 +61,22 @@ export default function SplashScreen() {
           toValue: 1,
           friction: 4,
           tension: 40,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
+          duration: 600,
+          useNativeDriver: false,
         }),
       ]),
       Animated.timing(taglineOpacity, {
         toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
+        duration: 400,
+        useNativeDriver: false,
       }),
       Animated.timing(loadingWidth, {
         toValue: 1,
-        duration: 1200,
+        duration: 1000,
         useNativeDriver: false,
       }),
     ]).start(() => {
@@ -100,17 +100,21 @@ export default function SplashScreen() {
           transform: [{ scale: logoScale }],
         }}
       >
-        <View className="w-[120px] h-[120px] rounded-[60px] bg-white/20 items-center justify-center mb-4 border-[3px] border-white/30">
-          <MaterialIcons name="work" size={60} color={Colors.white} />
+        <View className="w-[110px] h-[110px] rounded-3xl bg-white items-center justify-center mb-5 border-2 border-white/40 overflow-hidden shadow-2xl shadow-black/30">
+          <Image
+            source={require('../assets/images/icon.png')}
+            style={{ width: 100, height: 100, borderRadius: 24 }}
+            resizeMode="cover"
+          />
         </View>
         <Text className="text-[42px] font-extrabold text-white tracking-[1px]">DiskarTech</Text>
       </Animated.View>
 
       <Animated.Text 
-        className="text-white/90 italic text-center px-10 text-lg font-normal"
+        className="text-white/90 text-center px-10 text-xl font-normal"
         style={{ opacity: taglineOpacity }}
       >
-        "Smart Jobs for Smart Students"
+        Smart Job-Matching Platform for Smart Students
       </Animated.Text>
 
       <View className="absolute bottom-[100px] left-10 right-10 items-center">

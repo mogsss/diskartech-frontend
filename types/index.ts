@@ -4,11 +4,13 @@ export interface Job {
   companyName: string;
   jobTitle: string;
   salary: string;
+  salary_type?: 'day' | 'hour';
   distance: string;
   workingHours: string;
   location: string;
   verified: boolean;
   bookmarked: boolean;
+  isApplied?: boolean;
   description: string;
   requirements: string[];
   skills: string[];

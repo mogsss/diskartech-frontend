@@ -2,6 +2,7 @@ import { Notification } from '@/types';
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface NotificationCardProps {
   notification: any; // Pinalitan pansamantala para maging flexible sa JSX message
@@ -9,6 +10,7 @@ interface NotificationCardProps {
 }
 
 const typeConfig: Record<string, { icon: any; color: string; bg: string }> = {
+  new_job: { icon: 'location-on', color: '#DC2626', bg: '#FEE2E2' },
   job_recommendation: { icon: 'work', color: '#2196F3', bg: '#E3F2FD' },
   application_accepted: { icon: 'check-circle', color: '#4CAF50', bg: '#E8F5E9' },
   interview_reminder: { icon: 'event', color: '#FF9800', bg: '#FFF3E0' },
@@ -24,6 +26,7 @@ const typeConfig: Record<string, { icon: any; color: string; bg: string }> = {
 };
 
 export default function NotificationCard({ notification, onPress }: NotificationCardProps) {
+  const { colors, isDark } = useDarkMode();
   let configKey: string = notification.type;
 
   if (notification.type === 'verification') {
@@ -39,13 +42,14 @@ export default function NotificationCard({ notification, onPress }: Notification
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      className={`flex-row bg-white rounded-2xl p-4 mb-3 shadow-sm items-center ${
+      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+      className={`flex-row rounded-2xl p-4 mb-3 shadow-sm items-center border ${
         !notification.read ? 'border-l-[3px] border-l-red-600' : ''
       }`}
     >
       {/* Icon Container */}
       <View
-        style={{ backgroundColor: config.bg }}
+        style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : config.bg }}
         className="w-12 h-12 rounded-xl items-center justify-center mr-4"
       >
         <MaterialIcons name={config.icon as any} size={24} color={config.color} />
@@ -54,13 +58,13 @@ export default function NotificationCard({ notification, onPress }: Notification
       {/* Content */}
       <View className="flex-1">
         <View className="flex-row justify-between items-center mb-1">
-          <Text className="text-sm font-semibold text-slate-900 flex-1 mr-2" numberOfLines={1}>
+          <Text style={{ color: colors.text }} className="text-sm font-semibold flex-1 mr-2" numberOfLines={1}>
             {notification.title}
           </Text>
-          <Text className="text-xs text-slate-400">{notification.timestamp}</Text>
+          <Text style={{ color: colors.textSecondary }} className="text-xs">{notification.timestamp}</Text>
         </View>
         {/* Dito natin pinapayagang mag-render ng JSX (gaya ng bold text) ang message */}
-        <Text className="text-xs text-slate-500 leading-4" numberOfLines={3}>
+        <Text style={{ color: colors.textSecondary }} className="text-xs leading-4" numberOfLines={3}>
           {notification.message}
         </Text>
       </View>

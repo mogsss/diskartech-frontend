@@ -1,5 +1,4 @@
 import api from '@/api/axios';
-import ApplicationDetailsModal from '@/components/student/modals/ApplicationDetailsModal';
 import NotificationCard from '@/components/ui/NotificationCard';
 import { Colors } from '@/constants/colors';
 import {
@@ -14,9 +13,20 @@ import { APP_NOTIFICATIONS_COLLECTION } from '@/utils/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  where,
+} from 'firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 type FilterTab = 'all' | 'applications' | 'messages' | 'updates';
 
@@ -60,7 +70,10 @@ function formatNotificationTime(ms: number): string {
   return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeStr}`;
 }
 
+const incomingMsgCache = new Map<string, { text: string; ms: number }>();
+
 export default function NotificationsScreen() {
+  const { colors, isDark } = useDarkMode();
   const [apiNotifications, setApiNotifications] = useState<any[]>([]);
   const [liveAppNotifications, setLiveAppNotifications] = useState<any[]>([]);
   const [chatNotifications, setChatNotifications] = useState<any[]>([]);
@@ -68,10 +81,6 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
-  // States para sa direct modal display para sa student
-  const [selectedModalApp, setSelectedModalApp] = useState<any | null>(null);
-  const [isAppModalVisible, setIsAppModalVisible] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -105,6 +114,58 @@ export default function NotificationsScreen() {
 
         // 1. Fetch Backend API Notifications base sa user role
         if (userRole === 'student') {
+          const studentNotifs: any[] = [];
+
+          // 1a. Verification status notification para sa student
+          try {
+            const profileRes = await api.get('/user/profile');
+            const profile = profileRes.data?.profile || profileRes.data?.user || profileRes.data;
+            if (profile) {
+              const isVerified = profile.isVerified === 1 || profile.isVerified === true || profile.status === 'verified';
+              const isRejected = !isVerified && !!profile.rejection_reason;
+              const hasUploadedDocs = !!profile.school_id || !!profile.coe;
+
+              const notifId = 'student_verification_status';
+              const isLocallyRead = readNotifsIds.includes(notifId);
+              const ms = getTimestampMs(profile.updated_at || profile.created_at) || (Date.now() - 3600000);
+
+              if (isVerified) {
+                studentNotifs.push({
+                  id: notifId,
+                  title: 'Student Account Verified',
+                  message: 'Your student credentials have been verified! You can now apply for jobs.',
+                  timestamp: formatNotificationTime(ms),
+                  timestampMs: ms,
+                  read: true,
+                  type: 'verification',
+                });
+              } else if (isRejected) {
+                studentNotifs.push({
+                  id: notifId,
+                  title: 'Verification Rejected',
+                  message: `Reason: ${profile.rejection_reason}. Tap here to re-upload your documents.`,
+                  timestamp: formatNotificationTime(ms),
+                  timestampMs: ms,
+                  read: isLocallyRead,
+                  type: 'verification',
+                });
+              } else if (hasUploadedDocs) {
+                studentNotifs.push({
+                  id: notifId,
+                  title: 'Verification Under Review',
+                  message: 'Your student documents are currently being reviewed by Admin/AI.',
+                  timestamp: formatNotificationTime(ms),
+                  timestampMs: ms,
+                  read: isLocallyRead,
+                  type: 'verification',
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching student verification status:', err);
+          }
+
+          // 1b. Application updates para sa student
           try {
             const res = await api.get('/student/applications');
             if (isMounted && res.data && res.data.applications) {
@@ -159,10 +220,14 @@ export default function NotificationsScreen() {
                   rawApplication: app,
                 };
               });
-              setApiNotifications(list);
+              studentNotifs.push(...list);
             }
           } catch (err) {
             console.error('Error fetching student applications:', err);
+          }
+
+          if (isMounted) {
+            setApiNotifications(studentNotifs);
           }
         } else {
           // Employer at Household accounts
@@ -299,9 +364,8 @@ export default function NotificationsScreen() {
           const myId = String(currentUserId);
           unsubscribeChats = onSnapshot(
             collection(db, CHATS_COLLECTION),
-            (snapshot) => {
+            async (snapshot) => {
               if (!isMounted) return;
-              const chatList: any[] = [];
 
               const matchedDocs = snapshot.docs.filter((docSnap) => {
                 const raw = docSnap.data();
@@ -313,26 +377,97 @@ export default function NotificationsScreen() {
                 return pIds.includes(myId) || sId === myId || rId === myId;
               });
 
-              matchedDocs.forEach((docSnap) => {
-                const chat = normalizeChatFields(docSnap.data(), docSnap.id);
+              const chatListPromises = matchedDocs.map(async (docSnap) => {
+                const raw = docSnap.data();
+                const chat = normalizeChatFields(raw, docSnap.id);
                 const other = getOtherParticipant(chat, myId);
                 const isUnread = isChatUnreadForUser(chat, myId, userRole as any);
-                const ms = getTimestampMs(chat.last_message_at);
 
-                chatList.push({
+                let lastIncomingText = '';
+                let lastIncomingMs = 0;
+                let hasIncomingMessage = false;
+
+                // 1. Kung ang huling nag-send sa chat ay ang kausap (hindi ang current user)
+                if (chat.last_sender_id && String(chat.last_sender_id) !== myId) {
+                  lastIncomingText = chat.last_message;
+                  lastIncomingMs = getTimestampMs(chat.last_message_at);
+                  hasIncomingMessage = Boolean(lastIncomingText);
+                  if (hasIncomingMessage) {
+                    incomingMsgCache.set(docSnap.id, { text: lastIncomingText, ms: lastIncomingMs });
+                  }
+                } else if (raw[`last_message_for_${myId}`]) {
+                  // 2. Kung naka-cache na sa chat document ang huling mensahe para sa akin
+                  lastIncomingText = String(raw[`last_message_for_${myId}`]);
+                  lastIncomingMs = getTimestampMs(raw[`last_message_at_for_${myId}`]);
+                  hasIncomingMessage = Boolean(lastIncomingText);
+                } else if (incomingMsgCache.has(docSnap.id)) {
+                  // 3. Kung nasa memory cache na
+                  const cached = incomingMsgCache.get(docSnap.id)!;
+                  lastIncomingText = cached.text;
+                  lastIncomingMs = cached.ms;
+                  hasIncomingMessage = Boolean(lastIncomingText);
+                } else {
+                  // 4. Kung ang kasalukuyang user ang huling nag-reply (tulad ng "MWHEHHEHE"),
+                  // basahin sa messages subcollection ang pinakahuling mensahe na nanggaling sa kausap (sender_id !== myId).
+                  try {
+                    const messagesRef = collection(db, CHATS_COLLECTION, docSnap.id, 'messages');
+                    const q = query(messagesRef, orderBy('created_at', 'desc'), limit(15));
+                    const msgSnap = await getDocs(q);
+
+                    const otherMsgDoc = msgSnap.docs.find((mDoc) => {
+                      const mData = mDoc.data();
+                      const sId = String(mData.sender_id || '');
+                      return sId && sId !== myId;
+                    });
+
+                    if (otherMsgDoc) {
+                      const mData = otherMsgDoc.data();
+                      lastIncomingText = String(mData.text || '');
+                      lastIncomingMs = getTimestampMs(mData.created_at);
+                      hasIncomingMessage = Boolean(lastIncomingText);
+                      incomingMsgCache.set(docSnap.id, { text: lastIncomingText, ms: lastIncomingMs });
+
+                      // I-cache sa document para sa susunod na reads
+                      setDoc(
+                        doc(db, CHATS_COLLECTION, docSnap.id),
+                        {
+                          [`last_message_for_${myId}`]: lastIncomingText,
+                          [`last_message_at_for_${myId}`]: mData.created_at || null,
+                        },
+                        { merge: true }
+                      ).catch(() => {});
+                    }
+                  } catch (err) {
+                    console.error('Error fetching incoming message for chat:', docSnap.id, err);
+                  }
+                }
+
+                // Kung walang nahanap na mensahe mula sa kausap, huwag mag-display ng notification
+                if (!hasIncomingMessage || !lastIncomingText.trim()) {
+                  return null;
+                }
+
+                return {
                   id: `chat_${docSnap.id}`,
                   title: other.name || 'DiskarTech User',
-                  message: chat.last_message ? `"${chat.last_message}"` : 'Sent a message',
-                  timestamp: formatNotificationTime(ms),
-                  timestampMs: ms,
+                  message: `"${lastIncomingText.trim()}"`,
+                  timestamp: formatNotificationTime(lastIncomingMs),
+                  timestampMs: lastIncomingMs,
                   read: !isUnread,
                   type: 'message',
                   targetId: docSnap.id,
-                });
+                };
               });
 
-              setChatNotifications(chatList);
-              setLoading(false);
+              const resolvedList = await Promise.all(chatListPromises);
+              const validChatList = resolvedList.filter(
+                (item): item is NonNullable<typeof item> => item !== null
+              );
+
+              if (isMounted) {
+                setChatNotifications(validChatList);
+                setLoading(false);
+              }
             },
             (error) => {
               console.error('Error loading chat notifications:', error);
@@ -463,7 +598,7 @@ export default function NotificationsScreen() {
     }
     if (activeTab === 'updates') {
       return combinedNotifications.filter(
-        (n) => n.type === 'verification' || n.type === 'general'
+        (n) => n.type === 'verification' || n.type === 'general' || n.type === 'new_job'
       );
     }
     return combinedNotifications;
@@ -472,7 +607,7 @@ export default function NotificationsScreen() {
   const unreadCount = combinedNotifications.filter((n) => !n.read).length;
   const appCount = combinedNotifications.filter((n) => n.type === 'application' || n.type === 'application_status').length;
   const msgCount = combinedNotifications.filter((n) => n.type === 'message').length;
-  const updateCount = combinedNotifications.filter((n) => n.type === 'verification' || n.type === 'general').length;
+  const updateCount = combinedNotifications.filter((n) => n.type === 'verification' || n.type === 'general' || n.type === 'new_job').length;
 
   const handleNotificationPress = async (notification: any) => {
     const idsToMark: string[] = notification.mergedIds || [notification.id];
@@ -510,33 +645,32 @@ export default function NotificationsScreen() {
         await markChatAsRead(notification.targetId, String(currentUserId));
       }
       router.push(`/chat?id=${notification.targetId}` as any);
+    } else if (notification.type === 'new_job') {
+      if (notification.targetId) {
+        router.push({
+          pathname: '/students/job-details' as any,
+          params: { id: String(notification.targetId) },
+        });
+      }
     } else if (notification.type === 'application' || notification.type === 'application_status') {
       if (userRole === 'student') {
-        if (notification.rawApplication) {
-          setSelectedModalApp(notification.rawApplication);
-          setIsAppModalVisible(true);
-        } else {
-          try {
-            const res = await api.get('/student/applications');
-            if (res.data && res.data.applications) {
-              const foundApp = res.data.applications.find(
-                (a: any) => a.id.toString() === String(notification.targetId)
-              );
-              if (foundApp) {
-                setSelectedModalApp(foundApp);
-                setIsAppModalVisible(true);
-              }
-            }
-          } catch (error) {
-            console.error('Error fetching application for modal:', error);
-          }
-        }
+        const rawApp = notification.rawApplication;
+        const targetAppId = String(rawApp?.id || notification.targetId || '');
+
+        router.push({
+          pathname: '/students/application-details' as any,
+          params: { applicationId: targetAppId },
+        });
       } else {
         router.push(`/employer/applicant-details?applicationId=${notification.targetId}` as any);
       }
     } else if (notification.type === 'verification') {
-      const isHousehold = userRole === 'household';
-      router.push(`/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as any);
+      if (userRole === 'student') {
+        router.push('/students/verification-status' as any);
+      } else {
+        const isHousehold = userRole === 'household';
+        router.push(`/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as any);
+      }
     }
   };
 
@@ -562,24 +696,28 @@ export default function NotificationsScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
+      <View style={{ backgroundColor: colors.background }} className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#dc2626" />
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-[#F8FAFC]">
+    <View style={{ backgroundColor: colors.background }} className="flex-1">
       {/* Header */}
-      <View className="flex-row items-center px-6 pt-12 pb-4 bg-white border-b border-gray-100">
+      <View
+        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
+        className="flex-row items-center px-6 pt-12 pb-4 border-b"
+      >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-4"
+          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+          className="w-10 h-10 rounded-full items-center justify-center mr-4"
         >
-          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-2xl font-bold text-slate-900">Notifications</Text>
+          <Text style={{ color: colors.text }} className="text-2xl font-bold">Notifications</Text>
           {unreadCount > 0 && (
             <Text className="text-xs text-red-600 font-semibold mt-[2px]">{unreadCount} unread</Text>
           )}
@@ -590,7 +728,10 @@ export default function NotificationsScreen() {
       </View>
 
       {/* Filter Tabs Row */}
-      <View className="bg-white border-b border-gray-100">
+      <View
+        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
+        className="border-b"
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -598,12 +739,16 @@ export default function NotificationsScreen() {
         >
           <TouchableOpacity
             onPress={() => setActiveTab('all')}
-            className={`px-3.5 py-1.5 rounded-full ${activeTab === 'all' ? 'bg-red-600' : 'bg-gray-100'
-              }`}
+            style={{
+              backgroundColor: activeTab === 'all' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
+            }}
+            className="px-3.5 py-1.5 rounded-full"
           >
             <Text
-              className={`text-xs font-semibold ${activeTab === 'all' ? 'text-white' : 'text-slate-600'
-                }`}
+              style={{
+                color: activeTab === 'all' ? '#FFFFFF' : colors.textSecondary,
+              }}
+              className="text-xs font-semibold"
             >
               All ({combinedNotifications.length})
             </Text>
@@ -611,12 +756,16 @@ export default function NotificationsScreen() {
 
           <TouchableOpacity
             onPress={() => setActiveTab('applications')}
-            className={`px-3.5 py-1.5 rounded-full ${activeTab === 'applications' ? 'bg-red-600' : 'bg-gray-100'
-              }`}
+            style={{
+              backgroundColor: activeTab === 'applications' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
+            }}
+            className="px-3.5 py-1.5 rounded-full"
           >
             <Text
-              className={`text-xs font-semibold ${activeTab === 'applications' ? 'text-white' : 'text-slate-600'
-                }`}
+              style={{
+                color: activeTab === 'applications' ? '#FFFFFF' : colors.textSecondary,
+              }}
+              className="text-xs font-semibold"
             >
               Applications {appCount > 0 ? `(${appCount})` : ''}
             </Text>
@@ -624,26 +773,34 @@ export default function NotificationsScreen() {
 
           <TouchableOpacity
             onPress={() => setActiveTab('messages')}
-            className={`px-3.5 py-1.5 rounded-full ${activeTab === 'messages' ? 'bg-red-600' : 'bg-gray-100'
-              }`}
+            style={{
+              backgroundColor: activeTab === 'messages' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
+            }}
+            className="px-3.5 py-1.5 rounded-full"
           >
             <Text
-              className={`text-xs font-semibold ${activeTab === 'messages' ? 'text-white' : 'text-slate-600'
-                }`}
+              style={{
+                color: activeTab === 'messages' ? '#FFFFFF' : colors.textSecondary,
+              }}
+              className="text-xs font-semibold"
             >
               Messages {msgCount > 0 ? `(${msgCount})` : ''}
             </Text>
           </TouchableOpacity>
 
-          {userRole !== 'student' && updateCount > 0 && (
+          {updateCount > 0 && (
             <TouchableOpacity
               onPress={() => setActiveTab('updates')}
-              className={`px-3.5 py-1.5 rounded-full ${activeTab === 'updates' ? 'bg-red-600' : 'bg-gray-100'
-                }`}
+              style={{
+                backgroundColor: activeTab === 'updates' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
+              }}
+              className="px-3.5 py-1.5 rounded-full"
             >
               <Text
-                className={`text-xs font-semibold ${activeTab === 'updates' ? 'text-white' : 'text-slate-600'
-                  }`}
+                style={{
+                  color: activeTab === 'updates' ? '#FFFFFF' : colors.textSecondary,
+                }}
+                className="text-xs font-semibold"
               >
                 Updates ({updateCount})
               </Text>
@@ -660,13 +817,13 @@ export default function NotificationsScreen() {
       >
         {filteredList.length === 0 ? (
           <View className="flex-1 justify-center items-center mt-24">
-            <MaterialIcons name="notifications-none" size={56} color={Colors.gray400} />
-            <Text className="text-slate-500 mt-4 text-base font-medium">
+            <MaterialIcons name="notifications-none" size={56} color={colors.textSecondary} />
+            <Text style={{ color: colors.text }} className="mt-4 text-base font-medium">
               {activeTab === 'all'
                 ? 'No Notifications'
                 : `No ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
             </Text>
-            <Text className="text-slate-400 mt-1 text-xs text-center px-10">
+            <Text style={{ color: colors.textSecondary }} className="mt-1 text-xs text-center px-10">
               {userRole === 'student'
                 ? 'Job updates, interview invitations, and chat messages will appear here.'
                 : 'New applicants, verifications, and chat messages will appear here.'}
@@ -682,12 +839,6 @@ export default function NotificationsScreen() {
           ))
         )}
       </ScrollView>
-      <ApplicationDetailsModal
-        visible={isAppModalVisible}
-        onClose={() => setIsAppModalVisible(false)}
-        application={selectedModalApp}
-        onApplicationCancelled={() => { }}
-      />
     </View>
   );
 }

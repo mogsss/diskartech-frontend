@@ -31,6 +31,7 @@ export const getStatusColor = (status: string): string => {
     case 'rejected': return '#F44336';
     case 'completed': return '#4CAF50';
     case 'cancelled': return '#757575';
+    case 'terminated': return '#DC2626';
     default: return '#666666';
   }
 };
@@ -45,6 +46,7 @@ export const getStatusBgColor = (status: string): string => {
     case 'rejected': return '#FFEBEE';
     case 'completed': return '#E8F5E9';
     case 'cancelled': return '#F5F5F5';
+    case 'terminated': return '#FEE2E2';
     default: return '#F5F5F5';
   }
 };
@@ -59,6 +61,7 @@ export const getStatusIcon = (status: string): string => {
     case 'rejected': return 'cancel';
     case 'completed': return 'task-alt';
     case 'cancelled': return 'not-interested';
+    case 'terminated': return 'gavel';
     default: return 'help-outline';
   }
 };

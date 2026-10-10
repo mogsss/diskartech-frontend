@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import PrimaryButton from './PrimaryButton';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface EmptyStateProps {
   icon?: keyof typeof MaterialIcons.glyphMap;
@@ -20,13 +21,24 @@ export default function EmptyState({
   actionLabel,
   onAction,
 }: EmptyStateProps) {
+  const { colors, isDark } = useDarkMode();
+
   return (
     <View style={styles.container}>
-      <View style={styles.iconContainer}>
-        <MaterialIcons name={icon} size={64} color={Colors.gray300} />
+      <View
+        style={[
+          styles.iconContainer,
+          { backgroundColor: isDark ? colors.surface : Colors.gray50 },
+        ]}
+      >
+        <MaterialIcons
+          name={icon}
+          size={64}
+          color={isDark ? colors.textSecondary : Colors.gray300}
+        />
       </View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
       {actionLabel && onAction && (
         <PrimaryButton
           title={actionLabel}

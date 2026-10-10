@@ -1,39 +1,109 @@
 import Avatar from '@/components/ui/Avatar';
-import Badge from '@/components/ui/Badge';
-import { Colors } from '@/constants/colors';
+import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState, useCallback } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, Alert } from 'react-native';
+import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import api from '@/api/axios';
 import { useFocusEffect } from '@react-navigation/native';
 import { clearPushToken } from '@/utils/notifications';
+import LoadingModal from '@/components/ui/modals/LoadingModal';
+import DocumentViewerModal from '@/components/ui/modals/DocumentViewerModal';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
+import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
+import DrawerMenuButton from '@/components/ui/DrawerMenuButton';
+import { useDarkMode } from '@/hooks/useDarkMode';
+
+const getFilename = (path?: string | null) => {
+  if (!path || typeof path !== 'string') return null;
+  return path.split('/').pop() || null;
+};
 
 export default function EmployerProfileScreen() {
+  const { colors, isDark } = useDarkMode();
   const { type } = useLocalSearchParams<{ type?: string }>();
   const isHousehold = type === 'household';
+  const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
+  const accentText = isDark ? colors.accent : colors.primary;
+  const verifiedColor = isDark ? '#6EE7B7' : '#15803D';
+  const pendingColor = isDark ? '#FCD34D' : '#92400E';
+  const pendingSurface = isDark ? '#3B321D' : '#FFFBEB';
+  const verificationRoute = `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as const;
+  const [refreshing, setRefreshing] = useState(false);
+
+  const STORAGE_URL = api.defaults.baseURL
+    ? api.defaults.baseURL.replace('/api', '/storage/')
+    : 'https://diskartech-backend.onrender.com/storage/';
 
   const [isVerified, setIsVerified] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [rating, setRating] = useState<number>(5.0);
+  const [reviewCount, setReviewCount] = useState<number>(0);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
-  const [profileData, setProfileData] = useState({
-    title: isHousehold ? 'Household Profile' : 'Business Profile',
-    name: isHousehold ? 'Villa Family Residence' : "McDonald's SM North",
-    email: 'Loading...',
-    badgeText: isHousehold ? 'Verified Household' : 'Verified Business',
-    avatarInitials: isHousehold ? 'VF' : 'MD',
-    infoTypeLabel: isHousehold ? 'Household Type' : 'Business Type',
-    infoTypeValue: isHousehold ? 'Residential / Family' : 'Food & Beverage / Fast Food',
-    locationLabel: isHousehold ? 'Home Address' : 'Branch Location',
-    locationValue: isHousehold ? 'Pinamalayan, Oriental Mindoro' : 'SM City North EDSA, Quezon City',
-    contactNumber: '+63 912 345 6789',
-    permitLabel: isHousehold ? 'Government ID' : 'Tax ID / Permit',
-    permitValue: isHousehold ? 'Valid ID Verified' : 'Verified & Registered',
+  const [uploadedDocs, setUploadedDocs] = useState<{
+    valid_id_path?: string | null;
+    valid_id_raw?: string | null;
+    employer_certificate_path?: string | null;
+    employer_certificate_raw?: string | null;
+  }>({});
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  const [viewerModalVisible, setViewerModalVisible] = useState(false);
+  const [viewerConfig, setViewerConfig] = useState<{
+    title: string;
+    uri: string | null;
+    filename?: string | null;
+  }>({ title: '', uri: null, filename: null });
+
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
+  const [alertModalConfig, setAlertModalConfig] = useState<{
+    title: string;
+    message: string | React.ReactNode;
+    iconName?: keyof typeof MaterialIcons.glyphMap;
+    iconColor?: string;
+    iconBgColor?: string;
+    primaryButtonText?: string;
+    onPrimaryPress?: () => void;
+    secondaryButtonText?: string;
+    onSecondaryPress?: () => void;
+  }>({
+    title: '',
+    message: '',
   });
 
-  const fetchEmployerProfile = async () => {
+  const showAlertModal = (config: {
+    title: string;
+    message: string | React.ReactNode;
+    iconName?: keyof typeof MaterialIcons.glyphMap;
+    iconColor?: string;
+    iconBgColor?: string;
+    primaryButtonText?: string;
+    onPrimaryPress?: () => void;
+    secondaryButtonText?: string;
+    onSecondaryPress?: () => void;
+  }) => {
+    setAlertModalConfig(config);
+    setAlertModalVisible(true);
+  };
+
+  const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [isDrawerVisible, setDrawerVisible] = useState(false);
+
+  const [profileData, setProfileData] = useState({
+    name: isHousehold ? 'Household' : 'Business',
+    email: 'Loading...',
+    avatarInitials: isHousehold ? 'HH' : 'BU',
+    businessType: '',
+    hirerName: '',
+    locationValue: '',
+    contactNumber: '',
+  });
+
+  const fetchEmployerProfile = useCallback(async () => {
     try {
       // 1. Kunin muna ang cached data sa AsyncStorage para agad mag-load ang tamang pangalan
       const storedUser = await AsyncStorage.getItem('userData');
@@ -46,11 +116,15 @@ export default function EmployerProfileScreen() {
 
       if (storedProfile) {
         const profile = JSON.parse(storedProfile);
+        if (profile.rating !== undefined) setRating(Number(profile.rating));
+        if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
         const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+        const reason = profile.rejection_reason || null;
         setIsVerified(verifiedStatus);
+        setRejectionReason(reason);
 
-        const actualName = isHousehold 
-          ? (profile.household_name || profile.name || 'Villa Family Residence') 
+        const actualName = isHousehold
+          ? (profile.household_name || profile.name || 'Household')
           : (profile.employer_name || profile.business_name || profile.name || "Business Name");
 
         const nameParts = actualName.trim().split(' ');
@@ -60,14 +134,21 @@ export default function EmployerProfileScreen() {
         } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
           initials = nameParts[0].substring(0, 2).toUpperCase();
         } else {
-          initials = isHousehold ? 'VF' : 'MD';
+          initials = isHousehold ? 'HH' : 'BU';
         }
 
         if (profile.profile_picture || profile.avatar) {
           const picPath = profile.profile_picture || profile.avatar;
-          const fullUrl = picPath.startsWith('http') ? picPath : `http://192.168.1.2:8000/storage/${picPath}`;
+          const fullUrl = picPath.startsWith('http') ? picPath : `${STORAGE_URL}${picPath}`;
           setAvatarUri(fullUrl);
         }
+
+        setUploadedDocs({
+          valid_id_path: getFilename(profile.valid_id_path),
+          valid_id_raw: profile.valid_id_path,
+          employer_certificate_path: getFilename(profile.employer_certificate_path),
+          employer_certificate_raw: profile.employer_certificate_path,
+        });
 
         setProfileData((prev) => ({
           ...prev,
@@ -75,9 +156,8 @@ export default function EmployerProfileScreen() {
           avatarInitials: initials,
           locationValue: profile.location || profile.detailed_address || prev.locationValue,
           contactNumber: profile.contact_number || profile.cp_number || prev.contactNumber,
-          badgeText: verifiedStatus 
-            ? (isHousehold ? 'Verified Household' : 'Verified Business') 
-            : 'For Verification',
+          businessType: profile.business_type || '',
+          hirerName: profile.hirer_name || '',
         }));
       }
 
@@ -85,13 +165,21 @@ export default function EmployerProfileScreen() {
       try {
         const response = await api.get('/user/profile');
         const profile = response.data.profile;
+        const apiRating = response.data.rating !== undefined ? Number(response.data.rating) : 5.0;
+        const apiReviewCount = response.data.review_count !== undefined ? Number(response.data.review_count) : 0;
+        setRating(apiRating);
+        setReviewCount(apiReviewCount);
 
         if (profile) {
+          profile.rating = apiRating;
+          profile.review_count = apiReviewCount;
           const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+          const reason = profile.rejection_reason || null;
           setIsVerified(verifiedStatus);
+          setRejectionReason(reason);
 
-          const actualName = isHousehold 
-            ? (profile.household_name || profile.name || 'Villa Family Residence') 
+          const actualName = isHousehold
+            ? (profile.household_name || profile.name || 'Household')
             : (profile.employer_name || profile.business_name || profile.name || "Business Name");
 
           const nameParts = actualName.trim().split(' ');
@@ -101,24 +189,30 @@ export default function EmployerProfileScreen() {
           } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
             initials = nameParts[0].substring(0, 2).toUpperCase();
           } else {
-            initials = isHousehold ? 'VF' : 'MD';
+            initials = isHousehold ? 'HH' : 'BU';
           }
 
           if (profile.profile_picture || profile.avatar) {
             const picPath = profile.profile_picture || profile.avatar;
-            const fullUrl = picPath.startsWith('http') ? picPath : `http://192.168.1.2:8000/storage/${picPath}`;
+            const fullUrl = picPath.startsWith('http') ? picPath : `${STORAGE_URL}${picPath}`;
             setAvatarUri(fullUrl);
           }
+
+          setUploadedDocs({
+            valid_id_path: getFilename(profile.valid_id_path),
+            valid_id_raw: profile.valid_id_path,
+            employer_certificate_path: getFilename(profile.employer_certificate_path),
+            employer_certificate_raw: profile.employer_certificate_path,
+          });
 
           setProfileData((prev) => ({
             ...prev,
             name: actualName,
             avatarInitials: initials,
-            locationValue: profile.location || profile.detailed_address || prev.locationValue,
-            contactNumber: profile.contact_number || profile.cp_number || prev.contactNumber,
-            badgeText: verifiedStatus 
-              ? (isHousehold ? 'Verified Household' : 'Verified Business') 
-              : 'For Verification',
+            locationValue: profile.location || profile.detailed_address || '',
+            contactNumber: profile.contact_number || profile.cp_number || '',
+            businessType: profile.business_type || '',
+            hirerName: profile.hirer_name || '',
           }));
 
           // I-update din ang AsyncStorage cache
@@ -131,19 +225,38 @@ export default function EmployerProfileScreen() {
     } catch (error) {
       console.error('Error loading profile:', error);
     }
-  };
+  }, [isHousehold, STORAGE_URL]);
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
       fetchEmployerProfile();
-    }, [isHousehold])
+
+      // Live auto-polling bawat 3 segundo para live na mag-update ang Verification badge at status
+      const pollInterval = setInterval(() => {
+        if (isMounted) {
+          fetchEmployerProfile();
+        }
+      }, 3000);
+
+      return () => {
+        isMounted = false;
+        clearInterval(pollInterval);
+      };
+    }, [fetchEmployerProfile])
   );
 
   const handlePickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (!permissionResult.granted) {
-      Alert.alert('Permission Denied', 'You need to grant permission to access your photos.');
+      showAlertModal({
+        title: 'Permission Denied',
+        message: 'You need to grant permission to access your photos.',
+        iconName: 'photo-library',
+        iconColor: '#DC2626',
+        iconBgColor: 'bg-red-50',
+      });
       return;
     }
 
@@ -164,7 +277,7 @@ export default function EmployerProfileScreen() {
   const uploadProfile = async (uri: string) => {
     try {
       const formData = new FormData();
-      
+
       const filename = uri.split('/').pop() || 'profile.jpg';
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
@@ -182,11 +295,18 @@ export default function EmployerProfileScreen() {
       });
 
       if (response.data.status === 'success') {
-        Alert.alert('Success', 'Profile picture updated successfully!');
-        
+        showAlertModal({
+          title: 'Upload Successful',
+          message: 'Profile picture updated successfully!',
+          iconName: 'check-circle',
+          iconColor: '#059669',
+          iconBgColor: 'bg-emerald-50',
+          primaryButtonText: 'Great',
+        });
+
         const rawPath = response.data.profile_picture || response.data.file_path;
         if (rawPath) {
-          const fullUrl = rawPath.startsWith('http') ? rawPath : `http://192.168.1.2:8000/storage/${rawPath}`;
+          const fullUrl = rawPath.startsWith('http') ? rawPath : `${STORAGE_URL}${rawPath}`;
           setAvatarUri(fullUrl);
         }
 
@@ -201,135 +321,368 @@ export default function EmployerProfileScreen() {
       }
     } catch (error: any) {
       console.error('Error uploading avatar:', error);
-      Alert.alert('Upload Failed', error.response?.data?.message || 'Something went wrong.');
+      showAlertModal({
+        title: 'Upload Failed',
+        message: error.response?.data?.message || 'Something went wrong.',
+        iconName: 'error-outline',
+        iconColor: '#DC2626',
+        iconBgColor: 'bg-red-50',
+      });
     }
   };
 
+  const handleUploadDocument = async (documentField: 'valid_id_path' | 'certificate_path', title: string) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const file = result.assets[0];
+
+      console.log('Document picked:', {
+        originalName: file.name,
+        size: file.size,
+        originalMime: file.mimeType,
+        uri: file.uri,
+      });
+
+      if (file.size === 0) {
+        showAlertModal({
+          title: 'Empty / Corrupted File',
+          message: `Ang napiling file ("${file.name}") ay 0 bytes (walang laman o corrupted download). Pakipili ang totoong may lamang larawan (JPG, PNG) o PDF document.`,
+          iconName: 'warning',
+          iconColor: '#EAB308',
+          iconBgColor: 'bg-yellow-50',
+        });
+        return;
+      }
+
+      setUploadingDoc(true);
+
+      // Sanitize extension and MIME type for reliable backend validation
+      let fileName = file.name || `document_${Date.now()}`;
+      const extMatch = fileName.match(/\.([0-9a-z]+)$/i);
+      let ext = extMatch ? extMatch[1].toLowerCase() : '';
+
+      let mimeType = file.mimeType;
+      if (!ext) {
+        if (mimeType?.includes('pdf')) ext = 'pdf';
+        else if (mimeType?.includes('png')) ext = 'png';
+        else if (mimeType?.includes('webp')) ext = 'webp';
+        else ext = 'jpg';
+        fileName = `${fileName}.${ext}`;
+      }
+
+      if (!mimeType || mimeType === 'application/octet-stream' || mimeType === '*/*') {
+        if (ext === 'pdf') mimeType = 'application/pdf';
+        else if (ext === 'png') mimeType = 'image/png';
+        else if (ext === 'webp') mimeType = 'image/webp';
+        else mimeType = 'image/jpeg';
+      }
+      const formData = new FormData();
+      formData.append('type', isHousehold ? 'household' : 'employer');
+
+      formData.append(documentField, {
+        uri: file.uri,
+        name: fileName,
+        type: mimeType,
+      } as any);
+
+      const response = await api.post('/upload-verification-doc', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data && response.data.status === 'success') {
+        showAlertModal({
+          title: 'Upload Successful',
+          message: `${title} uploaded successfully!`,
+          iconName: 'cloud-done',
+          iconColor: '#059669',
+          iconBgColor: 'bg-emerald-50',
+          primaryButtonText: 'Great',
+        });
+        const updatedProfile = response.data.profile;
+        if (updatedProfile) {
+          setUploadedDocs({
+            valid_id_path: getFilename(updatedProfile.valid_id_path),
+            valid_id_raw: updatedProfile.valid_id_path,
+            employer_certificate_path: getFilename(updatedProfile.employer_certificate_path),
+            employer_certificate_raw: updatedProfile.employer_certificate_path,
+          });
+          await AsyncStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+        }
+        fetchEmployerProfile();
+      }
+    } catch (error: any) {
+      console.error('Upload Error:', error.response?.data || error);
+      const validationErrors = error.response?.data?.errors;
+      let detailedMsg = '';
+      if (validationErrors && typeof validationErrors === 'object') {
+        detailedMsg = Object.values(validationErrors).flat().join('\n');
+      }
+      showAlertModal({
+        title: 'Upload Failed',
+        message: detailedMsg || error.response?.data?.message || 'Unable to upload document at this time. Allowed formats: JPG, PNG, WEBP, PDF.',
+        iconName: 'error-outline',
+        iconColor: '#DC2626',
+        iconBgColor: 'bg-red-50',
+      });
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleViewDocument = (title: string, rawPath?: string | null, filename?: string | null) => {
+    if (!rawPath) {
+      showAlertModal({
+        title: 'Notice',
+        message: 'No document has been uploaded yet.',
+        iconName: 'info',
+        iconColor: '#DC2626',
+        iconBgColor: 'bg-red-50',
+      });
+      return;
+    }
+    const fullUrl = rawPath.startsWith('http') ? rawPath : `${STORAGE_URL}${rawPath}`;
+    setViewerConfig({
+      title,
+      uri: fullUrl,
+      filename: filename || getFilename(rawPath),
+    });
+    setViewerModalVisible(true);
+  };
+
   const menuItems = [
-    { icon: 'business', label: isHousehold ? 'Household Details' : 'Business Details', route: '#' },
+    { icon: isHousehold ? 'home-work' : 'business', label: isHousehold ? 'Household Details' : 'Business Details', route: '/edit-profile' },
     { icon: 'verified', label: 'Verification Status', route: `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` },
     { icon: 'settings', label: 'Settings', route: '/settings' },
-    { icon: 'help-outline', label: 'Help Center', route: '#' },
-    { icon: 'info-outline', label: 'About DiskarTech', route: '#' },
+    { icon: 'help-outline', label: 'Help Center', route: '/help-center' },
+    { icon: 'info-outline', label: 'About DiskarTech', route: '/about-diskartech' },
     { icon: 'logout', label: 'Logout', route: '/auth/welcome', danger: true },
   ];
 
-  const handleMenuPress = async (route: string) => {
-    if (route === '/auth/welcome') {
-      try {
-        const storedUser = await AsyncStorage.getItem('userData');
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          if (user?.id) await clearPushToken(user.id);
-        }
-        await AsyncStorage.clear();
-      } catch (error) {
-        console.error('Error clearing storage on logout:', error);
+  const handleLogout = async () => {
+    setLogoutModalVisible(false);
+    try {
+      const storedUser = await AsyncStorage.getItem('userData');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        if (user?.id) await clearPushToken(user.id);
       }
-      router.replace(route as any);
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error('Error clearing storage on logout:', error);
+    }
+    router.replace('/auth/welcome' as any);
+  };
+
+  const handleMenuPress = (route: string) => {
+    if (route === '/auth/welcome') {
+      setLogoutModalVisible(true);
     } else if (route !== '#') {
       router.push(route as any);
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try { await fetchEmployerProfile(); } finally { setRefreshing(false); }
+  };
+
+  const hasDocuments = !!uploadedDocs.valid_id_raw && (isHousehold || !!uploadedDocs.employer_certificate_raw);
+  const isRejected = !isVerified && !!rejectionReason;
+  const verificationColor = isRejected ? accentText : pendingColor;
+  const verificationFill = isRejected ? accentSurface : pendingSurface;
+  const displayRating = Number.isFinite(rating) ? Math.min(5, Math.max(0, rating)) : 0;
+  const displayReviewCount = Number.isFinite(reviewCount) ? Math.max(0, Math.floor(reviewCount)) : 0;
+
+  const renderDocument = (
+    title: string, icon: keyof typeof MaterialIcons.glyphMap,
+    rawPath: string | null | undefined, filename: string | null | undefined,
+    field: 'valid_id_path' | 'certificate_path',
+  ) => (
+    <View key={field} className="rounded-2xl border p-3 mb-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+      <View className="flex-row items-center gap-3">
+        <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
+        <View className="flex-1">
+          <Text className="text-sm font-semibold" style={{ color: colors.text }}>{title}</Text>
+          <Text className="text-[11px] leading-4 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
+        </View>
+        {rawPath && <TouchableOpacity onPress={() => handleViewDocument(title, rawPath, filename)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View ${title}`} className="w-11 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
+      </View>
+      {(!isVerified || !rawPath) && <View className="flex-row items-center justify-between gap-2 mt-3 pt-3 border-t" style={{ borderColor: colors.border }}>
+        <View className="flex-1 flex-row items-center gap-1.5">
+          <MaterialIcons name={rawPath ? (isRejected ? 'error-outline' : 'schedule') : 'file-upload'} size={15} color={accentText} />
+          <Text className="text-[11px] font-medium shrink" style={{ color: isRejected && rawPath ? accentText : colors.textSecondary }}>{rawPath ? (isRejected ? 'Needs review' : 'Uploaded') : 'Required document'}</Text>
+        </View>
+        <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDoc ? 0.5 : 1 }}>
+          <MaterialIcons name={rawPath ? 'refresh' : 'file-upload'} size={17} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{rawPath ? 'Change' : 'Upload'}</Text>
+        </TouchableOpacity>
+      </View>}
+    </View>
+  );
+
   return (
-    <ScrollView className="flex-1 bg-[#F8FAFC]" showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View className="px-6 pt-12 pb-4">
-        <Text className="text-2xl font-bold text-slate-900">{profileData.title}</Text>
+    <View style={{ backgroundColor: colors.background }} className="flex-1">
+      <SafeStatusBar />
+      <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3 flex-row items-center gap-3">
+        <DrawerMenuButton onPress={() => setDrawerVisible(true)} />
+        <Text className="flex-1 text-xl font-bold tracking-tight" style={{ color: colors.text }}>{isHousehold ? 'Household profile' : 'Business profile'}</Text>
       </View>
-
-      {/* Profile Card */}
-      <View className="bg-white mx-6 rounded-2xl p-6 items-center shadow-md mb-4">
-        <View className="relative mb-4">
-          <Avatar
-            uri={avatarUri || ''}
-            name={profileData.avatarInitials}
-            size={80}
-            verified={isVerified}
-          />
-          <TouchableOpacity 
-            onPress={handlePickImage}
-            className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-red-600 items-center justify-center border-2 border-white"
-          >
-            <MaterialIcons name="camera-alt" size={18} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
-        <Text className="text-xl font-bold text-slate-900 text-center">{profileData.name}</Text>
-        <Text className="text-xs text-slate-500 mt-[2px] text-center">{profileData.email}</Text>
-        
-        <Badge 
-          text={profileData.badgeText} 
-          variant={isVerified ? "success" : "warning"} 
-          icon={isVerified ? "verified" : "hourglass-empty"} 
-          style={{ marginTop: 8, alignSelf: 'center' }} 
-        />
-      </View>
-
-      {/* Subscription Plan Card */}
-      {!isHousehold && (
-        <View className="bg-white mx-6 rounded-2xl p-5 shadow-sm mb-4 border border-red-100 flex-row items-center justify-between">
-          <View className="flex-1 mr-3">
-            <View className="flex-row items-center gap-1.5 mb-1">
-              <MaterialIcons name="star" size={18} color="#D32F2F" />
-              <Text className="text-xs font-bold text-red-600 uppercase tracking-wider">Current Plan</Text>
+      <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}>
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="flex-row items-center gap-4">
+            <View className="relative">
+              <Avatar uri={avatarUri || ''} name={profileData.avatarInitials} size={72} />
+              <TouchableOpacity onPress={handlePickImage} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
             </View>
-            <Text className="text-lg font-bold text-slate-900">Free Plan</Text>
-            <Text className="text-xs text-slate-500 mt-0.5">Basic job postings and applicant review</Text>
+            <View className="flex-1">
+              <Text className="text-[10px] font-semibold tracking-wide mb-1" style={{ color: colors.textSecondary }}>{isHousehold ? 'HOUSEHOLD ACCOUNT' : 'EMPLOYER ACCOUNT'}</Text>
+              <View className="flex-row items-center gap-1.5">
+                <Text className="text-xl font-bold leading-7 tracking-tight shrink" style={{ color: colors.text }} numberOfLines={2}>{profileData.name}</Text>
+                {isVerified && <MaterialIcons name="verified" size={20} color={verifiedColor} accessibilityLabel="Verified account" />}
+              </View>
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{profileData.email}</Text>
+            </View>
           </View>
-          <TouchableOpacity 
-            onPress={() => router.push('/employer/subscription')}
-            className="bg-red-600 px-4 py-2.5 rounded-xl items-center justify-center shadow-sm"
-          >
-            <Text className="text-xs font-bold text-white">Manage Plan s</Text>
-          </TouchableOpacity>
+          <View className="flex-row flex-wrap items-center gap-3 mt-5 pt-4 border-t" style={{ borderColor: colors.border }}>
+            {!isVerified && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View account verification status" className="min-h-12 flex-row items-center gap-1.5 px-3 rounded-xl" style={{ backgroundColor: verificationFill }}>
+              <MaterialIcons name={isRejected ? 'error-outline' : 'shield'} size={17} color={verificationColor} /><Text className="text-xs font-semibold" style={{ color: verificationColor }}>{isRejected ? 'Update verification' : hasDocuments ? 'Waiting for approval' : 'Verification required'}</Text><MaterialIcons name="chevron-right" size={16} color={verificationColor} />
+            </TouchableOpacity>}
+            <View className="flex-row items-center gap-1.5">
+              <MaterialIcons name={displayReviewCount > 0 ? 'star' : 'star-outline'} size={18} color={displayReviewCount > 0 ? '#F59E0B' : colors.textSecondary} />
+              {displayReviewCount > 0 ? <Text className="text-xs" style={{ color: colors.textSecondary }}><Text className="font-semibold" style={{ color: colors.text }}>{displayRating.toFixed(1)}</Text>{` (${displayReviewCount} ${displayReviewCount === 1 ? 'review' : 'reviews'})`}</Text> : <Text className="text-xs" style={{ color: colors.textSecondary }}>No reviews yet</Text>}
+            </View>
+          </View>
         </View>
-      )}
 
-      {/* Information Section */}
-      <View className="bg-white mx-6 rounded-2xl p-6 shadow-sm mb-4">
-        <Text className="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-gray-100">
-          {isHousehold ? 'Household Info' : 'Establishment Info'}
-        </Text>
-        <InfoRow icon="store" label={profileData.infoTypeLabel} value={profileData.infoTypeValue} />
-        <InfoRow icon="location-on" label={profileData.locationLabel} value={profileData.locationValue} />
-        <InfoRow icon="phone" label="Contact Number" value={profileData.contactNumber} />
-        <InfoRow icon="badge" label={profileData.permitLabel} value={profileData.permitValue} />
-      </View>
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="flex-row items-start justify-between gap-3 mb-4">
+            <View className="flex-1">
+              <Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>Documents & verification</Text>
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{isVerified ? 'Your account documents.' : 'Upload your documents to verify your account and post jobs.'}</Text>
+            </View>
+            {!isVerified && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel="View document verification status" className="w-12 h-12 items-center justify-center"><MaterialIcons name="chevron-right" size={24} color={accentText} /></TouchableOpacity>}
+          </View>
+          {renderDocument('Valid ID', 'badge', uploadedDocs.valid_id_raw, uploadedDocs.valid_id_path, 'valid_id_path')}
+          {!isHousehold && renderDocument('Business Permit', 'insert-drive-file', uploadedDocs.employer_certificate_raw, uploadedDocs.employer_certificate_path, 'certificate_path')}
+          {isRejected && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Review verification rejection" className="rounded-xl p-3 mt-1" style={{ backgroundColor: accentSurface }}>
+            <View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="flex-1 text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text><MaterialIcons name="chevron-right" size={18} color={accentText} /></View>
+            <Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text>
+          </TouchableOpacity>}
+        </View>
 
-      {/* Menu / Settings */}
-      <View className="bg-white mx-6 rounded-2xl shadow-sm mb-12 overflow-hidden">
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            className={`flex-row items-center p-4 border-b border-gray-100 gap-4 ${
-              index === menuItems.length - 1 ? 'border-b-0' : ''
-            }`}
-            onPress={() => handleMenuPress(item.route)}
-          >
-            <MaterialIcons
-              name={item.icon as any}
-              size={22}
-              color={item.danger ? Colors.error : Colors.text}
-            />
-            <Text className={`text-base text-slate-900 flex-1 ${item.danger ? 'text-red-600 font-semibold' : ''}`}>
-              {item.label}
-            </Text>
-            <MaterialIcons name="chevron-right" size={22} color={Colors.gray400} />
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="flex-row items-start justify-between gap-3 mb-4">
+            <View className="flex-1"><Text className="text-lg font-bold" style={{ color: colors.text }}>{isHousehold ? 'Household information' : 'Business information'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Your location and contact details.</Text></View>
+            <TouchableOpacity onPress={() => router.push('/edit-profile')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Edit profile information" className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="edit" size={15} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Edit</Text></TouchableOpacity>
+          </View>
+          {!isHousehold && <>
+            <InfoRow icon="person-outline" label="Hirer name" value={profileData.hirerName} />
+            <InfoRow icon="store" label="Business type" value={profileData.businessType} />
+          </>}
+          <InfoRow icon="location-on" label={isHousehold ? 'Home address' : 'Business location'} value={profileData.locationValue} />
+          <InfoRow icon="phone" label="Contact number" value={profileData.contactNumber} />
+          <InfoRow icon="mail-outline" label="Email address" value={profileData.email} />
+        </View>
+
+        {!isHousehold && <TouchableOpacity onPress={() => router.push('/employer/subscription')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Manage subscription plans" className="mx-6 mb-4 rounded-3xl border p-5 flex-row items-center gap-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="w-11 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="workspace-premium" size={23} color={accentText} /></View>
+          <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: colors.text }}>Subscription plans</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>View available plans and options.</Text></View>
+          <MaterialIcons name="chevron-right" size={22} color={accentText} />
+        </TouchableOpacity>}
+
+        <View className="mx-6 rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="px-5 pt-5 pb-2"><Text className="text-lg font-bold" style={{ color: colors.text }}>Account & support</Text></View>
+          {menuItems.map((item, index) => <TouchableOpacity key={item.label} onPress={() => handleMenuPress(item.route)} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
+            <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
+            <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={accentText} />
+          </TouchableOpacity>)}
+        </View>
+      </ScrollView>
+
+      <LoadingModal visible={uploadingDoc} message="Uploading verification document..." />
+
+      <DocumentViewerModal
+        visible={viewerModalVisible}
+        onClose={() => setViewerModalVisible(false)}
+        title={viewerConfig.title}
+        uri={viewerConfig.uri}
+        filename={viewerConfig.filename}
+      />
+
+      {/* Notification / Alert Modal */}
+      <NotificationModal
+        visible={alertModalVisible}
+        title={alertModalConfig.title}
+        message={alertModalConfig.message}
+        iconName={alertModalConfig.iconName}
+        iconColor={alertModalConfig.iconColor}
+        iconBgColor={alertModalConfig.iconBgColor}
+        primaryButtonText={alertModalConfig.primaryButtonText || 'OK'}
+        onPrimaryPress={() => {
+          setAlertModalVisible(false);
+          if (alertModalConfig.onPrimaryPress) {
+            alertModalConfig.onPrimaryPress();
+          }
+        }}
+        secondaryButtonText={alertModalConfig.secondaryButtonText}
+        onSecondaryPress={
+          alertModalConfig.onSecondaryPress
+            ? () => {
+              setAlertModalVisible(false);
+              alertModalConfig.onSecondaryPress!();
+            }
+            : undefined
+        }
+      />
+
+      {/* Logout Confirmation Modal */}
+      <NotificationModal
+        visible={isLogoutModalVisible}
+        title="Log Out"
+        message="Are you sure you want to log out of your account?"
+        iconName="logout"
+        iconColor="#DC2626"
+        iconBgColor="bg-red-50"
+        primaryButtonText="Yes, Log Out"
+        onPrimaryPress={handleLogout}
+        secondaryButtonText="Cancel"
+        onSecondaryPress={() => setLogoutModalVisible(false)}
+      />
+
+      {/* Slide-out Burger Menu / Side Drawer */}
+      <SideDrawerMenu
+        visible={isDrawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        user={{
+          name: profileData.name,
+          role: isHousehold ? 'household' : 'business',
+          avatarUri: avatarUri,
+          avatarInitials: profileData.avatarInitials,
+          isVerified: isVerified,
+          rejectionReason: rejectionReason,
+        }}
+        onLogout={handleLogout}
+      />
+    </View>
   );
 }
 
 function InfoRow({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
+  const { colors, isDark } = useDarkMode();
   return (
-    <View className="flex-row items-start gap-4 mb-4">
-      <MaterialIcons name={icon} size={18} color={Colors.gray500} />
+    <View className="flex-row items-start gap-3 py-3">
+      <View className="w-9 h-9 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2' }}><MaterialIcons name={icon} size={18} color={isDark ? colors.accent : colors.accent} /></View>
       <View className="flex-1">
-        <Text className="text-xs text-slate-400">{label}</Text>
-        <Text className="text-sm font-medium text-slate-900 mt-[2px]">{value}</Text>
+        <Text className="text-[11px]" style={{ color: colors.textSecondary }}>{label}</Text>
+        <Text className="text-sm font-medium leading-5 mt-1" style={{ color: colors.text }}>{value || 'Not provided'}</Text>
       </View>
     </View>
   );

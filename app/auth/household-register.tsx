@@ -1,8 +1,11 @@
 import BaseRegisterScreen from '@/components/ui/BaseRegisterScreen';
 import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 import GenderModal from '@/components/ui/modals/GenderModal';
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
+import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
+import { GoogleAuthProfile } from '@/utils/googleAuth';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -13,6 +16,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterHouseholdScreen() {
   const [step, setStep] = useState(1); // 1: Personal Info, 2: Address & Contact, 3: Account Security
+
+  // Google OAuth Link State
+  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   // Personal Info States
   const [firstName, setFirstName] = useState('');
@@ -37,6 +44,18 @@ export default function RegisterHouseholdScreen() {
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registrationError, setRegistrationError] = useState('');
+
+  const handleGoogleProfile = (profile: GoogleAuthProfile) => {
+    if (profile.firstName) setFirstName(profile.firstName);
+    if (profile.lastName) setLastName(profile.lastName);
+    setEmail(profile.email);
+    if (profile.photoUrl) setAvatarUrl(profile.photoUrl);
+    const generatedPwd = `G_${Math.random().toString(36).slice(-5).toUpperCase()}${Math.floor(100 + Math.random() * 900)}!x`;
+    setPassword(generatedPwd);
+    setConfirmPassword(generatedPwd);
+    setIsGoogleLinked(true);
+  };
 
   // Live Password Checkers
   const hasUpper = /[A-Z]/.test(password);
@@ -76,14 +95,16 @@ export default function RegisterHouseholdScreen() {
       hasError = true;
     }
 
-    if (!hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar) {
-      setPasswordError('Please meet all password requirements.');
-      hasError = true;
-    }
+    if (!isGoogleLinked) {
+      if (!hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar) {
+        setPasswordError('Please meet all password requirements.');
+        hasError = true;
+      }
 
-    if (password !== confirmPassword) {
-      setConfirmPasswordError('Passwords do not match.');
-      hasError = true;
+      if (password !== confirmPassword) {
+        setConfirmPasswordError('Passwords do not match.');
+        hasError = true;
+      }
     }
 
     if (hasError) return;
@@ -105,6 +126,7 @@ export default function RegisterHouseholdScreen() {
         longitude: longitude,
         email: email,
         password: password,
+        avatar: avatarUrl || null,
       });
 
       if (response.data.status === 'success') {
@@ -132,18 +154,22 @@ export default function RegisterHouseholdScreen() {
         });
       }
     } catch (error: any) {
-      console.error('FULL AXIOS ERROR:', error.response?.data || error);
-      
       if (error.response && error.response.status === 422) {
-        const errors = error.response.data.errors;
+        const errors: Record<string, string[]> = error.response.data?.errors ?? {};
         if (errors.email) setEmailError(errors.email[0]);
         if (errors.password) setPasswordError(errors.password[0]);
+        setRegistrationError(
+          Object.values(errors).flat().join('\n')
+          || error.response.data?.message
+          || 'Please review your information and try again.'
+        );
       } else {
-        const serverMsg = error.response?.data?.message 
+        console.error('FULL AXIOS ERROR:', error.response?.data || error);
+        const serverMsg = error.response?.data?.message
           || (error.response?.data?.errors ? Object.values(error.response.data.errors).flat().join('\n') : null)
-          || error.message 
+          || error.message
           || 'Something went wrong during registration.';
-          
+
         Alert.alert('Registration Failed', serverMsg);
       }
     } finally {
@@ -168,15 +194,32 @@ export default function RegisterHouseholdScreen() {
       {/* --- STEP 1: PERSONAL INFORMATION --- */}
       {step === 1 && (
         <View>
-          <InputField label="First Name" placeholder="Enter your first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-          <InputField label="Middle Name (Optional)" placeholder="Enter your middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-          <InputField label="Last Name" placeholder="Enter your last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+          <GoogleRegisterButton
+            onGoogleProfileLoaded={handleGoogleProfile}
+            linkedEmail={isGoogleLinked ? email : undefined}
+            linkedName={isGoogleLinked ? `${firstName} ${lastName}`.trim() : undefined}
+            linkedPhoto={isGoogleLinked ? avatarUrl : undefined}
+            onUnlink={() => {
+              setIsGoogleLinked(false);
+              setAvatarUrl('');
+              setPassword('');
+              setConfirmPassword('');
+            }}
+          />
+
+          {!isGoogleLinked && (
+            <>
+              <InputField label="First Name" placeholder="Enter your first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
+              <InputField label="Middle Name (Optional)" placeholder="Enter your middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField label="Last Name" placeholder="Enter your last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+            </>
+          )}
           <InputField label="Age" placeholder="Enter your age" keyboardType="number-pad" maxLength={2} icon="cake" value={age} onChangeText={setAge} />
 
           {/* GENDER DROPDOWN */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Gender</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setGenderModalVisible(true)}
               className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
             >
@@ -188,7 +231,7 @@ export default function RegisterHouseholdScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleNext}
             className="bg-red-600 rounded-2xl py-4 items-center justify-center mt-6 shadow-sm"
           >
@@ -203,7 +246,7 @@ export default function RegisterHouseholdScreen() {
           {/* MAP LOCATION PICKER FIELD */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Home Location</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setMapModalVisible(true)}
               className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
             >
@@ -216,17 +259,17 @@ export default function RegisterHouseholdScreen() {
           </View>
 
           {/* DETAILED ADDRESS FIELD (House No., Street, Landmark) */}
-          <InputField 
-            label="House No., Street, Landmark (Optional)" 
-            placeholder="e.g., Blk 4 Lot 2, Mabini St., near school" 
-            icon="home" 
-            value={detailedAddress} 
-            onChangeText={setDetailedAddress} 
+          <InputField
+            label="House No., Street, Landmark (Optional)"
+            placeholder="e.g., Blk 4 Lot 2, Mabini St., near school"
+            icon="home"
+            value={detailedAddress}
+            onChangeText={setDetailedAddress}
           />
 
           <InputField label="Phone Number" placeholder="Enter your phone number" keyboardType="phone-pad" icon="phone" value={phone} onChangeText={setPhone} />
 
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleNext}
             className="bg-red-600 rounded-2xl py-4 items-center justify-center mt-6 shadow-sm"
           >
@@ -238,89 +281,100 @@ export default function RegisterHouseholdScreen() {
       {/* --- STEP 3: ACCOUNT SECURITY --- */}
       {step === 3 && (
         <View>
-          <InputField
-            label="Email Address"
-            placeholder="Enter your email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            icon="email"
-            value={email}
-            onChangeText={(text) => { setEmail(text); setEmailError(''); }}
-            error={emailError} 
-          />
-
-          <InputField
-            label="Password"
-            placeholder="Create a password"
-            isPassword
-            icon="lock"
-            value={password}
-            onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
-            error={passwordError} 
-          />
-
-          {/* Live requirement checklist */}
-          <View className="mb-4 px-1 gap-1">
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasMinLength ? "#16a34a" : "#9ca3af"}
+          {isGoogleLinked ? (
+            <GoogleRegisterButton
+              onGoogleProfileLoaded={handleGoogleProfile}
+              linkedEmail={email}
+              linkedName={`${firstName} ${lastName}`.trim()}
+              linkedPhoto={avatarUrl}
+            />
+          ) : (
+            <>
+              <InputField
+                label="Email Address"
+                placeholder="Enter your email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                icon="email"
+                value={email}
+                onChangeText={(text) => { setEmail(text); setEmailError(''); }}
+                error={emailError}
               />
-              <Text className={`text-xs ${hasMinLength ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                At least 8 characters long
-              </Text>
-            </View>
 
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasNumber ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasNumber ? "#16a34a" : "#9ca3af"}
+              <InputField
+                label="Password"
+                placeholder="Create a password"
+                isPassword
+                icon="lock"
+                value={password}
+                onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
+                error={passwordError}
               />
-              <Text className={`text-xs ${hasNumber ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                Contains at least one number (0-9)
-              </Text>
-            </View>
 
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasUpper ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasUpper ? "#16a34a" : "#9ca3af"}
+              {/* Live requirement checklist */}
+              <View className="mb-4 px-1 gap-1">
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasMinLength ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasMinLength ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    At least 8 characters long
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasNumber ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasNumber ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasNumber ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    Contains at least one number (0-9)
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasUpper ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasUpper ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasUpper ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    Contains an Uppercase Letter
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons
+                    name={hasSpecialChar ? "check-circle" : "radio-button-unchecked"}
+                    size={16}
+                    color={hasSpecialChar ? "#16a34a" : "#9ca3af"}
+                  />
+                  <Text className={`text-xs ${hasSpecialChar ? "text-green-600 font-medium" : "text-slate-500"}`}>
+                    Contains a special character (e.g., @, #, $)
+                  </Text>
+                </View>
+              </View>
+
+              <InputField
+                label="Confirm Password"
+                placeholder="Confirm your password"
+                isPassword
+                icon="lock"
+                value={confirmPassword}
+                onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
+                error={confirmPasswordError}
               />
-              <Text className={`text-xs ${hasUpper ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                Contains an Uppercase Letter
-              </Text>
-            </View>
-
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons
-                name={hasSpecialChar ? "check-circle" : "radio-button-unchecked"}
-                size={16}
-                color={hasSpecialChar ? "#16a34a" : "#9ca3af"}
-              />
-              <Text className={`text-xs ${hasSpecialChar ? "text-green-600 font-medium" : "text-slate-500"}`}>
-                Contains a special character (e.g., @, #, $)
-              </Text>
-            </View>
-          </View>
-
-          <InputField
-            label="Confirm Password"
-            placeholder="Confirm your password"
-            isPassword
-            icon="lock"
-            value={confirmPassword}
-            onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
-            error={confirmPasswordError} 
-          />
+            </>
+          )}
 
           <PrimaryButton
-            title={loading ? "Creating Account..." : "CREATE ACCOUNT"}
+            title={loading ? "Creating Account..." : isGoogleLinked ? "Verify Email" : "CREATE ACCOUNT"}
             onPress={handleRegister}
-            size="large"
-            style={{ marginTop: 24, backgroundColor: '#DC2626' }}
+            size={isGoogleLinked ? 'medium' : 'large'}
+            style={{ marginTop: isGoogleLinked ? 8 : 24, backgroundColor: '#DC2626' }}
             disabled={loading}
           />
         </View>
@@ -343,6 +397,13 @@ export default function RegisterHouseholdScreen() {
           setLatitude(data.latitude);
           setLongitude(data.longitude);
         }}
+      />
+      <NotificationModal
+        visible={!!registrationError}
+        title="Registration Failed"
+        message={registrationError}
+        iconName="error-outline"
+        onPrimaryPress={() => setRegistrationError('')}
       />
     </BaseRegisterScreen>
   );

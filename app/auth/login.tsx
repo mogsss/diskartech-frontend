@@ -1,11 +1,13 @@
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
-import { MaterialIcons } from '@expo/vector-icons';
+import { useDarkMode } from '@/hooks/useDarkMode';
+import { MaterialIcons, AntDesign } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import api from '@/api/axios'; 
+import api from '@/api/axios';
 import {
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -14,19 +16,24 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { redirectUserByRole } from '@/utils/authNavigation';
+import { registerAndSyncPushToken } from '@/utils/notifications';
+import { promptNativeGoogleSignIn } from '@/utils/googleAuth';
 // I-import ang custom modal
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 
 export default function LoginScreen() {
+  const { isDark, colors } = useDarkMode();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // States para sa ating Reusable Modal
   const [modalVisible, setModalVisible] = useState(false);
@@ -44,8 +51,8 @@ export default function LoginScreen() {
             (user.student_school_name
               ? 'student'
               : user.household_name
-              ? 'household'
-              : 'employer');
+                ? 'household'
+                : 'employer');
           redirectUserByRole(role);
         }
       } catch {
@@ -76,6 +83,10 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('userData', JSON.stringify(user));
         if (profile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+        }
+
+        if (user?.id) {
+          registerAndSyncPushToken(user.id);
         }
 
         setTimeout(() => {
@@ -167,13 +178,110 @@ export default function LoginScreen() {
         setModalVisible(true);
       }
     } finally {
-      setLoading(false); 
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setGoogleLoading(true);
+      const profile = await promptNativeGoogleSignIn();
+      if (!profile?.email) {
+        setGoogleLoading(false);
+        return;
+      }
+
+      const response = await api.post('/google-login', {
+        email: profile.email,
+      });
+
+      if (response.data.status === 'success') {
+        const { role } = response.data.user;
+        const { user, profile: userProfile, token } = response.data;
+
+        await AsyncStorage.setItem('userToken', token);
+        await AsyncStorage.setItem('userData', JSON.stringify(user));
+        if (userProfile) {
+          await AsyncStorage.setItem('userProfile', JSON.stringify(userProfile));
+        }
+
+        if (user?.id) {
+          registerAndSyncPushToken(user.id);
+        }
+
+        setTimeout(() => {
+          redirectUserByRole(role);
+        }, 100);
+      }
+    } catch (error: any) {
+      console.error('Google login error:', error);
+      const responseData = error.response?.data;
+      const status = error.response?.status;
+
+      if (status === 403) {
+        const token = responseData?.token;
+        const user = responseData?.user;
+        if (token) await AsyncStorage.setItem('userToken', token);
+        if (user) await AsyncStorage.setItem('userData', JSON.stringify(user));
+
+        setModalConfig({
+          title: 'Email Verification Required',
+          message: 'Just one more step! Enter the 6-digit verification code sent to your email to continue.',
+          iconName: 'mark-email-unread',
+          iconColor: Colors.primary,
+          iconBgColor: '#FEF2F2',
+          primaryButtonText: 'I-verify ang Email',
+          onPrimaryPress: () => {
+            setModalVisible(false);
+            router.push({
+              pathname: '/auth/verify-email',
+              params: { email: user?.email, role: user?.role },
+            });
+          },
+          secondaryButtonText: 'I-cancel',
+          onSecondaryPress: () => setModalVisible(false),
+        });
+        setModalVisible(true);
+      } else if (status === 404 || responseData?.status === 'not_registered') {
+        setModalConfig({
+          title: 'Account Not Found',
+          message: 'Wala pang DiskarTech account na naka-link sa Google email na ito. Gusto mo bang mag-register muna?',
+          iconName: 'person-add',
+          iconColor: Colors.primary,
+          iconBgColor: '#FEF2F2',
+          primaryButtonText: 'Register as Student',
+          onPrimaryPress: () => {
+            setModalVisible(false);
+            router.push('/auth/student-register');
+          },
+          secondaryButtonText: 'I-cancel',
+          onSecondaryPress: () => setModalVisible(false),
+        });
+        setModalVisible(true);
+      } else {
+        const errorMsg = responseData?.message || error.message || 'Hindi nakapasok gamit ang Google.';
+        setModalConfig({
+          title: 'Google Login Failed',
+          message: errorMsg,
+          iconName: 'error',
+          iconColor: '#DC2626',
+          iconBgColor: '#FEF2F2',
+          primaryButtonText: 'Subukan Muli',
+          onPrimaryPress: () => setModalVisible(false),
+          secondaryButtonText: undefined,
+          onSecondaryPress: undefined,
+        });
+        setModalVisible(true);
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1"
+      style={{ backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
@@ -189,24 +297,26 @@ export default function LoginScreen() {
             {/* Back button */}
             <TouchableOpacity
               onPress={() => router.back()}
-              className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mb-6"
+              style={{ backgroundColor: isDark ? colors.surface : '#F1F5F9' }}
+              className="w-10 h-10 rounded-full items-center justify-center mb-6"
             >
-              <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+              <MaterialIcons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
 
             {/* Logo */}
             <View className="flex-row items-center gap-3 mb-6">
-              <View
-                style={{ backgroundColor: Colors.primary + '15' }}
-                className="w-12 h-12 rounded-full items-center justify-center"
-              >
-                <MaterialIcons name="work" size={36} color={Colors.primary} />
+              <View className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-red-100 items-center justify-center overflow-hidden">
+                <Image
+                  source={require('../../assets/images/icon.png')}
+                  style={{ width: 44, height: 44, borderRadius: 10 }}
+                  resizeMode="cover"
+                />
               </View>
               <Text className="text-[28px] font-extrabold text-red-600">DiskarTech</Text>
             </View>
 
-            <Text className="text-2xl font-bold text-slate-900 mb-1">Welcome Back!</Text>
-            <Text className="text-base text-slate-500 mb-6">Login to your account</Text>
+            <Text style={{ color: colors.text }} className="text-2xl font-bold mb-1">Welcome Back!</Text>
+            <Text style={{ color: colors.textSecondary }} className="text-base mb-6">Login to your account</Text>
 
             {/* Form */}
             <View className="gap-2">
@@ -214,7 +324,7 @@ export default function LoginScreen() {
                 label="Email"
                 placeholder="Enter your email"
                 value={email}
-                onChangeText={(text) => { setEmail(text); setEmailError(''); }} 
+                onChangeText={(text) => { setEmail(text); setEmailError(''); }}
                 error={emailError}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -225,7 +335,7 @@ export default function LoginScreen() {
                 label="Password"
                 placeholder="Enter your password"
                 value={password}
-                onChangeText={(text) => { setPassword(text); setPasswordError(''); }} 
+                onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
                 error={passwordError}
                 isPassword
                 icon="lock"
@@ -239,14 +349,14 @@ export default function LoginScreen() {
                 >
                   <View
                     style={{
-                      borderColor: Colors.gray400,
+                      borderColor: isDark ? colors.border : Colors.gray400,
                       ...(rememberMe ? { backgroundColor: Colors.primary, borderColor: Colors.primary } : {})
                     }}
                     className="w-5 h-5 rounded-[4px] border-2 items-center justify-center"
                   >
                     {rememberMe && <MaterialIcons name="check" size={14} color={Colors.white} />}
                   </View>
-                  <Text className="text-sm text-slate-500">Remember me</Text>
+                  <Text style={{ color: colors.textSecondary }} className="text-sm">Remember me</Text>
                 </TouchableOpacity>
                 <TouchableOpacity>
                   <Text className="text-sm text-red-600 font-semibold">Forgot Password?</Text>
@@ -258,19 +368,38 @@ export default function LoginScreen() {
                 onPress={handleLogin}
                 size="large"
                 style={{ marginTop: 16 }}
-                disabled={loading}
+                disabled={loading || googleLoading}
               />
 
               {/* Google Login */}
               <TouchableOpacity
-                style={{ borderColor: Colors.border }}
-                className="flex-row items-center justify-center gap-2 bg-white border-[1.5px] rounded-2xl py-[14px] mt-4"
+                onPress={handleGoogleLogin}
+                disabled={googleLoading || loading}
+                activeOpacity={0.85}
+                style={{
+                  backgroundColor: isDark ? colors.surface : '#FFFFFF',
+                  borderColor: isDark ? colors.border : '#E2E8F0',
+                  shadowColor: '#000000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: isDark ? 0.2 : 0.06,
+                  shadowRadius: 6,
+                  elevation: 2,
+                }}
+                className="flex-row items-center justify-center gap-2.5 border rounded-2xl py-[14px] mt-4"
               >
-                <MaterialIcons name="android" size={22} color={Colors.text} />
-                <Text className="text-base font-semibold text-slate-900">Continue with Google</Text>
+                {googleLoading ? (
+                  <ActivityIndicator size="small" color="#EA4335" />
+                ) : (
+                  <>
+                    <AntDesign name="google" size={20} color="#EA4335" />
+                    <Text style={{ color: colors.text }} className="text-base font-bold">
+                      Continue with Google
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
 
-              <Text className="text-base text-slate-500 text-center mt-6">
+              <Text style={{ color: colors.textSecondary }} className="text-base text-center mt-6">
                 Don't have an account?{' '}
                 <Text
                   className="text-red-600 font-semibold"
@@ -283,7 +412,7 @@ export default function LoginScreen() {
           </ScrollView>
 
           {/* DITO NATIN INILAGAY ANG REUSABLE MODAL */}
-          <NotificationModal 
+          <NotificationModal
             visible={modalVisible}
             title={modalConfig.title}
             message={modalConfig.message}

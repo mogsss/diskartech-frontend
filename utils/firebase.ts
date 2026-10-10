@@ -1,5 +1,8 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { initializeFirestore, getFirestore, Firestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore, Firestore, setLogLevel } from "firebase/firestore";
+
+// Silence harmless 45-second WebChannel stream reconnection warnings
+setLogLevel('error');
 
 // Your web app's Firebase configuration
 const firebaseConfig = {

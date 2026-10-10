@@ -1,8 +1,8 @@
 import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '@/api/axios';
 import { db } from './firebase';
 import {
   addDoc,
@@ -22,6 +22,33 @@ import {
 export const CHATS_COLLECTION = 'chats';
 export const NOTIFICATION_CHANNEL_ID = 'diskartech-default';
 export const APP_NOTIFICATIONS_COLLECTION = 'app_notifications';
+export const NOTIFICATIONS_ENABLED_KEY = 'notifications_enabled';
+
+export type PushTokenSyncResult = 'enabled' | 'disabled' | 'permission-denied' | 'unavailable' | 'sync-failed';
+
+export function supportsRemotePushNotifications(): boolean {
+  return Platform.OS !== 'web' && !(Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient');
+}
+
+function isExpoPushToken(token: unknown): token is string {
+  return typeof token === 'string' && /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/.test(token);
+}
+
+// Serialize token changes so a login sync cannot re-enable push after the user turns it off.
+let pushTokenQueue: Promise<void> = Promise.resolve();
+function queuePushTokenChange<T>(operation: () => Promise<T>): Promise<T> {
+  const result = pushTokenQueue.then(operation, operation);
+  pushTokenQueue = result.then(() => {}, () => {});
+  return result;
+}
+
+export async function getPushNotificationSettings() {
+  const preferenceEnabled = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY) !== 'false';
+  const permission = await Notifications.getPermissionsAsync();
+  const permissionGranted = permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  const supported = supportsRemotePushNotifications();
+  return { enabled: preferenceEnabled && permissionGranted && supported, preferenceEnabled, permissionGranted, supported };
+}
 
 // Subaybayan ang active conversation ID
 let currentActiveChatId: string | null = null;
@@ -33,6 +60,17 @@ export function setActiveChatScreen(chatId: string | null) {
 // 1. I-set ang foreground notification handler (ayon sa Expo SDK 54 guidelines)
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
+    const disabled = {
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
+    };
+    try {
+      if (await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === 'false') return disabled;
+    } catch {
+      return disabled;
+    }
     const data = notification?.request?.content?.data as Record<string, any> | undefined;
     const incomingChatId = data?.chatId ? String(data.chatId) : null;
 
@@ -91,6 +129,7 @@ Notifications.addNotificationReceivedListener((notification) => {
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   try {
+    if (await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === 'false') return null;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL_ID, {
         name: 'DiskarTech Alerts & Messages',
@@ -102,17 +141,21 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       });
     }
 
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    const existingPermissions = await Notifications.getPermissionsAsync();
+    const existingStatus = existingPermissions.status;
     let finalStatus = existingStatus;
 
-    if (existingStatus !== 'granted') {
+    if (existingStatus !== 'granted' && existingPermissions.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
-    if (finalStatus !== 'granted') {
+    const permissions = await Notifications.getPermissionsAsync();
+    if (finalStatus !== 'granted' && permissions.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
       return null;
     }
+
+    if (!supportsRemotePushNotifications()) return 'local_granted';
 
     try {
       const projectId =
@@ -177,53 +220,115 @@ export async function getPushDiagnosticInfo(): Promise<{
  * I-save ang Expo Push Token ng kasalukuyang user sa Firestore.
  * Awtomatiko ring tatanggalin ang token na ito sa kahit anong lumang user na dating nag-login sa device na ito.
  */
-export async function registerAndSyncPushToken(userId: string | number): Promise<void> {
+async function syncPushToken(userId: string | number): Promise<PushTokenSyncResult> {
   try {
     const id = String(userId).trim();
-    if (!id || id === 'unknown') return;
+    if (!id || id === 'unknown') return 'sync-failed';
+
+    if (await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === 'false') return 'disabled';
+    if (!supportsRemotePushNotifications()) return 'unavailable';
 
     const token = await registerForPushNotificationsAsync();
-    if (!token || !token.startsWith('ExponentPushToken')) return;
+    if (!isExpoPushToken(token)) {
+      const settings = await getPushNotificationSettings();
+      return settings.permissionGranted ? 'unavailable' : 'permission-denied';
+    }
 
     try {
-      // 1. I-unlink ang device token na ito sa kahit sinong ibang user na dating gumamit ng phone na ito
-      const q = query(collection(db, 'user_push_tokens'), where('push_token', '==', token));
-      const oldTokensSnap = await getDocs(q);
-      for (const oldDoc of oldTokensSnap.docs) {
-        if (oldDoc.id !== id) {
-          await deleteDoc(oldDoc.ref);
-        }
-      }
-
-      // 2. I-save sa kasalukuyang user
+      // Save the active recipient token used by messaging and app updates.
       await setDoc(
         doc(db, 'user_push_tokens', id),
         {
           user_id: id,
           push_token: token,
+          notifications_enabled: true,
           updated_at: serverTimestamp(),
         },
         { merge: true }
       );
+
+      // 2. I-unlink sa ibang lumang accounts kung may kaparehong token
+      try {
+        const q = query(collection(db, 'user_push_tokens'), where('push_token', '==', token));
+        const oldTokensSnap = await getDocs(q);
+        for (const oldDoc of oldTokensSnap.docs) {
+          if (oldDoc.id !== id) {
+            await deleteDoc(oldDoc.ref);
+          }
+        }
+      } catch {
+        // Query might require index or rules, non-critical
+      }
     } catch (fsErr) {
       console.warn('[PushToken] Notice: Ensure user_push_tokens is allowed in Firestore rules:', fsErr);
+      return 'sync-failed';
     }
+
+    // 3. I-sync din sa Laravel backend API para sa students table (kung student)
+    try {
+      await api.post('/student/update-push-token', { expo_push_token: token });
+    } catch {
+      // Non-critical kung hindi naka-login o employer
+    }
+    return 'enabled';
   } catch (err) {
     console.error('Error syncing push token:', err);
+    return 'sync-failed';
   }
+}
+
+export function registerAndSyncPushToken(userId: string | number): Promise<PushTokenSyncResult> {
+  return queuePushTokenChange(() => syncPushToken(userId));
+}
+
+/** Persist the preference and update the recipient record used by chat and app pushes. */
+export function setPushNotificationsEnabled(userId: string | number, enabled: boolean): Promise<PushTokenSyncResult> {
+  return queuePushTokenChange(async () => {
+    const id = String(userId).trim();
+    if (!id || id === 'unknown') return 'sync-failed';
+    const previousPreference = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
+    try {
+      await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, String(enabled));
+      if (enabled) {
+        const result = await syncPushToken(id);
+        if (result === 'enabled') return result;
+        if (previousPreference === null) await AsyncStorage.removeItem(NOTIFICATIONS_ENABLED_KEY);
+        else await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, previousPreference);
+        return result;
+      }
+
+      await setDoc(doc(db, 'user_push_tokens', id), {
+        user_id: id,
+        notifications_enabled: false,
+        push_token: null,
+        updated_at: serverTimestamp(),
+      }, { merge: true });
+      // Existing in-app records stay available; only device alerts are turned off.
+      try { await Notifications.cancelAllScheduledNotificationsAsync(); } catch { /* Preference already saved. */ }
+      return 'disabled';
+    } catch (error) {
+      if (previousPreference === null) await AsyncStorage.removeItem(NOTIFICATIONS_ENABLED_KEY);
+      else await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, previousPreference);
+      console.warn('Unable to update push notification preference:', error);
+      return 'sync-failed';
+    }
+  });
 }
 
 /**
  * Alisin ang push token kapag nag-logout para hindi makatanggap ng notification ng ibang tao.
  */
 export async function clearPushToken(userId: string | number): Promise<void> {
-  try {
-    const id = String(userId).trim();
-    if (!id || id === 'unknown') return;
-    await deleteDoc(doc(db, 'user_push_tokens', id));
-  } catch (e) {
-    console.warn('Error clearing push token on logout:', e);
-  }
+  return queuePushTokenChange(async () => {
+    try {
+      const id = String(userId).trim();
+      if (!id || id === 'unknown') return;
+      await deleteDoc(doc(db, 'user_push_tokens', id));
+      await AsyncStorage.removeItem('expo_push_token');
+    } catch (e) {
+      console.warn('Error clearing push token on logout:', e);
+    }
+  });
 }
 
 /**
@@ -236,10 +341,12 @@ export async function getRecipientPushToken(userId: string | number): Promise<st
 
     const snap = await getDoc(doc(db, 'user_push_tokens', id));
     if (snap.exists()) {
-      return snap.data()?.push_token || null;
+      const data = snap.data();
+      if (data?.notifications_enabled === false) return null;
+      return isExpoPushToken(data?.push_token) ? data.push_token : null;
     }
     return null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -256,7 +363,7 @@ export async function sendRemotePushNotification(params: {
 }): Promise<boolean> {
   try {
     const { toToken, title, body, data } = params;
-    if (!toToken || !toToken.startsWith('ExponentPushToken')) {
+    if (!isExpoPushToken(toToken)) {
       return false;
     }
 
@@ -277,7 +384,10 @@ export async function sendRemotePushNotification(params: {
       }),
     });
 
-    return response.ok;
+    if (!response.ok) return false;
+    const payload = await response.json();
+    const ticket = Array.isArray(payload?.data) ? payload.data[0] : payload?.data;
+    return ticket?.status === 'ok';
   } catch (error) {
     console.error('Error sending remote push notification via Expo:', error);
     return false;
@@ -294,7 +404,7 @@ export async function sendLocalNotification(params: {
 }): Promise<void> {
   try {
     // Check if user disabled notifications in Settings
-    const pref = await AsyncStorage.getItem('notifications_enabled');
+    const pref = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
     if (pref === 'false') return;
 
     await Notifications.scheduleNotificationAsync({
@@ -460,7 +570,7 @@ export interface SendAppNotificationParams {
   senderName?: string;
   title: string;
   body: string;
-  type: 'application' | 'application_status' | 'general';
+  type: 'application' | 'application_status' | 'general' | 'new_job';
   targetId?: string | number;
 }
 
@@ -488,6 +598,11 @@ export async function sendAppNotification(params: SendAppNotificationParams): Pr
     try {
       const recipientToken = await getRecipientPushToken(recipientId);
       if (recipientToken) {
+        const targetUrl =
+          params.type === 'new_job' && params.targetId
+            ? `/students/job-details?id=${params.targetId}`
+            : '/notifications';
+
         await sendRemotePushNotification({
           toToken: recipientToken,
           title: params.title,
@@ -495,7 +610,7 @@ export async function sendAppNotification(params: SendAppNotificationParams): Pr
           data: {
             type: params.type,
             targetId: params.targetId,
-            url: '/notifications',
+            url: targetUrl,
           },
         });
       }
@@ -547,4 +662,3 @@ export function subscribeToAppNotifications(
 
   return unsubscribe;
 }
-

@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -15,6 +16,7 @@ const defaultSchedule = days.map((day) => ({
 }));
 
 export default function ScheduleScreen() {
+  const { colors, isDark } = useDarkMode();
   const [schedule] = useState(defaultSchedule);
   const [conflictResolved, setConflictResolved] = useState(false);
 
@@ -23,25 +25,30 @@ export default function ScheduleScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#F8FAFC]">
-      <View className="flex-row items-center px-6 pt-12 pb-4 bg-white border-b border-gray-100">
+    <View className="flex-1" style={{ backgroundColor: colors.background }}>
+      <View 
+        className="flex-row items-center px-6 pt-12 pb-4 border-b"
+        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
+      >
         <TouchableOpacity 
           onPress={() => router.back()} 
-          className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-4"
+          className="w-10 h-10 rounded-full items-center justify-center mr-4"
+          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
         >
-          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text className="text-2xl font-bold text-slate-900">My Schedule</Text>
+        <Text className="text-2xl font-bold" style={{ color: colors.text }}>My Schedule</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="p-6 pb-10">
         {schedule.map((day) => (
           <View 
             key={day.day} 
-            className={`bg-white rounded-2xl p-4 mb-4 shadow-sm ${day.hasConflict ? 'border-l-4 border-l-[#FF9800]' : ''}`}
+            className={`rounded-2xl p-4 mb-4 shadow-sm border ${day.hasConflict ? 'border-l-4 border-l-[#FF9800]' : ''}`}
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
           >
             <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-lg font-bold text-slate-900">{day.day}</Text>
+              <Text className="text-lg font-bold" style={{ color: colors.text }}>{day.day}</Text>
               {day.hasConflict && (
                 <View className="flex-row items-center gap-1 bg-[#FF9800] px-2.5 py-1 rounded-full">
                   <MaterialIcons name="warning" size={16} color={Colors.white} />
@@ -53,16 +60,22 @@ export default function ScheduleScreen() {
               <View key={job.id} className="flex-row items-start gap-4 mb-3">
                 <View className="w-2.5 h-2.5 rounded-full bg-red-600 mt-1.5" />
                 <View className="flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">{job.title}</Text>
-                  <Text className="text-xs text-slate-500">{job.company}</Text>
-                  <Text className="text-xs text-slate-400 mt-0.5">{job.time}</Text>
+                  <Text className="text-sm font-semibold" style={{ color: colors.text }}>{job.title}</Text>
+                  <Text className="text-xs" style={{ color: colors.textSecondary }}>{job.company}</Text>
+                  <Text className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>{job.time}</Text>
                 </View>
               </View>
             ))}
             {day.hasConflict && !conflictResolved && (
-              <View style={{ backgroundColor: '#FF980010' }} className="rounded-xl p-4 mt-3">
+              <View 
+                style={{ 
+                  backgroundColor: isDark ? 'rgba(255, 152, 0, 0.12)' : '#FF980010',
+                  borderColor: isDark ? 'rgba(255, 152, 0, 0.25)' : '#FFE0B2',
+                }} 
+                className="rounded-xl p-4 mt-3 border"
+              >
                 <Text className="text-sm font-semibold text-[#FF9800] mb-1">AI Conflict Detection</Text>
-                <Text className="text-xs text-slate-500 mb-3">This job overlaps with your existing schedule. What would you like to do?</Text>
+                <Text className="text-xs mb-3" style={{ color: colors.textSecondary }}>This job overlaps with your existing schedule. What would you like to do?</Text>
                 <View className="flex-row gap-2">
                   <TouchableOpacity className="flex-row items-center gap-1 bg-red-600 px-4 py-2 rounded-xl" onPress={() => handleConflict(true)}>
                     <MaterialIcons name="block" size={18} color={Colors.white} />

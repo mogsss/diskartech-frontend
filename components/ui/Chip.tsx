@@ -3,6 +3,7 @@ import { BorderRadius, Spacing, Typography } from '@/constants/typography';
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface ChipProps {
   label: string;
@@ -24,6 +25,11 @@ export default function Chip({
   variant = 'filled',
 }: ChipProps) {
   const isFilled = variant === 'filled';
+  const { isDark, colors } = useDarkMode();
+
+  const unselectedBg = isFilled ? (isDark ? '#334155' : Colors.gray100) : 'transparent';
+  const unselectedBorder = isDark ? '#475569' : Colors.border;
+  const unselectedTextColor = isDark ? '#E2E8F0' : Colors.textSecondary;
 
   return (
     <TouchableOpacity
@@ -32,23 +38,25 @@ export default function Chip({
       activeOpacity={0.7}
       style={[
         styles.chip,
-        isFilled ? styles.filled : styles.outlined,
-        selected && (isFilled ? styles.selectedFilled : styles.selectedOutlined),
+        {
+          backgroundColor: selected ? Colors.primary : unselectedBg,
+          borderColor: selected ? Colors.primary : unselectedBorder,
+          borderWidth: isFilled ? 0 : 1.5,
+        },
       ]}
     >
       {icon && (
         <MaterialIcons
           name={icon}
           size={16}
-          color={selected ? Colors.white : Colors.textSecondary}
+          color={selected ? Colors.white : unselectedTextColor}
           style={styles.icon}
         />
       )}
       <Text
         style={[
           styles.label,
-          isFilled ? styles.filledLabel : styles.outlinedLabel,
-          selected && styles.selectedLabel,
+          { color: selected ? Colors.white : unselectedTextColor },
         ]}
       >
         {label}

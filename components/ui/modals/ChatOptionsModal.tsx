@@ -1,7 +1,7 @@
-import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface ChatOptionsModalProps {
   visible: boolean;
@@ -18,42 +18,94 @@ export default function ChatOptionsModal({
   onClearChat,
   onBlockUser,
 }: ChatOptionsModalProps) {
+  const { colors, isDark } = useDarkMode();
+
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View className="flex-1 justify-end bg-black/50">
-        <View className="bg-white rounded-t-3xl p-6 pb-10 shadow-lg">
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.6)' }}>
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            padding: 24,
+            paddingBottom: 40,
+            borderTopWidth: 1,
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
           {/* Header */}
-          <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
-            <Text className="text-lg font-bold text-slate-900">Options</Text>
-            <TouchableOpacity onPress={onClose}>
-              <MaterialIcons name="close" size={24} color={Colors.text} />
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 16,
+              paddingBottom: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>Options</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <MaterialIcons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
 
           {/* Action List */}
-          <View className="gap-2">
-            <TouchableOpacity 
+          <View style={{ gap: 8 }}>
+            <TouchableOpacity
               onPress={onViewProfile}
-              className="flex-row items-center py-3.5 px-4 rounded-2xl bg-gray-50 border border-gray-100"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                borderRadius: 16,
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC',
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
             >
-              <MaterialIcons name="person-outline" size={20} color={Colors.text} style={{ marginRight: 12 }} />
-              <Text className="text-base font-semibold text-slate-800">View Profile</Text>
+              <MaterialIcons name="person-outline" size={20} color={colors.text} style={{ marginRight: 12 }} />
+              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>View Profile</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={onClearChat}
-              className="flex-row items-center py-3.5 px-4 rounded-2xl bg-gray-50 border border-gray-100"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                borderRadius: 16,
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC',
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
             >
-              <MaterialIcons name="delete-outline" size={20} color={Colors.text} style={{ marginRight: 12 }} />
-              <Text className="text-base font-semibold text-slate-800">Clear Chat</Text>
+              <MaterialIcons name="delete-outline" size={20} color={colors.text} style={{ marginRight: 12 }} />
+              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Clear Chat</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={onBlockUser}
-              className="flex-row items-center py-3.5 px-4 rounded-2xl bg-red-50 border border-red-100 mt-2"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                borderRadius: 16,
+                backgroundColor: isDark ? 'rgba(220, 38, 38, 0.15)' : '#FEF2F2',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(220, 38, 38, 0.3)' : '#FEE2E2',
+                marginTop: 8,
+              }}
             >
-              <MaterialIcons name="block" size={20} color="#DC2626" style={{ marginRight: 12 }} />
-              <Text className="text-base font-semibold text-red-600">Block User</Text>
+              <MaterialIcons name="block" size={20} color={colors.accent} style={{ marginRight: 12 }} />
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#EF4444' }}>Block User</Text>
             </TouchableOpacity>
           </View>
         </View>

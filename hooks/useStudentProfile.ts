@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { clearPushToken } from '@/utils/notifications';
+import api, { BACKEND_URL, STORAGE_URL } from '@/api/axios';
 
 export function useStudentProfile() {
   const [studentName, setStudentName] = useState('Junnyl Mabini');
@@ -13,18 +14,27 @@ export function useStudentProfile() {
   const [yearLevel, setYearLevel] = useState('Not specified');
   const [location, setLocation] = useState('Not specified');
   const [isVerified, setIsVerified] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [rating, setRating] = useState<number>(5.0);
+  const [reviewCount, setReviewCount] = useState<number>(0);
   
   const [profilePicUri, setProfilePicUri] = useState<string | null>(null);
 
   // 👇 GINAWANG STRING | NULL PARA MA-SAVE ANG FILENAME
   const [uploadedDocs, setUploadedDocs] = useState<{
     student_resume: string | null;
+    student_resume_raw?: string | null;
     school_id: string | null;
+    school_id_raw?: string | null;
     coe: string | null;
+    coe_raw?: string | null;
   }>({
     student_resume: null,
+    student_resume_raw: null,
     school_id: null,
-    coe: null
+    school_id_raw: null,
+    coe: null,
+    coe_raw: null
   });
 
   const [skills, setSkills] = useState<string[]>([]);
@@ -63,19 +73,25 @@ export function useStudentProfile() {
         if (profile.year_level) setYearLevel(profile.year_level);
         if (profile.location) setLocation(profile.location);
         if (profile.isVerified !== undefined) setIsVerified(profile.isVerified);
+        if (profile.rejection_reason !== undefined) setRejectionReason(profile.rejection_reason);
+        if (profile.rating !== undefined) setRating(Number(profile.rating));
+        if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
 
         if (profile.avatar) {
           const fullAvatarUrl = profile.avatar.startsWith('http')
             ? profile.avatar
-            : `http://192.168.1.2:8000/storage/${profile.avatar}`;
+            : `${STORAGE_URL}${profile.avatar}`;
           setProfilePicUri(fullAvatarUrl);
         }
 
-        // 👇 IN-UPDATE PARA GAMITIN ANG GETFILENAME
+        // 👇 IN-UPDATE PARA GAMITIN ANG GETFILENAME AT RAW PATHS
         setUploadedDocs({
           student_resume: getFilename(profile.student_resume),
+          student_resume_raw: profile.student_resume,
           school_id: getFilename(profile.school_id),
-          coe: getFilename(profile.coe)
+          school_id_raw: profile.school_id,
+          coe: getFilename(profile.coe),
+          coe_raw: profile.coe,
         });
 
         if (profile.skillset && Array.isArray(profile.skillset)) {
@@ -92,6 +108,59 @@ export function useStudentProfile() {
         const user = JSON.parse(storedUser);
         if (user.email) setStudentEmail(user.email);
       }
+
+      // Live sync mula sa backend API
+      try {
+        const response = await api.get('/user/profile');
+        const apiProfile = response.data?.profile;
+        const apiRating = response.data?.rating !== undefined ? Number(response.data.rating) : 5.0;
+        const apiReviewCount = response.data?.review_count !== undefined ? Number(response.data.review_count) : 0;
+        setRating(apiRating);
+        setReviewCount(apiReviewCount);
+
+        if (apiProfile) {
+          apiProfile.rating = apiRating;
+          apiProfile.review_count = apiReviewCount;
+          if (apiProfile.student_name) setStudentName(apiProfile.student_name);
+          if (apiProfile.student_school_name) setSchool(apiProfile.student_school_name);
+          if (apiProfile.course) setCourse(apiProfile.course);
+          if (apiProfile.year_level) setYearLevel(apiProfile.year_level);
+          if (apiProfile.location) setLocation(apiProfile.location);
+          if (apiProfile.isVerified !== undefined) {
+            const verifiedBool = apiProfile.isVerified === 1 || apiProfile.isVerified === true || apiProfile.isVerified === '1';
+            setIsVerified(verifiedBool);
+          }
+          if (apiProfile.rejection_reason !== undefined) setRejectionReason(apiProfile.rejection_reason);
+
+          if (apiProfile.avatar) {
+            const fullAvatarUrl = apiProfile.avatar.startsWith('http')
+              ? apiProfile.avatar
+              : `${STORAGE_URL}${apiProfile.avatar}`;
+            setProfilePicUri(fullAvatarUrl);
+          }
+
+          setUploadedDocs({
+            student_resume: getFilename(apiProfile.student_resume),
+            student_resume_raw: apiProfile.student_resume,
+            school_id: getFilename(apiProfile.school_id),
+            school_id_raw: apiProfile.school_id,
+            coe: getFilename(apiProfile.coe),
+            coe_raw: apiProfile.coe,
+          });
+
+          if (apiProfile.skillset && Array.isArray(apiProfile.skillset)) {
+            setSkills(apiProfile.skillset);
+          }
+
+          if (apiProfile.available_days) setSelectedDays(apiProfile.available_days);
+          if (apiProfile.time_slot) setSelectedTimeSlot(apiProfile.time_slot);
+
+          await AsyncStorage.setItem('userProfile', JSON.stringify(apiProfile));
+        }
+      } catch (apiErr: any) {
+        console.warn('⚠️ Failed to sync student profile with backend:', apiErr?.response?.data || apiErr?.message);
+      }
+
     } catch (error) {
       console.error('Error loading student profile from storage:', error);
     }
@@ -99,13 +168,20 @@ export function useStudentProfile() {
 
   useEffect(() => {
     fetchStudentProfile();
+
+    // Live auto-polling bawat 3 segundo para live ang verification status ng student
+    const pollInterval = setInterval(() => {
+      fetchStudentProfile();
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   const handleSaveAvailability = async (days: string[], timeSlot: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
 
-      const response = await fetch('http://192.168.1.2:8000/api/student/update-availability', {
+      const response = await fetch(`${BACKEND_URL}/api/student/update-availability`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,7 +236,7 @@ export function useStudentProfile() {
     try {
       const token = await AsyncStorage.getItem('userToken');
 
-      const response = await fetch('http://192.168.1.2:8000/api/student/update-skills', {
+      const response = await fetch(`${BACKEND_URL}/api/student/update-skills`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -224,7 +300,7 @@ export function useStudentProfile() {
 
       const token = await AsyncStorage.getItem('userToken');
 
-      const response = await fetch('http://192.168.1.2:8000/api/student/upload-doc', {
+      const response = await fetch(`${BACKEND_URL}/api/student/upload-doc`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -245,10 +321,11 @@ export function useStudentProfile() {
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
 
-        // 👇 IN-UPDATE PARA MAG-REFLECT AGAD ANG FILENAME SA SCREEN
+        // 👇 IN-UPDATE PARA MAG-REFLECT AGAD ANG FILENAME AT RAW PATH SA SCREEN
         setUploadedDocs(prev => ({
           ...prev,
-          [documentType]: getFilename(newPath)
+          [documentType]: getFilename(newPath),
+          [`${documentType}_raw`]: newPath,
         }));
 
         showAlertModal({
@@ -291,7 +368,7 @@ export function useStudentProfile() {
   const handleLogout = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      await fetch('http://192.168.1.2:8000/api/logout', {
+      await fetch(`${BACKEND_URL}/api/logout`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -343,7 +420,7 @@ export function useStudentProfile() {
 
       const token = await AsyncStorage.getItem('userToken');
 
-      const response = await fetch('http://192.168.1.2:8000/api/student/upload-doc', {
+      const response = await fetch(`${BACKEND_URL}/api/student/upload-doc`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -364,7 +441,7 @@ export function useStudentProfile() {
 
       if (response.ok) {
         const newPath = data.file_path || data.profile_picture;
-        const fullUrl = `http://192.168.1.2:8000/storage/${newPath}`;
+        const fullUrl = `${STORAGE_URL}${newPath}`;
         
         setProfilePicUri(fullUrl); 
 
@@ -402,11 +479,11 @@ export function useStudentProfile() {
   };
 
   return {
-    studentName, studentEmail, school, course, yearLevel, location, isVerified, profilePicUri, uploadedDocs,
+    studentName, studentEmail, school, course, yearLevel, location, isVerified, rejectionReason, rating, reviewCount, profilePicUri, uploadedDocs,
     skills, isAddSkillModalVisible, setAddSkillModalVisible, handleSaveSkills,
     selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
     isLogoutModalVisible, setLogoutModalVisible, handleLogout,
     alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
-    handleUploadDocument, handleUploadProfilePic
+    handleUploadDocument, handleUploadProfilePic, fetchStudentProfile
   };
 }

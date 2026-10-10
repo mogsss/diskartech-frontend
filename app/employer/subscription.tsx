@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -23,8 +24,8 @@ const paymentChannels = [
   { id: 'card', name: 'Credit / Debit Card', icon: 'payment' },
 ];
 
-// Mahalaga na may "export default" dito
 export default function SubscriptionScreen() {
+  const { colors, isDark } = useDarkMode();
   const [selectedPlan, setSelectedPlan] = useState('pro');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annually'>('monthly');
   const [selectedChannel, setSelectedChannel] = useState('gcash');
@@ -39,17 +40,24 @@ export default function SubscriptionScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#F8FAFC]">
+    <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {/* Header */}
-      <View className="flex-row items-center px-6 pt-12 pb-4 bg-white border-b border-gray-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4">
-          <MaterialIcons name="arrow-back" size={24} color={Colors.text} />
+      <View 
+        className="flex-row items-center px-6 pt-12 pb-4 border-b"
+        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
+      >
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          className="w-10 h-10 rounded-full items-center justify-center mr-4"
+          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+        >
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text className="text-xl font-bold text-slate-900">Manage Subscription</Text>
+        <Text className="text-xl font-bold" style={{ color: colors.text }}>Manage Subscription</Text>
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="p-6 pb-10" showsVerticalScrollIndicator={false}>
-        <Text className="text-base font-bold text-slate-900 mb-3">Choose Your Plan</Text>
+        <Text className="text-base font-bold mb-3" style={{ color: colors.text }}>Choose Your Plan</Text>
         
         {/* Plan Cards */}
         {plans.map((plan) => {
@@ -66,57 +74,77 @@ export default function SubscriptionScreen() {
             <TouchableOpacity
               key={plan.id}
               onPress={() => setSelectedPlan(plan.id)}
-              className={`bg-white rounded-2xl p-5 mb-3 border-2 ${
-                isSelected ? 'border-red-600 bg-red-50/20' : 'border-gray-100'
-              }`}
+              className="rounded-2xl p-5 mb-3 border-2"
+              style={{
+                backgroundColor: isSelected 
+                  ? (isDark ? 'rgba(220, 38, 38, 0.12)' : 'rgba(254, 242, 242, 0.7)') 
+                  : colors.surface,
+                borderColor: isSelected ? '#DC2626' : colors.border,
+              }}
             >
               <View className="flex-row justify-between items-center mb-1">
                 <View className="flex-row items-center gap-2">
-                  <Text className="text-lg font-bold text-slate-900">{plan.name}</Text>
+                  <Text className="text-lg font-bold" style={{ color: colors.text }}>{plan.name}</Text>
                   {plan.id === 'pro' && (
-                    <View className="bg-red-100 px-2 py-0.5 rounded-full">
+                    <View 
+                      className="px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.25)' : '#FEE2E2' }}
+                    >
                       <Text className="text-[10px] font-bold text-red-600 uppercase">Popular</Text>
                     </View>
                   )}
                 </View>
                 <Text className="text-base font-extrabold text-red-600">
-                  {displayPrice} <Text className="text-xs text-slate-500 font-normal">{displayPeriod}</Text>
+                  {displayPrice} <Text className="text-xs font-normal" style={{ color: colors.textSecondary }}>{displayPeriod}</Text>
                 </Text>
               </View>
-              <Text className="text-xs text-slate-500">{plan.description}</Text>
+              <Text className="text-xs" style={{ color: colors.textSecondary }}>{plan.description}</Text>
             </TouchableOpacity>
           );
         })}
 
         {/* Billing Cycle Choices (Monthly / Annually) para sa Pro Plan */}
         {selectedPlan === 'pro' && (
-          <View className="bg-white rounded-2xl p-4 mb-4 border border-gray-100 shadow-sm">
-            <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Billing Cycle</Text>
+          <View 
+            className="rounded-2xl p-4 mb-4 border shadow-sm"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          >
+            <Text className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>Billing Cycle</Text>
             <View className="flex-row gap-2">
               <TouchableOpacity
                 onPress={() => setBillingCycle('monthly')}
-                className={`flex-1 py-3 rounded-xl items-center justify-center border ${
-                  billingCycle === 'monthly' ? 'bg-red-600 border-red-600' : 'bg-gray-50 border-gray-200'
-                }`}
+                className="flex-1 py-3 rounded-xl items-center justify-center border"
+                style={{
+                  backgroundColor: billingCycle === 'monthly' ? '#DC2626' : (isDark ? colors.background : '#F8FAFC'),
+                  borderColor: billingCycle === 'monthly' ? '#DC2626' : colors.border,
+                }}
               >
-                <Text className={`text-xs font-bold ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-700'}`}>
+                <Text 
+                  className="text-xs font-bold"
+                  style={{ color: billingCycle === 'monthly' ? '#FFFFFF' : colors.text }}
+                >
                   Monthly (₱149)
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => setBillingCycle('annually')}
-                className={`flex-1 py-3 rounded-xl items-center justify-center border ${
-                  billingCycle === 'annually' ? 'bg-red-600 border-red-600' : 'bg-gray-50 border-gray-200'
-                }`}
+                className="flex-1 py-3 rounded-xl items-center justify-center border"
+                style={{
+                  backgroundColor: billingCycle === 'annually' ? '#DC2626' : (isDark ? colors.background : '#F8FAFC'),
+                  borderColor: billingCycle === 'annually' ? '#DC2626' : colors.border,
+                }}
               >
-                <Text className={`text-xs font-bold ${billingCycle === 'annually' ? 'text-white' : 'text-slate-700'}`}>
+                <Text 
+                  className="text-xs font-bold"
+                  style={{ color: billingCycle === 'annually' ? '#FFFFFF' : colors.text }}
+                >
                   Annually (₱1,490) 
                 </Text>
               </TouchableOpacity>
             </View>
             {billingCycle === 'annually' && (
-              <Text className="text-[11px] text-emerald-600 font-semibold text-center mt-2">🎉 You save ₱298 with annual billing!</Text>
+              <Text className="text-[11px] text-emerald-500 font-semibold text-center mt-2">🎉 You save ₱298 with annual billing!</Text>
             )}
           </View>
         )}
@@ -124,21 +152,28 @@ export default function SubscriptionScreen() {
         {/* Payment Channels */}
         {selectedPlan === 'pro' && (
           <>
-            <Text className="text-base font-bold text-slate-900 mb-3 mt-2">Select Payment Channel</Text>
+            <Text className="text-base font-bold mb-3 mt-2" style={{ color: colors.text }}>Select Payment Channel</Text>
             {paymentChannels.map((channel) => (
               <TouchableOpacity
                 key={channel.id}
                 onPress={() => setSelectedChannel(channel.id)}
-                className={`flex-row items-center bg-white rounded-xl p-4 mb-2.5 border ${
-                  selectedChannel === channel.id ? 'border-red-600 bg-red-50/10' : 'border-gray-100'
-                }`}
+                className="flex-row items-center rounded-xl p-4 mb-2.5 border"
+                style={{
+                  backgroundColor: selectedChannel === channel.id 
+                    ? (isDark ? 'rgba(220, 38, 38, 0.12)' : 'rgba(254, 242, 242, 0.6)') 
+                    : colors.surface,
+                  borderColor: selectedChannel === channel.id ? '#DC2626' : colors.border,
+                }}
               >
-                <MaterialIcons name={channel.icon as any} size={22} color={selectedChannel === channel.id ? '#D32F2F' : Colors.text} />
-                <Text className={`text-sm font-semibold ml-3 flex-1 ${selectedChannel === channel.id ? 'text-red-600 font-bold' : 'text-slate-900'}`}>
+                <MaterialIcons name={channel.icon as any} size={22} color={selectedChannel === channel.id ? '#DC2626' : colors.textSecondary} />
+                <Text 
+                  className="text-sm font-semibold ml-3 flex-1"
+                  style={{ color: selectedChannel === channel.id ? '#DC2626' : colors.text }}
+                >
                   {channel.name}
                 </Text>
                 {selectedChannel === channel.id && (
-                  <MaterialIcons name="check-circle" size={20} color="#D32F2F" />
+                  <MaterialIcons name="check-circle" size={20} color={colors.accent} />
                 )}
               </TouchableOpacity>
             ))}

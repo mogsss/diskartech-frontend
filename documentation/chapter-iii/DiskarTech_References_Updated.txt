@@ -1,0 +1,138 @@
+References
+Abejo, C. G., Adanza, D. R. A. G., Salvador, H. N., Uy, M. N. J., Indoc, S. M. P., & Abiol, M. J. D. (2023). The influence of interpersonal skills of working students on client service satisfaction in a higher educational institution. International Journal of Multidisciplinary: Applied Business and Education Research, 4(11), 3966–3972. https://doi.org/10.11594/ijmaber.04.11.16
+Android Developers. (2025). Android Developers documentation. https://developer.android.com/
+Android Developers. (2025). Android Emulator. https://developer.android.com/studio/run/emulator
+Anthropic. (2025). Intro to Claude. Anthropic. https://docs.anthropic.com/en/docs/welcome 
+Arsenal, X. P. M. A., Alcoriza, K. C. S., Lanorias, N. K. S., Aquino, Z. A. R., & Fonellera, R. M. L. (2025). Managing finances: The lived experiences of working students. IOER International Multidisciplinary Research Journal, 7(3), 112–125. https://doi.org/10.54476/ioer-imrj/034768
+Bernardo, D. (2026, March 27). Sleep deprivation, burnout, dropout risk among working students’ primary struggles. Daily Tribune. https://tribune.net.ph/2026/03/27/sleep-deprivation-burnout-dropout-risk-among-working-students-primary-struggles
+Biradar, A., Ainapur, J., Kalyanrao, K., Aishwarya, A., Sudharani, S., Shivaleela, S., & Monika, M. (2024). The impact of artificial intelligence on modern recruitment practices: A multi-company case study analysis. International Journal of Business and Management Invention, 13, 143–150. https://doi.org/10.35629/8028-1309143150 
+Cacho, J. L., Arago, R. F., & Apusaga, N. C. (2023). Impact of part-time job on academic performance of 3rd year college student in Quezon City University. QCU The Lamp: Journal of Education, 1(1). https://doi.org/10.64807/r4wy2b89
+Commission on Higher Education. (2024). CHED launches admission, retention research amid high attrition rate. Philippine News Agency. https://www.pna.gov.ph/articles/1218670
+Fetalvero, S. (2024). Predictors of attitude and intention to use e-recruitment among Human Resource Management practitioners in the Province of Romblon. Romblon State University Research Journal, 6(1), 9–18. https://doi.org/10.58780/rsurj.v6i1.168
+Fernando, A. N., Singh, N., & Tourek, G. (2023). Hiring frictions and the promise of online job portals: Evidence from India. American Economic Review: Insights, 5(4), 546–562. https://doi.org/10.1257/aeri.20220566
+Firebase. (2025). Cloud Storage for Firebase. https://firebase.google.com/docs/storage
+Firebase. (2025). Firebase documentation. https://firebase.google.com/docs
+Fitroh, F., Hidayatuloh, S., Putri, A. F. M., Durachman, Y., et al. (2024). Level of readiness and user acceptance of e-recruitment applications: Systematic literature review. Proceedings of the 2024 12th International Conference on Cyber and IT Service Management (CITSM). https://doi.org/10.1109/CITSM64103.2024.10775318
+Fradkin, A., Bhole, M., & Horton, J. J. (2025). Competition avoidance vs. herding in job search: Evidence from large-scale field experiments on an online job board. Management Science. https://doi.org/10.1287/mnsc.2023.02483
+GitHub Docs. (n.d.). About Git. https://docs.github.com/en/get-started/start-your-journey/about-git
+Google AI. (2025). Gemini API documentation. https://ai.google.dev/
+IBM. (2024). What is a software development kit (SDK)? https://www.ibm.com/think/topics/sdk
+International Labour Organization. (2025). Survey on workers on web-based digital platforms: New data for the Latin America and the Caribbean region. International Labour Organization. https://doi.org/10.54394/NDVQ0600 
+Indeed. (n.d.). About Indeed. https://www.indeed.com/about
+Iñigo, L., Orcullo, R., Rivas, B. M., & Lacson, D. A. (2024). Self-efficacy, perceived social support, and academic performance of working students. Psychology and Education: A Multidisciplinary Journal, 22(7), 751–756. https://doi.org/10.5281/zenodo.12854209
+JobStreet. (n.d.). About us. https://www.jobstreet.com.ph/about-us 
+Kelley, E. M., Ksoll, C., & Magruder, J. (2024). How do digital platforms affect employment and job search? Evidence from India. Journal of Development Economics, 166, 103176. https://doi.org/10.1016/j.jdeveco.2023.103176
+Kokkodis, M., & Ipeirotis, P. G. (2023). The good, the bad, and the unhirable: Recommending job applicants in online labor markets. Management Science. https://doi.org/10.1287/mnsc.2023.4690
+Koman, G., Toman, D., Jankal, R., & Boršoš, P. (2024). The importance of e-recruitment within a smart government framework. Systems, 12(3), 71. https://doi.org/10.3390/systems12030071
+Kurek, J., Latkowski, T., Bukowski, M., Świderski, B., Łępicki, M., Baranik, G., Nowak, B., Zakowicz, R., & Dobrakowski, Ł. (2024). Zero-shot recommendation AI models for efficient job–candidate matching in recruitment process. Applied Sciences, 14(6), 2601. https://doi.org/10.3390/app14062601
+Laravel. (2026). Laravel documentation. https://laravel.com/docs 
+LinkedIn. (n.d.). About LinkedIn. https://about.linkedin.com/
+Mariano, L. A., Madel, N. S., & Miranda, A. T. (2022). The relationship between time management skills and academic performance of working students in Open High School Program. Asian Journal of Education and Social Studies, 36(2), 61–66. https://doi.org/10.9734/ajess/2022/v36i2776
+Meta Platforms, Inc. (2025). React Native documentation. https://reactnative.dev/
+Microsoft. (2025). Visual Studio Code documentation. https://code.visualstudio.com/docs
+Moskito, C. C., Montejo, C. J., Tanilon, P. J., Vicencio, J. M., Dansalan, B., Mambayao, Y., & Capilitan, A. J. (2025). Time, task, and tenacity: Understanding the challenges of working students in higher education. Psychology and Education: A Multidisciplinary Journal, 43(8), 982–985. https://doi.org/10.70838/pemj.430804
+Municipality of Pinamalayan. (2019). Comprehensive Development Plan 2019–2028 (Vols. I–II). https://www.pinamalayan.gov.ph/official-documents-2/
+NativeWind. (2025). NativeWind documentation. https://www.nativewind.dev/
+OpenAI. (2026). Code generation. https://developers.openai.com/api/docs/guides/code-generation
+OpenJS Foundation. (2025). Node.js documentation. https://nodejs.org/docs/latest/api/
+OpenStreetMap Foundation. (2025). OpenStreetMap Wiki. https://wiki.openstreetmap.org/
+Oracle Corporation. (2025). What is SQL? https://www.oracle.com/database/what-is-sql/
+Pablico, C. S. E. (2021). Private e-recruitment for local employment: An ex-ante regulatory impact analysis. Department of Labor and Employment – Institute for Labor Studies. https://ils.dole.gov.ph/employment/2021-emp/private-e-recruitment-for-local-employment-an-exante-regulatory-impact-analysis
+Pagon, R. J. P., & Ponce, C. A. L. (2024). Experience and perception of working students: Study, work and academic performance. Philippine e-Journals. https://ejournals.ph/article.php?id=23011
+PayMongo. (2025). Developer documentation. https://developers.paymongo.com/
+Philippine Statistics Authority. (2025, July 22). 2024 Census of Population (POPCEN): Pinamalayan, Oriental Mindoro. Regional Statistical Services Office MIMAROPA. https://rssomimaropa.psa.gov.ph/system/files/attachment-dir/2024%20Census%20of%20Population%20%28POPCEN%29%20%E2%80%93%20Pinamalayan%2C%20Oriental%20Mindoro.pdf
+Philippine Statistics Authority–MIMAROPA. (2024). Annual Regional Labor Market Statistics (2023 preliminary results). Regional Statistical Services Office MIMAROPA. https://rssomimaropa.psa.gov.ph/statistics/labor-force-survey/node/1684058501
+Pineda, C. N. P., & Cayabyab, L. A. S. (2023). Facilitating employment opportunities in the digital space: A study on the activities and services of digital labor market intermediaries in the Philippines. Department of Labor and Employment – Institute for Labor Studies. https://ils.dole.gov.ph/2023-research-papers/facilitating-employment-opportunities-in-the-digital-space-a-study-on-the-activities-and-services-of-digital-labor-market-intermediaries-in-the-philippines
+Red Hat. (2024). What is a REST API? https://www.redhat.com/en/topics/api/what-is-a-rest-api 
+Signore, C., Della Piana, B., & Di Vincenzo, F. (2023). Digital job searching and recruitment platforms: A semi-systematic literature review. In Methodologies and Intelligent Systems for Technology Enhanced Learning Workshops (Lecture Notes in Networks and Systems, Vol. 769, pp. 313–322). Springer. https://doi.org/10.1007/978-3-031-42134-1_31
+Son, A. M. E. (2022). Generation Z in the Philippine labor force: Profile, perspectives, and prospects. Department of Labor and Employment – Institute for Labor Studies. https://ils.dole.gov.ph/2022-research-papers/generation-z-in-the-philippine-labor-force-profile-perspectives-and-prospects
+Tailwind Labs. (2025). Tailwind CSS documentation. https://tailwindcss.com/docs
+World Bank. (2023). Working without borders: The promise and peril of online gig work. World Bank Group. https://www.s4ye.org/sites/default/files/2023-05/Online%20Gig%20economy_Pages.pdf
+
+Aiven. (n.d.). Aiven for MySQL. Retrieved October 8, 2026, from https://aiven.io/docs/products/mysql
+
+Alpine.js. (n.d.). Alpine.js. Retrieved October 8, 2026, from https://alpinejs.dev/
+
+Apache Software Foundation. (n.d.). Apache HTTP Server version 2.4 documentation. Retrieved October 8, 2026, from https://httpd.apache.org/docs/2.4/
+
+Axios. (n.d.). First steps. Retrieved October 8, 2026, from https://axios.rest/pages/getting-started/first-steps
+
+Composer. (n.d.). Introduction. Retrieved October 8, 2026, from https://getcomposer.org/doc/00-intro.md
+
+Docker. (n.d.). What is Docker?. Retrieved October 8, 2026, from https://docs.docker.com/get-started/docker-overview/
+
+Expo. (n.d.-a). AsyncStorage. Retrieved October 8, 2026, from https://docs.expo.dev/versions/v54.0.0/sdk/async-storage/
+
+Expo. (n.d.-b). EAS Build. Retrieved October 8, 2026, from https://docs.expo.dev/build/introduction/
+
+Expo. (n.d.-c). Expo push notifications: Overview. Retrieved October 8, 2026, from https://docs.expo.dev/push-notifications/overview/
+
+Expo. (n.d.-d). Expo SDK 54 reference. Retrieved October 8, 2026, from https://docs.expo.dev/versions/v54.0.0/
+
+Expo. (n.d.-e). Introduction to Expo Router. Retrieved October 8, 2026, from https://docs.expo.dev/router/introduction/
+
+Expo. (n.d.-f). Location. Retrieved October 8, 2026, from https://docs.expo.dev/versions/v54.0.0/sdk/location/
+
+Expo. (n.d.-g). Notifications. Retrieved October 8, 2026, from https://docs.expo.dev/versions/v54.0.0/sdk/notifications/
+
+Expo. (n.d.-h). React Native WebView. Retrieved October 8, 2026, from https://docs.expo.dev/versions/v54.0.0/sdk/webview/
+
+Git. (n.d.). About version control. Retrieved October 8, 2026, from https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control
+
+GitHub. (n.d.). What is GitHub?. Retrieved October 8, 2026, from https://docs.github.com/en/get-started/start-your-journey/what-is-github
+
+Google. (n.d.-a). Cloud Firestore. Retrieved October 8, 2026, from https://firebase.google.com/docs/firestore
+
+Google. (n.d.-b). Create and send email messages. Retrieved October 8, 2026, from https://developers.google.com/workspace/gmail/api/guides/sending
+
+Google. (n.d.-e). Using OAuth 2.0 for web server applications. Retrieved October 8, 2026, from https://developers.google.com/identity/protocols/oauth2/web-server
+
+Laravel. (n.d.-a). Blade templates. Retrieved October 8, 2026, from https://laravel.com/framework/docs/12.x/blade
+
+Laravel. (n.d.-b). File storage. Retrieved October 8, 2026, from https://laravel.com/framework/docs/12.x/filesystem
+
+Laravel. (n.d.-c). Laravel 12.x installation. Retrieved October 8, 2026, from https://laravel.com/framework/docs/12.x
+
+Laravel. (n.d.-d). Laravel Sanctum. Retrieved October 8, 2026, from https://laravel.com/framework/docs/12.x/sanctum
+
+Leaflet. (n.d.). Leaflet: A JavaScript library for interactive maps. Retrieved October 8, 2026, from https://leafletjs.com/
+
+MapLibre. (n.d.). Introduction to MapLibre GL JS. Retrieved October 8, 2026, from https://maplibre.org/maplibre-gl-js/docs/
+
+MDN Web Docs. (n.d.-a). Introduction to JavaScript. Retrieved October 8, 2026, from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Introduction
+
+MDN Web Docs. (n.d.-b). Overview of HTTP. Retrieved October 8, 2026, from https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview
+
+Meta Platforms, Inc. (n.d.). Introduction to React Native. Retrieved October 8, 2026, from https://reactnative.dev/docs/getting-started
+
+Microsoft. (n.d.-a). The TypeScript handbook. Retrieved October 8, 2026, from https://www.typescriptlang.org/docs/handbook/intro.html
+
+NativeWind. (n.d.). Overview. Retrieved October 8, 2026, from https://www.nativewind.dev/docs
+
+Node.js. (n.d.). Introduction to Node.js. Retrieved October 8, 2026, from https://nodejs.org/learn/getting-started/introduction-to-nodejs
+
+Nominatim. (n.d.). Reverse geocoding. Retrieved October 8, 2026, from https://nominatim.org/release-docs/latest/api/Reverse/
+
+npm. (n.d.). About npm. Retrieved October 8, 2026, from https://docs.npmjs.com/about-npm/
+
+OpenAI. (n.d.-b). GPT-4o mini. Retrieved October 8, 2026, from https://developers.openai.com/api/docs/models/gpt-4o-mini
+
+OpenStreetMap Foundation. (n.d.). About OpenStreetMap. Retrieved October 8, 2026, from https://www.openstreetmap.org/about
+
+Oracle. (n.d.-a). SQL statements. Retrieved October 8, 2026, from https://dev.mysql.com/doc/refman/8.4/en/sql-statements.html
+
+Oracle. (n.d.-b). What is MySQL?. Retrieved October 8, 2026, from https://dev.mysql.com/doc/refman/8.4/en/what-is-mysql.html
+
+PHPUnit. (n.d.). PHPUnit 11.5 manual. Retrieved October 8, 2026, from https://docs.phpunit.de/en/11.5/
+
+Project OSRM. (n.d.). OSRM API documentation. Retrieved October 9, 2026, from https://project-osrm.org/docs/v5.24.0/api/
+
+React Native Google Sign In. (n.d.). Original Google sign in. Retrieved October 9, 2026, from https://react-native-google-signin.github.io/docs/original
+
+Render. (n.d.). Docker on Render. Retrieved October 8, 2026, from https://render.com/docs/docker
+
+Tailwind Labs. (n.d.). Styling with utility classes. Retrieved October 8, 2026, from https://tailwindcss.com/docs/styling-with-utility-classes
+
+The PHP Group. (n.d.). Introduction. Retrieved October 8, 2026, from https://www.php.net/manual/en/introduction.php
+
+Vite. (n.d.). Getting started. Retrieved October 9, 2026, from https://vite.dev/guide/

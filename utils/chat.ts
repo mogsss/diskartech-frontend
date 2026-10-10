@@ -9,6 +9,7 @@ import {
   where,
   serverTimestamp,
   setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import {
   ChatDocumentFields,
@@ -69,29 +70,43 @@ export function getOtherParticipant(
   chat: NormalizedChat,
   currentUserId: string
 ): ParticipantSummary {
-  const myId = String(currentUserId);
+  const myId = String(currentUserId).trim();
 
-  const isCurrentStudent =
-    (chat.student_user_id && myId === String(chat.student_user_id)) ||
-    (chat.sender_role === 'student' && myId === String(chat.sender_id)) ||
-    (chat.receiver_role === 'student' && myId === String(chat.receiver_id));
+  const isExplicitOwner = Boolean(chat.owner_user_id && myId === String(chat.owner_user_id));
+  const isExplicitStudent = Boolean(chat.student_user_id && myId === String(chat.student_user_id));
 
-  const isCurrentOwner =
-    (chat.owner_user_id && myId === String(chat.owner_user_id)) ||
-    (isOwnerSideRole(chat.sender_role as any) && myId === String(chat.sender_id)) ||
-    (isOwnerSideRole(chat.receiver_role as any) && myId === String(chat.receiver_id));
+  let isCurrentOwner = isExplicitOwner;
+  let isCurrentStudent = isExplicitStudent;
+
+  if (!isExplicitOwner && !isExplicitStudent) {
+    if (chat.sender_role === 'student' && myId === String(chat.sender_id)) {
+      isCurrentStudent = true;
+    } else if (isOwnerSideRole(chat.sender_role as any) && myId === String(chat.sender_id)) {
+      isCurrentOwner = true;
+    } else if (chat.receiver_role === 'student' && myId === String(chat.receiver_id)) {
+      isCurrentStudent = true;
+    } else if (isOwnerSideRole(chat.receiver_role as any) && myId === String(chat.receiver_id)) {
+      isCurrentOwner = true;
+    }
+  }
+
+  let result: ParticipantSummary;
 
   // Kaso 1: Ang kasalukuyang user ay Estudyante -> Kausap ay ang Owner (Employer o Household)
-  if (isCurrentStudent) {
-    const ownerName = !isGenericName(chat.owner_name)
+  if (isCurrentStudent && !isExplicitOwner) {
+    const ownerNameCandidate = !isGenericName(chat.owner_name)
       ? chat.owner_name
       : String(chat.sender_id) === myId
       ? chat.receiver_name
       : chat.sender_name;
 
-    const ownerId =
+    const ownerIdCandidate =
       chat.owner_user_id ||
       (String(chat.sender_id) === myId ? chat.receiver_id : chat.sender_id);
+    const ownerId = String(ownerIdCandidate) === myId
+      ? (String(chat.receiver_id) === myId ? chat.sender_id : chat.receiver_id)
+      : ownerIdCandidate;
+
     const ownerRole =
       chat.owner_role ||
       (String(chat.sender_id) === myId ? chat.receiver_role : chat.sender_role) ||
@@ -103,25 +118,26 @@ export function getOtherParticipant(
 
     const safeOwnerAvatar = sanitizeOwnerAvatar(ownerAvatarCandidate, chat.student_avatar_url);
 
-    return {
+    result = {
       id: ownerId || '',
-      name: (ownerName && !isGenericName(ownerName)) ? ownerName : 'Employer',
+      name: (ownerNameCandidate && !isGenericName(ownerNameCandidate)) ? ownerNameCandidate : 'Employer',
       avatar: safeOwnerAvatar,
       role: ownerRole,
     };
-  }
-
-  // Kaso 2: Ang kasalukuyang user ay Owner -> Kausap ay ang Estudyante
-  if (isCurrentOwner) {
-    const studentName = !isGenericName(chat.student_name)
+  } else if (isCurrentOwner && !isExplicitStudent) {
+    // Kaso 2: Ang kasalukuyang user ay Owner -> Kausap ay ang Estudyante
+    const studentNameCandidate = !isGenericName(chat.student_name)
       ? chat.student_name
       : String(chat.sender_id) === myId
       ? chat.receiver_name
       : chat.sender_name;
 
-    const studentId =
+    const studentIdCandidate =
       chat.student_user_id ||
       (String(chat.sender_id) === myId ? chat.receiver_id : chat.sender_id);
+    const studentId = String(studentIdCandidate) === myId
+      ? (String(chat.receiver_id) === myId ? chat.sender_id : chat.receiver_id)
+      : studentIdCandidate;
 
     const studentAvatarCandidate =
       chat.student_avatar_url ||
@@ -129,43 +145,62 @@ export function getOtherParticipant(
 
     const safeStudentAvatar = sanitizeStudentAvatar(studentAvatarCandidate, chat.owner_avatar_url);
 
-    return {
+    result = {
       id: studentId || '',
-      name: (studentName && !isGenericName(studentName)) ? studentName : 'Student Applicant',
+      name: (studentNameCandidate && !isGenericName(studentNameCandidate)) ? studentNameCandidate : 'Student Applicant',
       avatar: safeStudentAvatar,
       role: 'student',
     };
+  } else {
+    // Kaso 3: Generic fallback base sa sender vs receiver
+    const isSender = myId === String(chat.sender_id);
+    if (isSender) {
+      const isReceiverOwner = chat.receiver_role !== 'student';
+      const rawAvatar = chat.receiver_avatar;
+      const avatar = isReceiverOwner
+        ? sanitizeOwnerAvatar(rawAvatar || chat.owner_avatar_url, chat.student_avatar_url)
+        : sanitizeStudentAvatar(rawAvatar || chat.student_avatar_url, chat.owner_avatar_url);
+
+      result = {
+        id: chat.receiver_id || '',
+        name: chat.receiver_name || 'User',
+        avatar,
+        role: chat.receiver_role || 'employer',
+      };
+    } else {
+      const isSenderOwner = chat.sender_role !== 'student';
+      const rawAvatar = chat.sender_avatar;
+      const avatar = isSenderOwner
+        ? sanitizeOwnerAvatar(rawAvatar || chat.owner_avatar_url, chat.student_avatar_url)
+        : sanitizeStudentAvatar(rawAvatar || chat.student_avatar_url, chat.owner_avatar_url);
+
+      result = {
+        id: chat.sender_id || '',
+        name: chat.sender_name || 'User',
+        avatar,
+        role: chat.sender_role || 'student',
+      };
+    }
   }
 
-  // Kaso 3: Generic fallback base sa sender vs receiver
-  const isSender = myId === String(chat.sender_id);
-  if (isSender) {
-    const isReceiverOwner = chat.receiver_role !== 'student';
-    const rawAvatar = chat.receiver_avatar;
-    const avatar = isReceiverOwner
-      ? sanitizeOwnerAvatar(rawAvatar || chat.owner_avatar_url, chat.student_avatar_url)
-      : sanitizeStudentAvatar(rawAvatar || chat.student_avatar_url, chat.owner_avatar_url);
+  // Double safeguard: Huwag kailanman ibalik ang current user ID bilang counterpart
+  if (result.id && String(result.id) === myId) {
+    const alternateId =
+      chat.participant_ids?.find((p) => String(p) !== myId) ||
+      (String(chat.sender_id) !== myId ? chat.sender_id : chat.receiver_id) ||
+      '';
+    result.id = alternateId;
 
-    return {
-      id: chat.receiver_id || '',
-      name: chat.receiver_name || 'User',
-      avatar,
-      role: chat.receiver_role || 'employer',
-    };
+    if (String(chat.sender_id) === myId) {
+      result.name = chat.receiver_name || result.name;
+      result.avatar = chat.receiver_avatar || result.avatar;
+    } else {
+      result.name = chat.sender_name || result.name;
+      result.avatar = chat.sender_avatar || result.avatar;
+    }
   }
 
-  const isSenderOwner = chat.sender_role !== 'student';
-  const rawAvatar = chat.sender_avatar;
-  const avatar = isSenderOwner
-    ? sanitizeOwnerAvatar(rawAvatar || chat.owner_avatar_url, chat.student_avatar_url)
-    : sanitizeStudentAvatar(rawAvatar || chat.student_avatar_url, chat.owner_avatar_url);
-
-  return {
-    id: chat.sender_id || '',
-    name: chat.sender_name || 'User',
-    avatar,
-    role: chat.sender_role || 'student',
-  };
+  return result;
 }
 
 /**
@@ -529,10 +564,18 @@ export async function sendChatMessage(params: {
     last_sender_id: senderId,
     last_message_at: serverTimestamp(),
     updated_at: serverTimestamp(),
+    participant_ids: [String(senderId), String(receiverId)].filter(Boolean),
   };
 
+  if (senderName) updateData.sender_name = senderName;
+  if (senderAvatar) updateData.sender_avatar = senderAvatar;
   if (receiverId) {
+    updateData.receiver_id = receiverId;
+    if (receiverName) updateData.receiver_name = receiverName;
+    if (params.receiverAvatar) updateData.receiver_avatar = params.receiverAvatar;
     updateData.unread_user_ids = [receiverId];
+    updateData[`last_message_for_${receiverId}`] = trimmed;
+    updateData[`last_message_at_for_${receiverId}`] = serverTimestamp();
   }
 
   await setDoc(chatDocRef, updateData, { merge: true });
@@ -577,5 +620,57 @@ export async function markChatAsRead(chatId: string, currentUserId: string): Pro
     await setDoc(chatRef, { unread_user_ids: updatedUnread }, { merge: true });
   } catch (e) {
     console.error('Error marking chat as read:', e);
+  }
+}
+
+/**
+ * Burahin ang chat para sa partikular na user lamang (Clear for me only).
+ * Hindi mabubura ang messages sa kachat niya.
+ */
+export async function clearChatForUser(chatId: string, userId: string): Promise<void> {
+  if (!chatId || !userId) return;
+  try {
+    const chatDocRef = doc(db, CHATS_COLLECTION, chatId);
+    await setDoc(
+      chatDocRef,
+      {
+        [`cleared_at_for_${userId}`]: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error('Error clearing chat for user:', err);
+    throw err;
+  }
+}
+
+/**
+ * Burahin ang chat. Kapag may userId, buburahin lamang para sa kanya (Clear for me only).
+ * Kung walang userId, buburahin sa buong conversation (Clear for everyone).
+ */
+export async function clearChatConversation(chatId: string, userId?: string): Promise<void> {
+  if (!chatId) return;
+  if (userId) {
+    return clearChatForUser(chatId, userId);
+  }
+  try {
+    const messagesRef = collection(db, CHATS_COLLECTION, chatId, 'messages');
+    const snap = await getDocs(messagesRef);
+
+    const batch = writeBatch(db);
+    snap.docs.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+
+    const chatDocRef = doc(db, CHATS_COLLECTION, chatId);
+    batch.update(chatDocRef, {
+      last_message: '',
+      last_message_at: serverTimestamp(),
+    });
+
+    await batch.commit();
+  } catch (err) {
+    console.error('Error clearing chat conversation:', err);
+    throw err;
   }
 }

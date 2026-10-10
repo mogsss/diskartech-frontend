@@ -1,207 +1,262 @@
-import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View, Image } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Colors } from '@/constants/colors';
 import { router } from 'expo-router';
 
 import Avatar from '@/components/ui/Avatar';
-import Badge from '@/components/ui/Badge';
+import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import AddSkillModal from '@/components/student/modals/AddSkillModal';
 import EditAvailabilityModal from '@/components/student/modals/EditAvailabilityModal';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
-import DocumentCard from '@/components/student/DocumentCard'; 
-import InfoRow from '@/components/ui/InfoRow'; 
+import DocumentViewerModal from '@/components/ui/modals/DocumentViewerModal';
+import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
+import { STORAGE_URL } from '@/api/axios';
 
 // Custom Hook natin!
-import { useStudentProfile } from '@/hooks/useStudentProfile'; 
+import { useStudentProfile } from '@/hooks/useStudentProfile';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 const menuItems = [
+  { icon: 'verified', label: 'Verification Status', route: '/students/verification-status' },
   { icon: 'settings', label: 'Settings', route: '/settings' },
-  { icon: 'help-outline', label: 'Help Center', route: '#' },
-  { icon: 'info-outline', label: 'About DiskarTech', route: '#' },
+  { icon: 'help-outline', label: 'Help Center', route: '/help-center' },
+  { icon: 'info-outline', label: 'About DiskarTech', route: '/about-diskartech' },
   { icon: 'logout', label: 'Logout', route: '/auth/welcome', danger: true },
 ];
 
 export default function ProfileScreen() {
+  const { colors, isDark } = useDarkMode();
+  const [refreshing, setRefreshing] = useState(false);
+  const [isDrawerVisible, setDrawerVisible] = useState(false);
+
   // Hinatak natin palabas lahat ng data at functions galing sa Custom Hook
   const {
-    studentName, studentEmail, school, course, yearLevel, location, isVerified, profilePicUri, uploadedDocs,
+    studentName, studentEmail, school, course, yearLevel, location, isVerified, rejectionReason, rating, reviewCount, profilePicUri, uploadedDocs,
     skills, isAddSkillModalVisible, setAddSkillModalVisible, handleSaveSkills,
     selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
     isLogoutModalVisible, setLogoutModalVisible, handleLogout,
     alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
-    handleUploadDocument, handleUploadProfilePic
+    handleUploadDocument, handleUploadProfilePic, fetchStudentProfile
   } = useStudentProfile();
 
-  return (
-    <ScrollView className="flex-1 bg-[#F8FAFC]" showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View className="px-6 pt-12 pb-4">
-        <Text className="text-2xl font-bold text-slate-900">Profile</Text>
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchStudentProfile();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const isRejected = !isVerified && !!rejectionReason;
+
+  const [viewerModalVisible, setViewerModalVisible] = useState(false);
+  const [viewerConfig, setViewerConfig] = useState<{
+    title: string;
+    uri: string | null;
+    filename?: string | null;
+  }>({ title: '', uri: null, filename: null });
+
+  const buildStorageUrl = (path?: string | null) => {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const clean = path.replace(/^\/?storage\/?/, '').replace(/^\//, '');
+    return `${STORAGE_URL}${clean}`;
+  };
+
+  const handleViewDocument = (title: string, rawPath?: string | null, filename?: string | null) => {
+    if (!rawPath) {
+      showAlertModal({
+        title: 'Document Unavailable',
+        message: 'No document path available to preview.',
+        iconName: 'warning',
+        iconColor: '#F59E0B',
+        iconBgColor: 'bg-amber-50',
+      });
+      return;
+    }
+    const fullUrl = buildStorageUrl(rawPath);
+    setViewerConfig({
+      title,
+      uri: fullUrl,
+      filename: filename || (typeof rawPath === 'string' ? rawPath.split('/').pop() : null),
+    });
+    setViewerModalVisible(true);
+  };
+
+  const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
+  const accentText = isDark ? colors.accent : colors.primary;
+  const subtle = isDark ? '#263449' : '#F1F5F9';
+  const verificationColor = isRejected ? accentText : colors.textSecondary;
+  const verificationFill = isRejected ? accentSurface : subtle;
+  const validSkills = skills.filter((skill) => typeof skill === 'string' && skill.trim());
+  const displayRating = Number.isFinite(rating) ? Math.max(0, Math.min(rating, 5)) : 0;
+
+  const handleAddSkill = () => {
+    if (skills.length >= 5) {
+      showAlertModal({
+        title: 'Limit Reached', message: 'You can only add up to 5 skills.', iconName: 'warning',
+        iconColor: '#f59e0b', iconBgColor: 'bg-amber-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
+      });
+      return;
+    }
+    setAddSkillModalVisible(true);
+  };
+
+  const renderSectionHeader = (title: string, description: string, action: string, onPress: () => void, icon: keyof typeof MaterialIcons.glyphMap = 'edit') => (
+    <View className="flex-row items-start justify-between gap-3 mb-4">
+      <View className="flex-1">
+        <Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>{title}</Text>
+        <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{description}</Text>
       </View>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${action} ${title}`} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}>
+        <MaterialIcons name={icon} size={16} color={accentText} />
+        <Text className="text-xs font-semibold" style={{ color: accentText }}>{action}</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
-      {/* Profile Card */}
-      <View className="bg-white mx-6 rounded-2xl p-6 items-center shadow-md mb-4">
-        <View className="relative mb-4">
-          {profilePicUri ? (
-            <Image 
-              source={{ uri: profilePicUri }} 
-              style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#e2e8f0' }} 
-              onError={(e) => console.log('Image Load Error:', e.nativeEvent.error)} 
-            />
-          ) : (
-            <Avatar
-              uri={`https://ui-avatars.com/api/?name=${encodeURIComponent(String(studentName || 'User'))}&background=D32F2F&color=fff&size=200`}
-              name={String(studentName || 'User')}
-              size={80}
-              verified={Boolean(isVerified)}
-            />
-          )}
-          <TouchableOpacity onPress={handleUploadProfilePic} className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-red-600 items-center justify-center border-2 border-white">
-            <MaterialIcons name="camera-alt" size={18} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
-        <Text className="text-xl font-bold text-slate-900">{String(studentName || '')}</Text>
-        <Text className="text-xs text-slate-500 mt-[2px]">{String(studentEmail || '')}</Text>
-        <Badge
-          text={isVerified ? "Verified Student" : "Pending Verification"}
-          variant={isVerified ? "success" : "warning"}
-          icon={isVerified ? "check-circle" : "hourglass-empty"}
-          style={{ marginTop: 8, alignSelf: 'center' }}
-        />
+  const renderInfoRow = (icon: keyof typeof MaterialIcons.glyphMap, label: string, value: string) => (
+    <View className="flex-row items-start gap-3 py-3">
+      <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={19} color={accentText} /></View>
+      <View className="flex-1">
+        <Text className="text-xs leading-5" style={{ color: colors.textSecondary }}>{label}</Text>
+        <Text className="text-sm font-medium leading-6 mt-0.5" style={{ color: colors.text }}>{String(value || 'Not specified')}</Text>
       </View>
+    </View>
+  );
 
-      {/* Documents & Verification */}
-      <View className="bg-white mx-6 rounded-2xl p-6 shadow-sm mb-4">
-        <Text className="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-gray-100">Documents & Verification</Text>
-        
-        {/* 👇 PINALITAN ANG isUploaded NG filename */}
-        <DocumentCard
-          icon="description"
-          title="Resume"
-          filename={uploadedDocs.student_resume}
-          onUpload={() => handleUploadDocument('student_resume', 'Resume')}
-        />
-        <DocumentCard
-          icon="badge"
-          title="School ID"
-          filename={uploadedDocs.school_id}
-          onUpload={() => handleUploadDocument('school_id', 'School ID')}
-        />
-        <DocumentCard
-          icon="insert-drive-file"
-          title="COR (Certificate of Reg.)"
-          filename={uploadedDocs.coe}
-          onUpload={() => handleUploadDocument('coe', 'COR')}
-        />
-      </View>
-
-      {/* Student Info */}
-      <View className="bg-white mx-6 rounded-2xl p-6 shadow-sm mb-4">
-        <Text className="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-gray-100">Student Information</Text>
-        <InfoRow icon="school" label="School" value={school} />
-        <InfoRow icon="menu-book" label="Course" value={course} />
-        <InfoRow icon="format-list-numbered" label="Year Level" value={yearLevel} />
-        <InfoRow icon="location-on" label="Location" value={location} />
-      </View>
-
-      {/* Skills Section */}
-      <View className="bg-white mx-6 rounded-2xl p-6 shadow-sm mb-4">
-        <Text className="text-lg font-bold text-slate-900 mb-1">Skills</Text>
-        <Text className="text-xs text-slate-400 mb-4">
-          Show your top skills — add up to 5 skills you want to be known for.
-        </Text>
-
-        {skills && skills.length > 0 ? (
-          <View className="flex-row flex-wrap gap-2 mb-4">
-            {skills
-              .filter((skill) => skill && typeof skill === 'string')
-              .map((skill, index) => (
-                <View
-                  key={index.toString()}
-                  className="flex-row items-center bg-red-50 border border-red-100 rounded-full px-3.5 py-2"
-                >
-                  <Text className="text-xs font-semibold text-red-600 mr-2">
-                    {String(skill)}
-                  </Text>
-                  <TouchableOpacity onPress={() => {
-                    const updatedSkills = skills.filter((_, i) => i !== index);
-                    handleSaveSkills(updatedSkills);
-                  }}>
-                    <MaterialIcons name="close" size={14} color="#DC2626" />
-                  </TouchableOpacity>
-                </View>
-              ))}
+  const renderDocument = (type: 'student_resume' | 'school_id' | 'coe', title: string, icon: keyof typeof MaterialIcons.glyphMap, forVerification = false) => {
+    const filename = uploadedDocs[type];
+    const rawPath = uploadedDocs[`${type}_raw`];
+    const uploaded = Boolean(filename);
+    const verified = forVerification && isVerified && uploaded;
+    const rejected = forVerification && isRejected && uploaded;
+    const documentColor = rejected ? accentText : uploaded ? (isDark ? '#6EE7B7' : '#047857') : colors.textSecondary;
+    return (
+      <View className="rounded-2xl border p-4 mt-3" style={{ borderColor: colors.border }}>
+        <View className="flex-row items-start gap-3">
+          <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
+            <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
           </View>
-        ) : (
-          <Text className="text-xs text-slate-400 italic mb-4">No skills added yet.</Text>
-        )}
-        <TouchableOpacity
-          onPress={() => {
-            if (skills.length >= 5) {
-              showAlertModal({
-                title: 'Limit Reached', message: 'You can only add up to 5 skills.', iconName: 'warning',
-                iconColor: '#f59e0b', iconBgColor: 'bg-amber-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-              });
-              return;
-            }
-            setAddSkillModalVisible(true);
-          }}
-          className="flex-row items-center justify-center border border-gray-300 rounded-full py-2.5 px-4 self-start"
-        >
-          <MaterialIcons name="add" size={16} color="#0F172A" style={{ marginRight: 6 }} />
-          <Text className="text-xs font-semibold text-slate-800">Add skill</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Availability Section */}
-      <View className="bg-white mx-6 rounded-2xl p-6 shadow-sm mb-4">
-        <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
-          <Text className="text-lg font-bold text-slate-900">Availability</Text>
-          <TouchableOpacity onPress={() => setAvailabilityModalVisible(true)}>
-            <Text className="text-red-600 font-bold text-xs">EDIT</Text>
-          </TouchableOpacity>
         </View>
-        <InfoRow icon="schedule" label="Available Schedule" value={formatScheduleText()} />
-        <InfoRow icon="work" label="Preferred Job Type" value="Part-time" />
+        <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
+          <View className="flex-row items-center gap-1.5">
+            <MaterialIcons name={verified ? 'verified' : rejected ? 'error-outline' : uploaded ? 'check-circle-outline' : 'upload-file'} size={14} color={documentColor} />
+            <Text className="text-xs font-medium" style={{ color: documentColor }}>{verified ? 'Verified' : rejected ? 'Needs update' : uploaded ? 'Uploaded' : 'Not uploaded'}</Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            {uploaded && <TouchableOpacity onPress={() => handleViewDocument(title, rawPath, filename)} accessibilityRole="button" accessibilityLabel={`View ${title}`} activeOpacity={0.75} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
+            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR' : title)} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
+          </View>
+        </View>
       </View>
+    );
+  };
 
-      {/* Menu */}
-      <View className="bg-white mx-6 rounded-2xl shadow-sm mb-12 overflow-hidden">
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            className={`flex-row items-center p-4 border-b border-gray-100 gap-4 ${
-              index === menuItems.length - 1 ? 'border-b-0' : ''
-            }`}
-            onPress={() => {
-              if (item.route === '/auth/welcome') {
-                setLogoutModalVisible(true);
-              } else if (item.route !== '#') {
-                router.push(item.route as any);
-              }
-            }}
-          >
-            <MaterialIcons
-              name={item.icon as any}
-              size={22}
-              color={item.danger ? Colors.error : Colors.text}
-            />
-            <Text className={`text-base text-slate-900 flex-1 ${item.danger ? 'text-red-600' : ''}`}>
-              {item.label}
-            </Text>
-            <MaterialIcons name="chevron-right" size={22} color={Colors.gray400} />
-          </TouchableOpacity>
-        ))}
+  return (
+    <View style={{ backgroundColor: colors.background }} className="flex-1">
+      <SafeStatusBar />
+      <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3 flex-row items-center gap-3">
+        <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
+        <View className="flex-1"><Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Profile</Text></View>
       </View>
+      <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}>
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="flex-row items-center gap-4">
+            <View className="relative">
+              <Avatar uri={profilePicUri} name={String(studentName || 'Student')} size={72} />
+              <TouchableOpacity onPress={handleUploadProfilePic} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
+            </View>
+            <View className="flex-1">
+              <View className="flex-row items-center gap-1.5">
+                <Text className="text-xl font-bold leading-7 tracking-tight shrink" style={{ color: colors.text }} numberOfLines={2}>{String(studentName || 'Student')}</Text>
+                {isVerified && <MaterialIcons name="verified" size={20} color={isDark ? '#6EE7B7' : '#15803D'} accessibilityLabel="Verified account" />}
+              </View>
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{String(studentEmail || '')}</Text>
+            </View>
+          </View>
+          <View className="flex-row flex-wrap items-center gap-3 mt-5 pt-4 border-t" style={{ borderColor: colors.border }}>
+            {!isVerified && <TouchableOpacity onPress={() => router.push('/students/verification-status')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View account verification status" className="min-h-12 flex-row items-center gap-1.5 px-3 rounded-xl" style={{ backgroundColor: verificationFill }}><MaterialIcons name={isRejected ? 'error-outline' : 'shield'} size={17} color={verificationColor} /><Text className="text-xs font-semibold" style={{ color: verificationColor }}>{isRejected ? 'Needs verification update' : 'Not verified'}</Text><MaterialIcons name="chevron-right" size={16} color={verificationColor} /></TouchableOpacity>}
+            <View className="flex-row items-center gap-1.5">
+              <MaterialIcons name={reviewCount > 0 ? 'star' : 'star-outline'} size={18} color={reviewCount > 0 ? '#F59E0B' : colors.textSecondary} />
+              {reviewCount > 0 ? <Text className="text-xs" style={{ color: colors.textSecondary }}><Text className="font-semibold" style={{ color: colors.text }}>{displayRating.toFixed(1)}</Text>{` (${reviewCount} ${reviewCount === 1 ? 'review' : 'reviews'})`}</Text> : <Text className="text-xs" style={{ color: colors.textSecondary }}>No reviews yet</Text>}
+            </View>
+          </View>
+        </View>
 
-      {/* MODALS */}
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="flex-row items-start justify-between gap-3 mb-4">
+            <View className="flex-1">
+              <Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>Documents & verification</Text>
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{isVerified ? 'Keep your documents ready.' : 'Keep your documents ready. Verify your account to apply for jobs.'}</Text>
+            </View>
+            {!isVerified && (
+              <TouchableOpacity onPress={() => router.push('/students/verification-status')} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel="View document verification status" className="w-12 h-12 items-center justify-center">
+                <MaterialIcons name="chevron-right" size={24} color={accentText} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {renderDocument('student_resume', 'Resume', 'description')}
+          {renderDocument('school_id', 'School ID', 'badge', true)}
+          {renderDocument('coe', 'COR (Certificate of Registration)', 'insert-drive-file', true)}
+          {isRejected && <View className="rounded-xl p-3 mt-4" style={{ backgroundColor: accentSurface }}><View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text></View><Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text></View>}
+        </View>
+
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          {renderSectionHeader('Student information', 'Your school and contact details.', 'Edit', () => router.push('/edit-profile'))}
+          {renderInfoRow('school', 'School', school)}
+          {renderInfoRow('menu-book', 'Course', course)}
+          {renderInfoRow('format-list-numbered', 'Year level', yearLevel)}
+          {renderInfoRow('location-on', 'Location', location)}
+        </View>
+
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          {renderSectionHeader('Skills', 'Add up to 5 skills you want to be known for.', 'Add', handleAddSkill, 'add')}
+          {validSkills.length > 0 ? <View className="flex-row flex-wrap gap-2">{skills.map((skill, index) => {
+            if (typeof skill !== 'string' || !skill.trim()) return null;
+            return <View key={`${skill}-${index}`} className="max-w-full flex-row items-center gap-1 rounded-xl pl-3 pr-1 py-1" style={{ backgroundColor: subtle }}><Text className="text-xs font-medium shrink" style={{ color: colors.text }}>{skill}</Text><TouchableOpacity onPress={() => handleSaveSkills(skills.filter((_, i) => i !== index))} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Remove ${skill} skill`} className="w-9 h-9 items-center justify-center rounded-lg"><MaterialIcons name="close" size={16} color={accentText} /></TouchableOpacity></View>;
+          })}</View> : <View className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: subtle }}><MaterialIcons name="auto-awesome" size={20} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>No skills yet. Add your strengths to help employers find you.</Text></View>}
+        </View>
+
+        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          {renderSectionHeader('Availability', 'Let employers know when you can work.', 'Edit', () => setAvailabilityModalVisible(true))}
+          {renderInfoRow('schedule', 'Available schedule', formatScheduleText())}
+          {renderInfoRow('work-outline', 'Preferred job type', 'Part-time')}
+        </View>
+
+        <View className="mx-6 rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="px-5 pt-5 pb-2"><Text className="text-lg font-bold" style={{ color: colors.text }}>Account & support</Text></View>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity key={item.label} onPress={() => { if (item.danger) setLogoutModalVisible(true); else router.push(item.route as any); }} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
+              <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
+              <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
+              <MaterialIcons name="chevron-right" size={20} color={accentText} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
       <AddSkillModal
         visible={isAddSkillModalVisible}
+        existingSkills={skills}
         onClose={() => setAddSkillModalVisible(false)}
-        onAddSkill={(newSkill) => {
-          const updatedSkills = [...skills, newSkill];
-          handleSaveSkills(updatedSkills);
+        onAddSkill={(newSkills) => {
+          const incoming = Array.isArray(newSkills) ? newSkills : [newSkills];
+          const combined = Array.from(new Set([...skills, ...incoming]));
+          if (combined.length > 5) {
+            showAlertModal({
+              title: 'Skill Limit Reached',
+              message: 'You can only have up to 5 skills. The first 5 skills have been saved.',
+              iconName: 'warning',
+              iconColor: '#f59e0b',
+              iconBgColor: 'bg-amber-50',
+              primaryButtonText: 'OK',
+              onPrimaryPress: () => setAlertModalVisible(false),
+            });
+          }
+          handleSaveSkills(combined.slice(0, 5));
         }}
       />
 
@@ -235,7 +290,10 @@ export default function ProfileScreen() {
         onPrimaryPress={handleLogout}
         secondaryButtonText="Cancel"
         onSecondaryPress={() => setLogoutModalVisible(false)}
+        buttonLayout="row"
       />
-    </ScrollView>
+      <DocumentViewerModal visible={viewerModalVisible} onClose={() => setViewerModalVisible(false)} title={viewerConfig.title} uri={viewerConfig.uri} filename={viewerConfig.filename} />
+      <SideDrawerMenu visible={isDrawerVisible} onClose={() => setDrawerVisible(false)} user={{ name: String(studentName || 'Student'), role: 'student', avatarUri: profilePicUri || undefined, avatarInitials: studentName ? studentName.trim().substring(0, 2).toUpperCase() : 'ST', isVerified: Boolean(isVerified), rejectionReason: rejectionReason || null }} onLogout={handleLogout} />
+    </View>
   );
 }

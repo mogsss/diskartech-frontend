@@ -1,5 +1,6 @@
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -44,6 +45,7 @@ const slides = [
 ];
 
 export default function OnboardingScreen() {
+  const { isDark, colors } = useDarkMode();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
@@ -75,13 +77,17 @@ export default function OnboardingScreen() {
   const renderSlide = ({ item }: { item: typeof slides[0] }) => (
     <View style={{ width }} className="flex-1 items-center justify-center px-10">
       <View 
-        style={{ backgroundColor: item.bgColor }} 
+        style={{ backgroundColor: isDark ? colors.surface : item.bgColor }} 
         className="w-[180px] h-[180px] rounded-[90px] items-center justify-center mb-8 shadow-lg"
       >
-        <MaterialIcons name={item.icon as any} size={80} color={item.color} />
+        <MaterialIcons 
+          name={item.icon as any} 
+          size={80} 
+          color={isDark ? (item.color === '#121212' ? '#F1F5F9' : item.color) : item.color} 
+        />
       </View>
-      <Text className="text-3xl font-bold text-slate-900 text-center mb-3">{item.title}</Text>
-      <Text className="text-base text-slate-500 text-center leading-6 px-4">{item.subtitle}</Text>
+      <Text style={{ color: colors.text }} className="text-3xl font-bold text-center mb-3">{item.title}</Text>
+      <Text style={{ color: colors.textSecondary }} className="text-base text-center leading-6 px-4">{item.subtitle}</Text>
     </View>
   );
 
@@ -92,10 +98,10 @@ export default function OnboardingScreen() {
   });
 
   return (
-    <View className="flex-1 bg-white">
+    <View style={{ backgroundColor: colors.background }} className="flex-1">
       {/* Skip button */}
       <Animated.View style={{ opacity: dotOpacity }} className="absolute top-[60px] right-6 z-10">
-        <Text onPress={handleSkip} className="text-base font-semibold text-slate-500">
+        <Text onPress={handleSkip} style={{ color: colors.textSecondary }} className="text-base font-semibold">
           Skip
         </Text>
       </Animated.View>
@@ -141,7 +147,7 @@ export default function OnboardingScreen() {
                   {
                     width: dotWidth,
                     opacity: dotOpacityAnim,
-                    backgroundColor: currentIndex === index ? Colors.primary : Colors.gray300,
+                    backgroundColor: currentIndex === index ? Colors.primary : (isDark ? colors.border : Colors.gray300),
                   },
                 ]}
                 className="h-2 rounded-full"

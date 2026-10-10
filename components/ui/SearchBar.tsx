@@ -3,6 +3,7 @@ import { BorderRadius, Shadow, Spacing, Typography } from '@/constants/typograph
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface SearchBarProps {
   placeholder?: string;
@@ -20,15 +21,24 @@ export default function SearchBar({
   onChangeText,
 }: SearchBarProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const { colors, isDark } = useDarkMode();
 
   return (
     <View style={[styles.container, isFocused && styles.focused]}>
-      <View style={styles.searchInputContainer}>
-        <MaterialIcons name="search" size={22} color={isFocused ? Colors.primary : Colors.gray500} />
+      <View
+        style={[
+          styles.searchInputContainer,
+          {
+            backgroundColor: colors.surface,
+            borderColor: isFocused ? Colors.primary : colors.border,
+          },
+        ]}
+      >
+        <MaterialIcons name="search" size={22} color={isFocused ? (isDark ? colors.accent : Colors.primary) : colors.textSecondary} />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: colors.text }]}
           placeholder={placeholder}
-          placeholderTextColor={Colors.gray400}
+          placeholderTextColor={colors.textSecondary}
           value={value}
           onChangeText={onChangeText}
           onFocus={() => setIsFocused(true)}
@@ -38,7 +48,7 @@ export default function SearchBar({
         />
         {value && (
           <TouchableOpacity onPress={() => onChangeText?.('')}>
-            <MaterialIcons name="close" size={20} color={Colors.gray500} />
+            <MaterialIcons name="close" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>

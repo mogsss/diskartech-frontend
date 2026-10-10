@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, Modal, Alert } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View, Modal, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import Badge from '@/components/ui/Badge';
-import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
+import { getSalaryUnit } from '@/utils/jobRate';
 import { formatDate } from '@/utils/helpers';
-import api from '@/api/axios';
+import api, { STORAGE_URL } from '@/api/axios';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 import {
     ensureChatRoom,
     getStudentParticipantFromStorage,
@@ -17,13 +19,42 @@ interface ApplicationDetailsModalProps {
     onClose: () => void;
     application: any | null;
     onApplicationCancelled?: () => void;
+    onApplicationDeleted?: () => void;
 }
 
-export default function ApplicationDetailsModal({ visible, onClose, application, onApplicationCancelled }: ApplicationDetailsModalProps) {
+export default function ApplicationDetailsModal({ 
+    visible, 
+    onClose, 
+    application, 
+    onApplicationCancelled,
+    onApplicationDeleted 
+}: ApplicationDetailsModalProps) {
+    const { colors, isDark } = useDarkMode();
     const [companyName, setCompanyName] = useState('Employer');
     const [ownerId, setOwnerId] = useState('employer_default');
     const [employerAvatar, setEmployerAvatar] = useState('');
     const [cancelling, setCancelling] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    const [notification, setNotification] = useState<{
+        visible: boolean;
+        title: string;
+        message: string;
+        iconName?: keyof typeof MaterialIcons.glyphMap;
+        iconColor?: string;
+        iconBgColor?: string;
+        primaryButtonText?: string;
+        onPrimaryPress: () => void;
+        secondaryButtonText?: string;
+        onSecondaryPress?: () => void;
+    }>({
+        visible: false,
+        title: '',
+        message: '',
+        onPrimaryPress: () => {},
+    });
+
+    const closeNotification = () => setNotification((prev) => ({ ...prev, visible: false }));
 
     useEffect(() => {
         const fetchJobOwnerDetails = async () => {
@@ -56,7 +87,7 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                         if (rawAvatar) {
                             const formattedAvatar = rawAvatar.startsWith('http')
                                 ? rawAvatar
-                                : `http://192.168.1.2:8000/storage/${rawAvatar}`;
+                                : `${STORAGE_URL}${rawAvatar}`;
                             setEmployerAvatar(formattedAvatar);
                         } else {
                             setEmployerAvatar('');
@@ -98,45 +129,131 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
             router.push(`/chat?id=${chatId}` as any);
         } catch (error) {
             console.error('Error starting chat:', error);
-            Alert.alert('Paalala', 'Hindi mabuksan ang chat sa ngayon.');
+            setNotification({
+                visible: true,
+                title: 'Notice',
+                message: 'Unable to open chat at this time.',
+                iconName: 'error-outline',
+                iconColor: '#DC2626',
+                iconBgColor: 'bg-red-50',
+                primaryButtonText: 'OK',
+                onPrimaryPress: closeNotification,
+            });
         }
     };
 
     const handleCancelApplication = () => {
-        Alert.alert(
-            'Kanselahin ang Aplikasyon',
-            'Sigurado ka bang gusto mong kanselahin ang aplikasyon na ito?',
-            [
-                { text: 'Huwag Muna', style: 'cancel' },
-                {
-                    text: 'Oo, Kanselahin',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            setCancelling(true);
-                            const response = await api.post(`/student/applications/${application.id}/cancel`);
+        setNotification({
+            visible: true,
+            title: 'Cancel Application',
+            message: 'Are you sure you want to cancel this application? This action cannot be undone.',
+            iconName: 'remove-circle-outline',
+            iconColor: '#DC2626',
+            iconBgColor: 'bg-red-50',
+            primaryButtonText: 'Yes, Cancel',
+            secondaryButtonText: 'Keep Application',
+            onSecondaryPress: closeNotification,
+            onPrimaryPress: async () => {
+                closeNotification();
+                try {
+                    setCancelling(true);
+                    const response = await api.post(`/student/applications/${application.id}/cancel`);
 
-                            if (response.data && response.data.status === 'success') {
-                                Alert.alert('Tagumpay', 'Matagumpay na na-kansela ang iyong aplikasyon.');
+                    if (response.data && response.data.status === 'success') {
+                        setNotification({
+                            visible: true,
+                            title: 'Application Cancelled',
+                            message: 'Your application has been successfully cancelled.',
+                            iconName: 'check-circle',
+                            iconColor: '#16A34A',
+                            iconBgColor: 'bg-emerald-50',
+                            primaryButtonText: 'Done',
+                            onPrimaryPress: () => {
+                                closeNotification();
                                 onClose();
                                 if (onApplicationCancelled) {
                                     onApplicationCancelled();
                                 }
-                            }
-                        } catch (error: any) {
-                            console.error('Error cancelling application:', error);
-                            const msg = error.response?.data?.message || 'Hindi ma-cancel ang aplikasyon sa ngayon.';
-                            Alert.alert('Paalala', msg);
-                        } finally {
-                            setCancelling(false);
-                        }
-                    },
-                },
-            ]
-        );
+                            },
+                        });
+                    }
+                } catch (error: any) {
+                    console.error('Error cancelling application:', error);
+                    const msg = error.response?.data?.message || 'Unable to cancel application at this time.';
+                    setNotification({
+                        visible: true,
+                        title: 'Notice',
+                        message: msg,
+                        iconName: 'error-outline',
+                        iconColor: '#DC2626',
+                        iconBgColor: 'bg-red-50',
+                        primaryButtonText: 'OK',
+                        onPrimaryPress: closeNotification,
+                    });
+                } finally {
+                    setCancelling(false);
+                }
+            },
+        });
     };
 
-    const isPending = application.status?.toLowerCase() === 'pending';
+    const handleDeleteApplication = () => {
+        setNotification({
+            visible: true,
+            title: 'Delete Application',
+            message: 'Are you sure you want to delete this application record? This action cannot be undone.',
+            iconName: 'delete-outline',
+            iconColor: '#DC2626',
+            iconBgColor: 'bg-red-50',
+            primaryButtonText: 'Yes, Delete',
+            secondaryButtonText: 'Cancel',
+            onSecondaryPress: closeNotification,
+            onPrimaryPress: async () => {
+                closeNotification();
+                try {
+                    setDeleting(true);
+                    const response = await api.delete(`/student/applications/${application.id}`);
+
+                    if (response.data && response.data.status === 'success') {
+                        setNotification({
+                            visible: true,
+                            title: 'Application Deleted',
+                            message: 'The application record has been removed.',
+                            iconName: 'check-circle',
+                            iconColor: '#16A34A',
+                            iconBgColor: 'bg-emerald-50',
+                            primaryButtonText: 'Done',
+                            onPrimaryPress: () => {
+                                closeNotification();
+                                onClose();
+                                if (onApplicationDeleted) {
+                                    onApplicationDeleted();
+                                }
+                            },
+                        });
+                    }
+                } catch (error: any) {
+                    console.error('Error deleting application:', error);
+                    const msg = error.response?.data?.message || 'Unable to delete application at this time.';
+                    setNotification({
+                        visible: true,
+                        title: 'Notice',
+                        message: msg,
+                        iconName: 'error-outline',
+                        iconColor: '#DC2626',
+                        iconBgColor: 'bg-red-50',
+                        primaryButtonText: 'OK',
+                        onPrimaryPress: closeNotification,
+                    });
+                } finally {
+                    setDeleting(false);
+                }
+            },
+        });
+    };
+
+    const canCancel = ['pending', 'viewed'].includes(application.status?.toLowerCase());
+    const canDelete = ['cancelled', 'rejected', 'completed'].includes(application.status?.toLowerCase());
 
     return (
         <Modal
@@ -145,26 +262,52 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
             visible={visible}
             onRequestClose={onClose}
         >
-            <View className="flex-1 justify-end bg-black/50">
-                <View className="bg-white rounded-t-3xl p-6 max-h-[80%]">
+            <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)' }}>
+                <View 
+                    className="rounded-t-3xl p-6 max-h-[80%]"
+                    style={{ backgroundColor: colors.surface }}
+                >
                     {/* Header */}
-                    <View className="flex-row justify-between items-center mb-4 border-b border-gray-100 pb-3">
-                        <Text className="text-lg font-bold text-slate-900 text-center">Application Details</Text>
-                        <TouchableOpacity onPress={onClose} className="p-1 bg-gray-100 rounded-full">
-                            <MaterialIcons name="close" size={20} color="#64748b" />
+                    <View 
+                        className="flex-row justify-between items-center mb-4 border-b pb-3"
+                        style={{ borderBottomColor: colors.border }}
+                    >
+                        <Text className="text-lg font-bold text-center" style={{ color: colors.text }}>
+                            Application Details
+                        </Text>
+                        <TouchableOpacity 
+                            onPress={onClose} 
+                            className="p-1 rounded-full"
+                            style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+                        >
+                            <MaterialIcons name="close" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
                     {/* Content */}
                     <ScrollView showsVerticalScrollIndicator={false}>
-                        <View className="bg-slate-50 p-4 rounded-xl mb-4">
-                            <Text className="text-base font-bold text-slate-900">{application.job?.title || 'Job Opening'}</Text>
-                            <Text className="text-xs font-medium text-slate-700">{companyName}</Text>
-                            <Text className="text-xs text-slate-500 mt-1">{application.job?.category || 'General'}</Text>
+                        <View 
+                            className="p-4 rounded-xl mb-4 border"
+                            style={{ 
+                                backgroundColor: isDark ? colors.background : '#F8FAFC',
+                                borderColor: colors.border
+                            }}
+                        >
+                            <Text className="text-base font-bold" style={{ color: colors.text }}>
+                                {application.job?.title || 'Job Opening'}
+                            </Text>
+                            <Text className="text-xs font-medium mt-0.5" style={{ color: colors.textSecondary }}>
+                                {companyName}
+                            </Text>
+                            <Text className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                {application.job?.category || 'General'}
+                            </Text>
                         </View>
 
                         <View className="mb-4">
-                            <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Current Status</Text>
+                            <Text className="text-xs uppercase font-semibold mb-1" style={{ color: colors.textSecondary }}>
+                                Current Status
+                            </Text>
                             <View className="flex-row items-center gap-2 mt-1">
                                 <Badge
                                     text={application.status ? application.status.charAt(0).toUpperCase() + application.status.slice(1) : ''}
@@ -175,37 +318,61 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                         </View>
 
                         <View className="mb-4">
-                            <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Rate</Text>
-                            <Text className="text-sm font-semibold text-slate-700">₱{application.job?.salary || '0.00'}</Text>
+                            <Text className="text-xs uppercase font-semibold mb-1" style={{ color: colors.textSecondary }}>
+                                Rate
+                            </Text>
+                            <Text className="text-sm font-semibold" style={{ color: colors.text }}>
+                                ₱{application.job?.salary || '0.00'} {getSalaryUnit(application.job?.salary_type)}
+                            </Text>
                         </View>
 
                         <View className="mb-4">
-                            <Text className="text-xs text-slate-700 uppercase font-semibold mb-1">Job Description</Text>
-                            <Text className="text-sm text-slate-600 leading-5">{application.job?.description || 'No Description.'}</Text>
+                            <Text className="text-xs uppercase font-semibold mb-1" style={{ color: colors.textSecondary }}>
+                                Job Description
+                            </Text>
+                            <Text className="text-sm leading-5" style={{ color: colors.text }}>
+                                {application.job?.description || 'No Description.'}
+                            </Text>
                         </View>
 
                         <View className="mb-6">
-                            <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Applied Date</Text>
-                            <Text className="text-sm text-slate-600">{formatDate(application.created_at)}</Text>
+                            <Text className="text-xs uppercase font-semibold mb-1" style={{ color: colors.textSecondary }}>
+                                Applied Date
+                            </Text>
+                            <Text className="text-sm" style={{ color: colors.text }}>
+                                {formatDate(application.created_at)}
+                            </Text>
                         </View>
                         
                         {/* Requirements Section */}
                         {application.job?.requirements && (
                             <View className="mb-4">
-                                <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Requirements</Text>
+                                <View className="flex-row items-center gap-1.5 mb-1.5">
+                                    <MaterialIcons name="checklist" size={14} color="#dc2626" />
+                                    <Text className="text-xs uppercase font-semibold" style={{ color: colors.textSecondary }}>
+                                        Requirements
+                                    </Text>
+                                </View>
                                 <View className="flex-row flex-wrap gap-1.5 mt-1">
                                     {(() => {
                                         try {
-                                            const reqs = typeof application.job.requirements === 'string'
+                                             const reqs = typeof application.job.requirements === 'string'
                                                 ? JSON.parse(application.job.requirements)
                                                 : application.job.requirements;
                                             return Array.isArray(reqs) ? reqs.map((req: string, index: number) => (
-                                                <View key={index} className="bg-slate-100 px-3 py-1 rounded-full">
-                                                    <Text className="text-xs text-slate-700">{req}</Text>
+                                                <View 
+                                                    key={index} 
+                                                    className="px-3 py-1 rounded-full border"
+                                                    style={{ 
+                                                        backgroundColor: isDark ? colors.background : '#F1F5F9',
+                                                        borderColor: colors.border
+                                                    }}
+                                                >
+                                                    <Text className="text-xs" style={{ color: colors.text }}>{req}</Text>
                                                 </View>
-                                            )) : <Text className="text-sm text-slate-600">{String(reqs)}</Text>;
+                                            )) : <Text className="text-sm" style={{ color: colors.text }}>{String(reqs)}</Text>;
                                         } catch {
-                                            return <Text className="text-sm text-slate-600">{application.job.requirements}</Text>;
+                                            return <Text className="text-sm" style={{ color: colors.text }}>{application.job.requirements}</Text>;
                                         }
                                     })()}
                                 </View>
@@ -214,7 +381,12 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
 
                         {application.job?.skills && (
                             <View className="mb-4">
-                                <Text className="text-xs text-slate-400 uppercase font-semibold mb-1">Skills Needed</Text>
+                                <View className="flex-row items-center gap-1.5 mb-1.5">
+                                    <MaterialIcons name="psychology" size={14} color="#dc2626" />
+                                    <Text className="text-xs uppercase font-semibold" style={{ color: colors.textSecondary }}>
+                                        Skills Needed
+                                    </Text>
+                                </View>
                                 <View className="flex-row flex-wrap gap-1.5 mt-1">
                                     {(() => {
                                         try {
@@ -222,12 +394,19 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                                                 ? JSON.parse(application.job.skills)
                                                 : application.job.skills;
                                             return Array.isArray(skills) ? skills.map((skill: string, index: number) => (
-                                                <View key={index} className="bg-red-50 px-3 py-1 rounded-full border border-red-100">
+                                                <View 
+                                                    key={index} 
+                                                    className="px-3 py-1 rounded-full border"
+                                                    style={{
+                                                        backgroundColor: isDark ? 'rgba(220, 38, 38, 0.15)' : '#FEF2F2',
+                                                        borderColor: isDark ? 'rgba(220, 38, 38, 0.3)' : '#FEE2E2'
+                                                    }}
+                                                >
                                                     <Text className="text-xs text-red-600 font-medium">{skill}</Text>
                                                 </View>
-                                            )) : <Text className="text-sm text-slate-600">{String(skills)}</Text>;
+                                            )) : <Text className="text-sm" style={{ color: colors.text }}>{String(skills)}</Text>;
                                         } catch {
-                                            return <Text className="text-sm text-slate-600">{application.job.skills}</Text>;
+                                            return <Text className="text-sm" style={{ color: colors.text }}>{application.job.skills}</Text>;
                                         }
                                     })()}
                                 </View>
@@ -237,27 +416,75 @@ export default function ApplicationDetailsModal({ visible, onClose, application,
                         {/* Message Employer Button */}
                         <TouchableOpacity
                             onPress={handleSendMessage}
-                            className="bg-red-600 py-3.5 rounded-xl items-center justify-center flex-row gap-2 mb-3"
+                            className="bg-red-600 py-3.5 rounded-xl items-center justify-center flex-row gap-2 mb-3 shadow-sm"
                         >
                             <MaterialIcons name="chat" size={18} color="white" />
                             <Text className="text-white font-semibold text-sm">Message Employer</Text>
                         </TouchableOpacity>
 
-                        {isPending && (
+                        {canCancel && (
                             <TouchableOpacity
                                 onPress={handleCancelApplication}
                                 disabled={cancelling}
-                                className="bg-gray-100 py-3.5 rounded-xl items-center justify-center flex-row gap-2 mb-6 border border-gray-200"
+                                activeOpacity={0.7}
+                                className="py-3.5 rounded-xl items-center justify-center flex-row gap-2 mb-6 border"
+                                style={{
+                                    borderColor: isDark ? 'rgba(220, 38, 38, 0.4)' : '#FECACA',
+                                    backgroundColor: isDark ? 'rgba(220, 38, 38, 0.1)' : '#FEF2F2'
+                                }}
                             >
-                                <MaterialIcons name="cancel" size={18} color="#ef4444" />
-                                <Text className="text-red-500 font-semibold text-sm">
-                                    {cancelling ? 'Loading...' : 'Cancel Application'}
-                                </Text>
+                                {cancelling ? (
+                                    <ActivityIndicator size="small" color="#dc2626" />
+                                ) : (
+                                    <>
+                                        <MaterialIcons name="remove-circle-outline" size={17} color="#dc2626" />
+                                        <Text className="text-red-600 font-semibold text-sm">
+                                            Cancel Application
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity> 
+                        )}
+
+                        {canDelete && (
+                            <TouchableOpacity
+                                onPress={handleDeleteApplication}
+                                disabled={deleting}
+                                activeOpacity={0.7}
+                                className="py-3.5 rounded-xl items-center justify-center flex-row gap-2 mb-6 border"
+                                style={{
+                                    borderColor: isDark ? 'rgba(220, 38, 38, 0.4)' : '#FECACA',
+                                    backgroundColor: isDark ? 'rgba(220, 38, 38, 0.1)' : '#FEF2F2'
+                                }}
+                            >
+                                {deleting ? (
+                                    <ActivityIndicator size="small" color="#dc2626" />
+                                ) : (
+                                    <>
+                                        <MaterialIcons name="delete-outline" size={17} color="#dc2626" />
+                                        <Text className="text-red-600 font-semibold text-sm">
+                                            Delete Application
+                                        </Text>
+                                    </>
+                                )}
                             </TouchableOpacity> 
                         )}
                     </ScrollView>
                 </View>
             </View>
+
+            <NotificationModal
+                visible={notification.visible}
+                title={notification.title}
+                message={notification.message}
+                iconName={notification.iconName}
+                iconColor={notification.iconColor}
+                iconBgColor={notification.iconBgColor}
+                primaryButtonText={notification.primaryButtonText}
+                onPrimaryPress={notification.onPrimaryPress}
+                secondaryButtonText={notification.secondaryButtonText}
+                onSecondaryPress={notification.onSecondaryPress}
+            />
         </Modal>
     );
 }

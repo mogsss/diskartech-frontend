@@ -1,10 +1,11 @@
 import { Colors } from '@/constants/colors';
+import { STORAGE_URL } from '@/api/axios';
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Image, Text, View, ViewStyle } from 'react-native';
 
 interface AvatarProps {
-  uri?: string;
+  uri?: string | null;
   name?: string;
   size?: number;
   verified?: boolean;
@@ -15,11 +16,24 @@ interface AvatarProps {
 export default function Avatar({ uri, name, size = 48, verified = false, online = false, style }: AvatarProps) {
   const [imageError, setImageError] = useState(false);
 
+  useEffect(() => {
+    setImageError(false);
+  }, [uri]);
+
+  // I-resolve ang tamang URL (full HTTP o storage relative path)
+  const resolvedUri = React.useMemo(() => {
+    if (!uri || typeof uri !== 'string') return null;
+    const clean = uri.trim();
+    if (!clean || clean === 'null' || clean === 'undefined') return null;
+    if (clean.startsWith('http://') || clean.startsWith('https://')) return clean;
+    return `${STORAGE_URL}${clean.replace(/^\//, '')}`;
+  }, [uri]);
+
   const getInitials = (): string => {
     if (!name || typeof name !== 'string') return '?';
     const cleanName = name.trim();
     if (!cleanName) return '?';
-    
+
     const words = cleanName.split(' ');
     if (words.length >= 2 && words[0] && words[1]) {
       return `${words[0][0]}${words[1][0]}`.toUpperCase();
@@ -32,9 +46,9 @@ export default function Avatar({ uri, name, size = 48, verified = false, online 
 
   return (
     <View style={style} className="relative">
-      {uri && !imageError ? (
+      {resolvedUri && !imageError ? (
         <Image
-          source={{ uri }}
+          source={{ uri: resolvedUri }}
           style={{ width: size, height: size, borderRadius }}
           className="bg-gray-100"
           onError={() => setImageError(true)}
