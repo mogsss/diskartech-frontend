@@ -1,6 +1,6 @@
 import api from '@/api/axios';
 import NotificationCard from '@/components/ui/NotificationCard';
-import { Colors } from '@/constants/colors';
+import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import {
   CHATS_COLLECTION,
   getOtherParticipant,
@@ -10,6 +10,7 @@ import {
 } from '@/utils/chat';
 import { db } from '@/utils/firebase';
 import { APP_NOTIFICATIONS_COLLECTION } from '@/utils/notifications';
+import { mergeNotificationSources } from '@/utils/notificationFeed';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -24,9 +25,10 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type FilterTab = 'all' | 'applications' | 'messages' | 'updates';
 
@@ -74,6 +76,7 @@ const incomingMsgCache = new Map<string, { text: string; ms: number }>();
 
 export default function NotificationsScreen() {
   const { colors, isDark } = useDarkMode();
+  const insets = useSafeAreaInsets();
   const [apiNotifications, setApiNotifications] = useState<any[]>([]);
   const [liveAppNotifications, setLiveAppNotifications] = useState<any[]>([]);
   const [chatNotifications, setChatNotifications] = useState<any[]>([]);
@@ -81,6 +84,7 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const readNotificationIds = useRef(new Set<string>());
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -111,6 +115,7 @@ export default function NotificationsScreen() {
       try {
         const readNotifsString = await AsyncStorage.getItem('read_notifications');
         const readNotifsIds: string[] = readNotifsString ? JSON.parse(readNotifsString) : [];
+        readNotificationIds.current = new Set(readNotifsIds);
 
         // 1. Fetch Backend API Notifications base sa user role
         if (userRole === 'student') {
@@ -181,7 +186,7 @@ export default function NotificationsScreen() {
                 let titleText = `Application ${statusText}`;
                 let messageText: React.ReactNode = (
                   <Text>
-                    Your application for <Text className="font-bold text-slate-700">{app.job?.title || 'Job'}</Text> is currently {app.status}.
+                    Your application for <Text className="font-bold">{app.job?.title || 'Job'}</Text> is currently {app.status}.
                   </Text>
                 );
 
@@ -189,21 +194,21 @@ export default function NotificationsScreen() {
                   titleText = 'Interview Invitation';
                   messageText = (
                     <Text>
-                      You are invited for an interview for <Text className="font-bold text-slate-700">{app.job?.title || 'Job'}</Text>.
+                      You are invited for an interview for <Text className="font-bold">{app.job?.title || 'Job'}</Text>.
                     </Text>
                   );
                 } else if (app.status === 'accepted') {
                   titleText = 'Application Approved';
                   messageText = (
                     <Text>
-                      Congratulations! Your application for <Text className="font-bold text-slate-700">{app.job?.title || 'Job'}</Text> has been APPROVED.
+                      Congratulations! Your application for <Text className="font-bold">{app.job?.title || 'Job'}</Text> has been APPROVED.
                     </Text>
                   );
                 } else if (app.status === 'rejected') {
                   titleText = 'Application Update';
                   messageText = (
                     <Text>
-                      Your application for <Text className="font-bold text-slate-700">{app.job?.title || 'Job'}</Text> was not accepted.
+                      Your application for <Text className="font-bold">{app.job?.title || 'Job'}</Text> was not accepted.
                     </Text>
                   );
                 }
@@ -309,6 +314,10 @@ export default function NotificationsScreen() {
                   read: isLocallyRead || app.status !== 'pending',
                   type: 'application',
                   targetId: app.id,
+                  applicationId: app.id,
+                  jobId: app.job_id ?? app.job?.id,
+                  senderId: app.student?.user_id,
+                  rawApplication: app,
                 });
               });
             }
@@ -335,7 +344,7 @@ export default function NotificationsScreen() {
                 const data = docSnap.data();
                 const ms = getTimestampMs(data.created_at);
                 const notifId = `firestore_${docSnap.id}`;
-                const isLocallyRead = readNotifsIds.includes(notifId) || data.read === true;
+                const isLocallyRead = readNotificationIds.current.has(notifId) || data.read === true;
 
                 notifs.push({
                   id: notifId,
@@ -346,6 +355,9 @@ export default function NotificationsScreen() {
                   read: isLocallyRead,
                   type: data.type || 'application_status',
                   targetId: data.target_id,
+                  applicationId: data.application_id,
+                  jobId: data.job_id,
+                  senderId: data.sender_id,
                   firestoreDocId: docSnap.id,
                 });
               });
@@ -494,97 +506,10 @@ export default function NotificationsScreen() {
     };
   }, [currentUserId, userRole]);
 
-  function getNotificationDedupeKey(n: any): string {
-    let text = '';
-    if (typeof n.message === 'string') {
-      // Alisin ang lahat ng spaces, quotes, at punctuation para sigurado ang match sa iba't ibang formatting
-      text = n.message.toLowerCase().replace(/[^a-z0-9]/g, '');
-    } else if (n.rawApplication) {
-      text = `app_${n.rawApplication.id}_${n.rawApplication.status || ''}`;
-    }
-
-    const title = (n.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    let type = (n.type || '').trim().toLowerCase();
-    if (type === 'application_status') type = 'application';
-
-    if (text) {
-      return `${type}|${title}|${text}`;
-    }
-    if (n.targetId) {
-      return `${type}|${title}|${n.targetId}`;
-    }
-    return n.id;
-  }
-
-  // Pagsamahin at i-sort chronologically: Pinakabago / Newest First nang walang duplicates!
-  const combinedNotifications = useMemo(() => {
-    const map = new Map<string, any>();
-
-    // 1. Backend API notifications
-    apiNotifications.forEach((n) => {
-      const key = getNotificationDedupeKey(n);
-      if (map.has(key)) {
-        const existing = map.get(key);
-        map.set(key, {
-          ...existing,
-          ...n,
-          targetId: existing.targetId || n.targetId,
-          rawApplication: existing.rawApplication || n.rawApplication,
-          mergedIds: Array.from(new Set([...(existing.mergedIds || [existing.id]), n.id])),
-        });
-      } else {
-        map.set(key, { ...n, mergedIds: [n.id] });
-      }
-    });
-
-    // 2. Live Firestore App notifications (i-merge sa existing para updated pero walang doble)
-    liveAppNotifications.forEach((n) => {
-      const key = getNotificationDedupeKey(n);
-      if (map.has(key)) {
-        const existing = map.get(key);
-        const mergedIds = Array.from(
-          new Set([...(existing.mergedIds || [existing.id]), ...(n.mergedIds || [n.id])])
-        );
-        map.set(key, {
-          ...existing,
-          ...n,
-          id: existing.id || n.id,
-          mergedIds,
-          targetId: existing.targetId || n.targetId,
-          rawApplication: existing.rawApplication || n.rawApplication,
-          read: existing.read || n.read,
-          // Panatilihin ang pinakabagong timestamp
-          timestampMs: Math.max(existing.timestampMs || 0, n.timestampMs || 0),
-          timestamp: (existing.timestampMs || 0) > (n.timestampMs || 0) ? existing.timestamp : n.timestamp,
-        });
-      } else {
-        map.set(key, { ...n, mergedIds: [n.id] });
-      }
-    });
-
-    // 3. Chat notifications
-    chatNotifications.forEach((n) => {
-      const key = getNotificationDedupeKey(n);
-      if (map.has(key)) {
-        const existing = map.get(key);
-        map.set(key, {
-          ...existing,
-          ...n,
-          targetId: existing.targetId || n.targetId,
-          mergedIds: Array.from(new Set([...(existing.mergedIds || [existing.id]), n.id])),
-        });
-      } else {
-        map.set(key, { ...n, mergedIds: [n.id] });
-      }
-    });
-
-    const list = Array.from(map.values());
-
-    // NAKA-SORT CHRONOLOGICALLY: Newest first (Descending timestampMs)
-    list.sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0));
-
-    return list;
-  }, [apiNotifications, liveAppNotifications, chatNotifications]);
+  const combinedNotifications = useMemo(
+    () => mergeNotificationSources(apiNotifications, liveAppNotifications, chatNotifications),
+    [apiNotifications, liveAppNotifications, chatNotifications]
+  );
 
   // Filtered list base sa piniling tab
   const filteredList = useMemo(() => {
@@ -611,6 +536,7 @@ export default function NotificationsScreen() {
 
   const handleNotificationPress = async (notification: any) => {
     const idsToMark: string[] = notification.mergedIds || [notification.id];
+    idsToMark.forEach((id) => readNotificationIds.current.add(id));
     try {
       const readNotifsString = await AsyncStorage.getItem('read_notifications');
       const readNotifsIds: string[] = readNotifsString ? JSON.parse(readNotifsString) : [];
@@ -684,6 +610,7 @@ export default function NotificationsScreen() {
           allIds.push(n.id);
         }
       });
+      allIds.forEach((id) => readNotificationIds.current.add(id));
       await AsyncStorage.setItem('read_notifications', JSON.stringify(Array.from(new Set(allIds))));
     } catch (e) {
       console.error('Error marking all as read:', e);
@@ -694,151 +621,117 @@ export default function NotificationsScreen() {
     setChatNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  if (loading) {
-    return (
-      <View style={{ backgroundColor: colors.background }} className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#dc2626" />
-      </View>
-    );
-  }
+  const filterTabs: { key: FilterTab; label: string; count: number; icon: React.ComponentProps<typeof MaterialIcons>['name'] }[] = [
+    { key: 'all', label: 'All', count: combinedNotifications.length, icon: 'notifications-none' },
+    { key: 'applications', label: 'Applications', count: appCount, icon: 'assignment' },
+    { key: 'messages', label: 'Messages', count: msgCount, icon: 'chat-bubble-outline' },
+    { key: 'updates', label: 'Updates', count: updateCount, icon: 'info-outline' },
+  ];
+  const accentSurface = isDark ? colors.primary + '1F' : '#FEF2F2';
 
   return (
     <View style={{ backgroundColor: colors.background }} className="flex-1">
-      {/* Header */}
-      <View
-        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
-        className="flex-row items-center px-6 pt-12 pb-4 border-b"
-      >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
-          className="w-10 h-10 rounded-full items-center justify-center mr-4"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View className="flex-1">
-          <Text style={{ color: colors.text }} className="text-2xl font-bold">Notifications</Text>
-          {unreadCount > 0 && (
-            <Text className="text-xs text-red-600 font-semibold mt-[2px]">{unreadCount} unread</Text>
-          )}
+      <SafeStatusBar backgroundColor={colors.background} withSpacer={false} />
+      <View className="w-full max-w-2xl self-center px-5 pb-3" style={{ paddingTop: insets.top + 8 }}>
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            className="h-11 w-11 items-center justify-center rounded-2xl border"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          >
+            <MaterialIcons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={{ color: colors.text }} className="flex-1 text-xl font-bold">Notifications</Text>
         </View>
-        <TouchableOpacity onPress={handleMarkAllRead} className="py-2 px-4">
-          <Text className="text-sm text-red-600 font-semibold">Mark all as read</Text>
-        </TouchableOpacity>
+        <View className="mt-4 flex-row items-center justify-between gap-3">
+          <View className="flex-1 flex-row items-center gap-2">
+            <View className="h-2 w-2 rounded-full" style={{ backgroundColor: unreadCount > 0 ? colors.accent : colors.textSecondary }} />
+            <Text style={{ color: colors.textSecondary }} className="flex-1 text-xs">
+              {loading ? 'Loading your updates...' : unreadCount > 0 ? unreadCount + ' unread notification' + (unreadCount === 1 ? '' : 's') : "You're all caught up"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleMarkAllRead}
+            disabled={loading || unreadCount === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Mark all notifications as read"
+            accessibilityState={{ disabled: loading || unreadCount === 0 }}
+            className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3"
+            style={{ backgroundColor: unreadCount > 0 ? accentSurface : 'transparent' }}
+          >
+            <MaterialIcons name="done-all" size={17} color={unreadCount > 0 ? colors.accent : colors.textSecondary} />
+            <Text style={{ color: unreadCount > 0 ? colors.accent : colors.textSecondary }} className="text-xs font-semibold">Mark all read</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Filter Tabs Row */}
-      <View
-        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
-        className="border-b"
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerClassName="px-6 py-2.5 flex-row gap-2"
-        >
-          <TouchableOpacity
-            onPress={() => setActiveTab('all')}
-            style={{
-              backgroundColor: activeTab === 'all' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
-            }}
-            className="px-3.5 py-1.5 rounded-full"
-          >
-            <Text
-              style={{
-                color: activeTab === 'all' ? '#FFFFFF' : colors.textSecondary,
-              }}
-              className="text-xs font-semibold"
-            >
-              All ({combinedNotifications.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setActiveTab('applications')}
-            style={{
-              backgroundColor: activeTab === 'applications' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
-            }}
-            className="px-3.5 py-1.5 rounded-full"
-          >
-            <Text
-              style={{
-                color: activeTab === 'applications' ? '#FFFFFF' : colors.textSecondary,
-              }}
-              className="text-xs font-semibold"
-            >
-              Applications {appCount > 0 ? `(${appCount})` : ''}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setActiveTab('messages')}
-            style={{
-              backgroundColor: activeTab === 'messages' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
-            }}
-            className="px-3.5 py-1.5 rounded-full"
-          >
-            <Text
-              style={{
-                color: activeTab === 'messages' ? '#FFFFFF' : colors.textSecondary,
-              }}
-              className="text-xs font-semibold"
-            >
-              Messages {msgCount > 0 ? `(${msgCount})` : ''}
-            </Text>
-          </TouchableOpacity>
-
-          {updateCount > 0 && (
-            <TouchableOpacity
-              onPress={() => setActiveTab('updates')}
-              style={{
-                backgroundColor: activeTab === 'updates' ? '#DC2626' : isDark ? colors.background : '#F1F5F9',
-              }}
-              className="px-3.5 py-1.5 rounded-full"
-            >
-              <Text
-                style={{
-                  color: activeTab === 'updates' ? '#FFFFFF' : colors.textSecondary,
-                }}
-                className="text-xs font-semibold"
+      <View className="w-full max-w-2xl self-center border-b" style={{ borderBottomColor: colors.border }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-5 pb-4 pt-1">
+          {filterTabs.map((tab) => {
+            const selected = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                onPress={() => setActiveTab(tab.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                accessibilityLabel={tab.label + ', ' + tab.count + ' notifications'}
+                className="min-h-11 flex-row items-center gap-2 rounded-xl border px-3"
+                style={{ backgroundColor: selected ? colors.primary : colors.surface, borderColor: selected ? colors.primary : colors.border }}
               >
-                Updates ({updateCount})
-              </Text>
-            </TouchableOpacity>
-          )}
+                <MaterialIcons name={tab.icon} size={17} color={selected ? '#FFFFFF' : colors.textSecondary} />
+                <Text className="text-xs font-semibold" style={{ color: selected ? '#FFFFFF' : colors.textSecondary }}>{tab.label}</Text>
+                <View className="min-w-5 items-center rounded-md px-1.5 py-0.5" style={{ backgroundColor: selected ? 'rgba(255,255,255,0.18)' : colors.background }}>
+                  <Text className="text-[10px] font-semibold" style={{ color: selected ? '#FFFFFF' : colors.textSecondary }}>{tab.count}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
-      {/* Notification List (Sorted by newest first) */}
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="p-6 pb-10"
-        showsVerticalScrollIndicator={false}
-      >
-        {filteredList.length === 0 ? (
-          <View className="flex-1 justify-center items-center mt-24">
-            <MaterialIcons name="notifications-none" size={56} color={colors.textSecondary} />
-            <Text style={{ color: colors.text }} className="mt-4 text-base font-medium">
-              {activeTab === 'all'
-                ? 'No Notifications'
-                : `No ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
-            </Text>
-            <Text style={{ color: colors.textSecondary }} className="mt-1 text-xs text-center px-10">
-              {userRole === 'student'
-                ? 'Job updates, interview invitations, and chat messages will appear here.'
-                : 'New applicants, verifications, and chat messages will appear here.'}
-            </Text>
-          </View>
-        ) : (
-          filteredList.map((notification) => (
-            <NotificationCard
-              key={notification.id}
-              notification={notification}
-              onPress={() => handleNotificationPress(notification)}
-            />
-          ))
-        )}
-      </ScrollView>
+      {loading ? (
+        <View className="flex-1 items-center justify-center gap-3">
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text className="text-xs" style={{ color: colors.textSecondary }}>Getting your notifications...</Text>
+        </View>
+      ) : (
+        <FlatList
+          className="flex-1"
+          data={filteredList}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerClassName="w-full max-w-2xl self-center px-5 pt-5"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24, flexGrow: 1 }}
+          ListHeaderComponent={filteredList.length > 0 ? (
+            <View className="mb-4 flex-row items-center justify-between gap-3">
+              <Text style={{ color: colors.text }} className="text-sm font-semibold">Latest activity</Text>
+              <View className="flex-row items-center gap-1">
+                <MaterialIcons name="arrow-downward" size={13} color={colors.textSecondary} />
+                <Text style={{ color: colors.textSecondary }} className="text-[11px]">Newest first</Text>
+              </View>
+            </View>
+          ) : null}
+          ListEmptyComponent={
+            <View className="mt-8 items-center rounded-3xl border px-6 py-10" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+              <View className="h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: accentSurface }}>
+                <MaterialIcons name="notifications-none" size={30} color={colors.accent} />
+              </View>
+              <Text style={{ color: colors.text }} className="mt-5 text-center text-base font-semibold">
+                {activeTab === 'all' ? 'No notifications yet' : 'No ' + activeTab + ' yet'}
+              </Text>
+              <Text style={{ color: colors.textSecondary }} className="mt-2 text-center text-xs leading-5">
+                {userRole === 'student'
+                  ? 'Job updates, interview invitations, and messages will appear here.'
+                  : 'New applicants, account updates, and messages will appear here.'}
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => <NotificationCard notification={item} onPress={() => handleNotificationPress(item)} />}
+        />
+      )}
     </View>
   );
 }

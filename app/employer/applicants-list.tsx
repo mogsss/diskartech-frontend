@@ -19,7 +19,6 @@ export default function ApplicantsListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
 
-  const STORAGE_URL = api.defaults.baseURL ? api.defaults.baseURL.replace('/api', '/storage/') : 'https://diskartech-backend.onrender.com/storage/';
 
   const fetchApplicants = async (isBackground = false) => {
     try {
@@ -195,7 +194,7 @@ export default function ApplicantsListScreen() {
               >
                 <View className="mr-4">
                   <Avatar 
-                    uri={app.student?.avatar ? `${STORAGE_URL}${app.student.avatar}` : undefined} 
+                    uri={app.student?.avatar}
                     name={app.student?.student_name} 
                     size={50} 
                   />

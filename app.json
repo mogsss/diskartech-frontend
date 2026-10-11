@@ -56,6 +56,14 @@
         }
       ],
       "@react-native-community/datetimepicker",
+      "@livekit/react-native-expo-plugin",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow DiskarTech to use your camera for video calls.",
+          "microphonePermission": "Allow DiskarTech to use your microphone for video calls."
+        }
+      ],
       [
         "expo-location",
         {

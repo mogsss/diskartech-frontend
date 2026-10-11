@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { Timestamp } from 'firebase/firestore';
 import { LoggedInRole } from '@/types/chat';
+import { resolveMediaUrl } from '@/utils/media';
 
 export function getStorageBaseUrl(): string {
   return api.defaults.baseURL
@@ -10,9 +11,7 @@ export function getStorageBaseUrl(): string {
 }
 
 export function toAbsoluteStorageUrl(path: string | null | undefined): string {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  return `${getStorageBaseUrl()}${path}`;
+  return resolveMediaUrl(path) ?? '';
 }
 
 export function isGenericName(val?: string | null): boolean {

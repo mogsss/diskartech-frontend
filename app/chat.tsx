@@ -3,7 +3,8 @@ import ChatOptionsModal from '@/components/ui/modals/ChatOptionsModal';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import UserProfileModal, { UserProfileData } from '@/components/ui/modals/UserProfileModal';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
-import api, { STORAGE_URL } from '@/api/axios';
+import api from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -202,9 +203,7 @@ export default function ChatScreen() {
           const verified = Boolean(user?.isVerified);
           const liveName = user?.name;
           const liveAvatar = user?.avatar;
-          const avatarUrl = liveAvatar
-            ? (liveAvatar.startsWith('http') ? liveAvatar : `${STORAGE_URL}${liveAvatar}`)
-            : undefined;
+          const avatarUrl = resolveMediaUrl(liveAvatar) ?? undefined;
 
           setChatUser((prev) => ({
             ...prev,

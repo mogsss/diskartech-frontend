@@ -1,5 +1,5 @@
 import { Colors } from '@/constants/colors';
-import { STORAGE_URL } from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState, useEffect } from 'react';
 import { Image, Text, View, ViewStyle } from 'react-native';
@@ -20,14 +20,7 @@ export default function Avatar({ uri, name, size = 48, verified = false, online 
     setImageError(false);
   }, [uri]);
 
-  // I-resolve ang tamang URL (full HTTP o storage relative path)
-  const resolvedUri = React.useMemo(() => {
-    if (!uri || typeof uri !== 'string') return null;
-    const clean = uri.trim();
-    if (!clean || clean === 'null' || clean === 'undefined') return null;
-    if (clean.startsWith('http://') || clean.startsWith('https://')) return clean;
-    return `${STORAGE_URL}${clean.replace(/^\//, '')}`;
-  }, [uri]);
+  const resolvedUri = resolveMediaUrl(uri);
 
   const getInitials = (): string => {
     if (!name || typeof name !== 'string') return '?';

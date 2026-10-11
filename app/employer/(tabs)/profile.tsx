@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import api from '@/api/axios';
+import { resolveMediaUrl, mediaFilename } from '@/utils/media';
 import { useFocusEffect } from '@react-navigation/native';
 import { clearPushToken } from '@/utils/notifications';
 import LoadingModal from '@/components/ui/modals/LoadingModal';
@@ -19,7 +20,7 @@ import { useDarkMode } from '@/hooks/useDarkMode';
 
 const getFilename = (path?: string | null) => {
   if (!path || typeof path !== 'string') return null;
-  return path.split('/').pop() || null;
+  return path.split(/[?#]/)[0].split('/').pop() || null;
 };
 
 export default function EmployerProfileScreen() {
@@ -34,9 +35,6 @@ export default function EmployerProfileScreen() {
   const verificationRoute = `/employer/verification-status?type=${isHousehold ? 'household' : 'business'}` as const;
   const [refreshing, setRefreshing] = useState(false);
 
-  const STORAGE_URL = api.defaults.baseURL
-    ? api.defaults.baseURL.replace('/api', '/storage/')
-    : 'https://diskartech-backend.onrender.com/storage/';
 
   const [isVerified, setIsVerified] = useState(false);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
@@ -57,6 +55,7 @@ export default function EmployerProfileScreen() {
     title: string;
     uri: string | null;
     filename?: string | null;
+    field?: 'valid_id_path' | 'certificate_path';
   }>({ title: '', uri: null, filename: null });
 
   const [alertModalVisible, setAlertModalVisible] = useState(false);
@@ -118,7 +117,7 @@ export default function EmployerProfileScreen() {
         const profile = JSON.parse(storedProfile);
         if (profile.rating !== undefined) setRating(Number(profile.rating));
         if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
-        const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+        const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true || profile.isVerified === '1';
         const reason = profile.rejection_reason || null;
         setIsVerified(verifiedStatus);
         setRejectionReason(reason);
@@ -137,11 +136,7 @@ export default function EmployerProfileScreen() {
           initials = isHousehold ? 'HH' : 'BU';
         }
 
-        if (profile.profile_picture || profile.avatar) {
-          const picPath = profile.profile_picture || profile.avatar;
-          const fullUrl = picPath.startsWith('http') ? picPath : `${STORAGE_URL}${picPath}`;
-          setAvatarUri(fullUrl);
-        }
+        setAvatarUri(resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture));
 
         setUploadedDocs({
           valid_id_path: getFilename(profile.valid_id_path),
@@ -173,7 +168,7 @@ export default function EmployerProfileScreen() {
         if (profile) {
           profile.rating = apiRating;
           profile.review_count = apiReviewCount;
-          const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true;
+          const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true || profile.isVerified === '1';
           const reason = profile.rejection_reason || null;
           setIsVerified(verifiedStatus);
           setRejectionReason(reason);
@@ -192,11 +187,7 @@ export default function EmployerProfileScreen() {
             initials = isHousehold ? 'HH' : 'BU';
           }
 
-          if (profile.profile_picture || profile.avatar) {
-            const picPath = profile.profile_picture || profile.avatar;
-            const fullUrl = picPath.startsWith('http') ? picPath : `${STORAGE_URL}${picPath}`;
-            setAvatarUri(fullUrl);
-          }
+          setAvatarUri(resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture));
 
           setUploadedDocs({
             valid_id_path: getFilename(profile.valid_id_path),
@@ -225,7 +216,7 @@ export default function EmployerProfileScreen() {
     } catch (error) {
       console.error('Error loading profile:', error);
     }
-  }, [isHousehold, STORAGE_URL]);
+  }, [isHousehold]);
 
   useFocusEffect(
     useCallback(() => {
@@ -306,13 +297,15 @@ export default function EmployerProfileScreen() {
 
         const rawPath = response.data.profile_picture || response.data.file_path;
         if (rawPath) {
-          const fullUrl = rawPath.startsWith('http') ? rawPath : `${STORAGE_URL}${rawPath}`;
+          const fullUrl = resolveMediaUrl(response.data?.url || rawPath);
           setAvatarUri(fullUrl);
         }
 
         const storedProfile = await AsyncStorage.getItem('userProfile');
         if (storedProfile) {
           const profileObj = JSON.parse(storedProfile);
+          profileObj.avatar = rawPath;
+          profileObj.avatar_url = resolveMediaUrl(response.data?.url || rawPath);
           profileObj.profile_picture = rawPath;
           await AsyncStorage.setItem('userProfile', JSON.stringify(profileObj));
         }
@@ -437,7 +430,12 @@ export default function EmployerProfileScreen() {
     }
   };
 
-  const handleViewDocument = (title: string, rawPath?: string | null, filename?: string | null) => {
+  const fetchDocumentUri = async (field: 'valid_id_path' | 'certificate_path') => {
+    const response = await api.get('/user/profile');
+    return resolveMediaUrl(response.data?.profile?.[field === 'certificate_path' ? 'employer_certificate_path' : field]);
+  };
+
+  const handleViewDocument = async (field: 'valid_id_path' | 'certificate_path', title: string, rawPath?: string | null) => {
     if (!rawPath) {
       showAlertModal({
         title: 'Notice',
@@ -448,13 +446,14 @@ export default function EmployerProfileScreen() {
       });
       return;
     }
-    const fullUrl = rawPath.startsWith('http') ? rawPath : `${STORAGE_URL}${rawPath}`;
-    setViewerConfig({
-      title,
-      uri: fullUrl,
-      filename: filename || getFilename(rawPath),
-    });
-    setViewerModalVisible(true);
+    try {
+      const uri = await fetchDocumentUri(field);
+      if (!uri) throw new Error('Document unavailable');
+      setViewerConfig({ title, uri, filename: mediaFilename(uri), field });
+      setViewerModalVisible(true);
+    } catch {
+      showAlertModal({ title: 'Document Unavailable', message: 'Unable to load this document. Please try again.', iconName: 'warning' });
+    }
   };
 
   const menuItems = [
@@ -506,24 +505,26 @@ export default function EmployerProfileScreen() {
     rawPath: string | null | undefined, filename: string | null | undefined,
     field: 'valid_id_path' | 'certificate_path',
   ) => (
-    <View key={field} className="rounded-2xl border p-3 mb-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-      <View className="flex-row items-center gap-3">
+    <View key={field} className="rounded-2xl border p-4 mt-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+      <View className="flex-row items-start gap-3">
         <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
         <View className="flex-1">
-          <Text className="text-sm font-semibold" style={{ color: colors.text }}>{title}</Text>
-          <Text className="text-[11px] leading-4 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
+          <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
+          <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
         </View>
-        {rawPath && <TouchableOpacity onPress={() => handleViewDocument(title, rawPath, filename)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View ${title}`} className="w-11 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
       </View>
-      {(!isVerified || !rawPath) && <View className="flex-row items-center justify-between gap-2 mt-3 pt-3 border-t" style={{ borderColor: colors.border }}>
-        <View className="flex-1 flex-row items-center gap-1.5">
-          <MaterialIcons name={rawPath ? (isRejected ? 'error-outline' : 'schedule') : 'file-upload'} size={15} color={accentText} />
-          <Text className="text-[11px] font-medium shrink" style={{ color: isRejected && rawPath ? accentText : colors.textSecondary }}>{rawPath ? (isRejected ? 'Needs review' : 'Uploaded') : 'Required document'}</Text>
+      <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
+        <View className="flex-row items-center gap-1.5">
+          {!(isVerified && rawPath) && <MaterialIcons name={rawPath ? (isRejected ? 'error-outline' : 'schedule') : 'file-upload'} size={14} color={accentText} />}
+          <Text className="text-xs font-medium" style={{ color: isVerified && rawPath ? verifiedColor : isRejected && rawPath ? accentText : colors.textSecondary }}>{isVerified && rawPath ? 'Verified' : rawPath ? (isRejected ? 'Needs review' : 'Uploaded') : 'Required document'}</Text>
         </View>
-        <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDoc ? 0.5 : 1 }}>
-          <MaterialIcons name={rawPath ? 'refresh' : 'file-upload'} size={17} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{rawPath ? 'Change' : 'Upload'}</Text>
-        </TouchableOpacity>
-      </View>}
+        <View className="flex-row items-center gap-2">
+          {rawPath && <TouchableOpacity onPress={() => handleViewDocument(field, title, rawPath)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View ${title}`} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
+          {(!isVerified || !rawPath) && <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDoc ? 0.5 : 1 }}>
+            <MaterialIcons name={rawPath ? 'refresh' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{rawPath ? 'Change' : 'Upload'}</Text>
+          </TouchableOpacity>}
+        </View>
+      </View>
     </View>
   );
 
@@ -615,6 +616,7 @@ export default function EmployerProfileScreen() {
         title={viewerConfig.title}
         uri={viewerConfig.uri}
         filename={viewerConfig.filename}
+        refreshUri={() => viewerConfig.field ? fetchDocumentUri(viewerConfig.field) : Promise.resolve(null)}
       />
 
       {/* Notification / Alert Modal */}

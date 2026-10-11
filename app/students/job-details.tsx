@@ -13,9 +13,9 @@ import {
   Share,
 } from 'react-native';
 import api from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
-import ReportModal from '@/components/common/ReportModal';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import {
   ensureChatRoom,
@@ -24,6 +24,7 @@ import {
   resolveOwnerFromJob,
 } from '@/utils/chat';
 import { sendAppNotification } from '@/utils/notifications';
+import { getCreatedApplicationId } from '@/utils/notificationFeed';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,7 +44,6 @@ export default function JobDetailsScreen() {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [hasReported, setHasReported] = useState(false);
 
   const [notification, setNotification] = useState<{
@@ -247,9 +247,6 @@ export default function JobDetailsScreen() {
   const dailyRate = hasRate ? '\u20B1' + amount.toLocaleString('en-PH', { maximumFractionDigits: 2 }) : 'Not specified';
   const accentColor = isDark ? colors.accent : '#B91C1C';
 
-  const STORAGE_URL = api.defaults.baseURL
-    ? api.defaults.baseURL.replace('/api', '/storage/')
-    : 'https://diskartech-backend.onrender.com/storage/';
 
   const rawLogo =
     job.employer?.profile_image ||
@@ -259,11 +256,7 @@ export default function JobDetailsScreen() {
     job.company_logo ||
     job.companyLogo;
 
-  const companyLogoUrl = rawLogo
-    ? rawLogo.startsWith('http')
-      ? rawLogo
-      : `${STORAGE_URL}${rawLogo.replace(/^\//, '')}`
-    : null;
+  const companyLogoUrl = resolveMediaUrl(rawLogo);
 
   const initials = getInitials(companyName);
 
@@ -334,11 +327,8 @@ export default function JobDetailsScreen() {
         try {
           const owner = resolveOwnerFromJob(job);
           const student = await getStudentParticipantFromStorage();
-          const createdAppId =
-            response.data?.application?.id ||
-            response.data?.application_id ||
-            response.data?.id ||
-            job.id;
+          const createdAppId = getCreatedApplicationId(response.data);
+          if (!createdAppId) throw new Error('The application response did not include an application ID.');
           if (owner.owner_user_id && owner.owner_user_id !== 'unknown') {
             await sendAppNotification({
               recipientId: owner.owner_user_id,
@@ -348,6 +338,8 @@ export default function JobDetailsScreen() {
               body: `${student.student_name || 'A student'} applied for "${job.title || 'Job'}".`,
               type: 'application',
               targetId: createdAppId,
+              applicationId: createdAppId,
+              jobId: job.id,
             });
           }
         } catch (notifErr) {
@@ -640,7 +632,15 @@ export default function JobDetailsScreen() {
                     onPrimaryPress: closeNotification,
                   });
                 } else {
-                  setReportModalVisible(true);
+                  router.push({
+                    pathname: '/students/report',
+                    params: {
+                      targetName: job?.title || companyName,
+                      targetType: 'job',
+                      jobId: String(job?.id || id || ''),
+                      reportedUserId: String(job?.employer?.user_id || job?.household?.user_id || job?.user_id || ''),
+                    },
+                  });
                 }
               }}
               style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 12 }}
@@ -658,49 +658,6 @@ export default function JobDetailsScreen() {
           </View>
         </Pressable>
       </Modal>
-
-      {/* Incident Report Modal */}
-      <ReportModal
-        visible={reportModalVisible}
-        onClose={() => setReportModalVisible(false)}
-        targetName={job?.title || companyName}
-        targetType="job"
-        jobId={job?.id || id}
-        reportedUserId={
-          job?.employer?.user_id ||
-          job?.household?.user_id ||
-          job?.user_id
-        }
-        onSuccess={() => {
-          setHasReported(true);
-          setNotification({
-            visible: true,
-            title: 'Report Received',
-            message:
-              'Thank you for reporting. Your report has been submitted to the admin team for review and investigation.',
-            iconName: 'check-circle',
-            iconColor: '#16A34A',
-            iconBgColor: 'bg-emerald-50',
-            primaryButtonText: 'Done',
-            onPrimaryPress: closeNotification,
-          });
-        }}
-        onAlreadyReported={(msg) => {
-          setHasReported(true);
-          setNotification({
-            visible: true,
-            title: 'Report Already Submitted',
-            message:
-              msg ||
-              'You have already reported this. Our safety and moderation team is currently reviewing your report.',
-            iconName: 'check-circle',
-            iconColor: '#16A34A',
-            iconBgColor: 'bg-emerald-50',
-            primaryButtonText: 'Understood',
-            onPrimaryPress: closeNotification,
-          });
-        }}
-      />
 
       <NotificationModal
         visible={notification.visible}

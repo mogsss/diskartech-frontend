@@ -12,7 +12,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import MapViewerModal from '@/components/ui/modals/MapViewerModal';
-import api, { STORAGE_URL } from '@/api/axios';
+import api from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 import { db } from '@/utils/firebase';
 import {
   CHATS_COLLECTION,
@@ -28,7 +29,6 @@ import CertificateOfEmploymentCard from '@/components/student/CertificateOfEmplo
 import InterviewInformationCard from '@/components/student/InterviewInformationCard';
 import JobOverviewCard from '@/components/student/JobOverviewCard';
 import * as WebBrowser from 'expo-web-browser';
-import ReportModal from '@/components/common/ReportModal';
 import { sendAppNotification } from '@/utils/notifications';
 import {
   collection,
@@ -64,7 +64,6 @@ export default function StudentApplicationDetailsScreen() {
   const [certData, setCertData] = useState<any>(null);
   const [loadingCert, setLoadingCert] = useState(false);
   const [requestingCert, setRequestingCert] = useState(false);
-  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [hasReported, setHasReported] = useState(false);
 
   // States para sa interview date, time, at address
@@ -205,14 +204,7 @@ export default function StudentApplicationDetailsScreen() {
         const resolvedOwner = jobData.employer_id || jobData.household_id || jobData.user_id || 'employer_default';
         setOwnerId(resolvedOwner.toString());
 
-        if (rawAvatar) {
-          const formattedAvatar = rawAvatar.startsWith('http')
-            ? rawAvatar
-            : `${STORAGE_URL}${rawAvatar}`;
-          setEmployerAvatar(formattedAvatar);
-        } else {
-          setEmployerAvatar('');
-        }
+        setEmployerAvatar(resolveMediaUrl(rawAvatar) ?? '');
 
         // Hanapin ang Interview Details (Date, Time, Address/Link)
         let iDate = appData.interview_date || '';
@@ -222,7 +214,7 @@ export default function StudentApplicationDetailsScreen() {
 
         // Kung status ay interview ngunit wala pa sa database columns,
         // hanapin ang invitation message mula sa chat history sa Firestore
-        if (appData.status === 'interview' && (!iDate || !iTime || !iLoc)) {
+        if (appData.status === 'interview' && (!iDate || !iTime || (iType !== 'online' && !iLoc))) {
           try {
             const studentInfo = await getStudentParticipantFromStorage();
             const sId = String(studentInfo.student_user_id || '').trim();
@@ -497,8 +489,14 @@ export default function StudentApplicationDetailsScreen() {
 
       const jobTitle = job?.title || 'Job Opening';
       const title = `Interview: ${jobTitle} - ${companyName}`;
-      const location = interviewDetails?.location || job?.location || resolveWorkAddress(job) || '';
-      const details = `Job Interview for "${jobTitle}" at ${companyName}.\nInterview Type: ${(interviewDetails?.type || 'walk-in').toUpperCase()}.\nLocation: ${location}\n\nPlease bring your valid school ID and wear appropriate attire.`;
+      const isOnline = interviewDetails?.type === 'online';
+      const location = isOnline
+        ? 'DiskarTech video call'
+        : interviewDetails?.location || job?.location || resolveWorkAddress(job) || '';
+      const reminder = isOnline
+        ? 'Open your application details in DiskarTech and tap Join video call.'
+        : 'Please bring your valid school ID and wear appropriate attire.';
+      const details = `Job Interview for "${jobTitle}" at ${companyName}.\nInterview Type: ${(interviewDetails?.type || 'walk-in').toUpperCase()}.\nLocation: ${location}\n\n${reminder}`;
 
       // Helper para i-parse ang date at time papuntang standard calendar format
       let datesParam = '';
@@ -814,7 +812,15 @@ export default function StudentApplicationDetailsScreen() {
                   onPrimaryPress: closeNotification,
                 });
               } else {
-                setReportModalVisible(true);
+                router.push({
+                  pathname: '/students/report',
+                  params: {
+                    targetName: job?.title || companyName,
+                    targetType: job?.title ? 'job' : 'employer',
+                    jobId: String(application?.job_id || job?.id || ''),
+                    reportedUserId: String(job?.employer?.user_id || job?.household?.user_id || job?.user_id || application?.job?.user_id || ''),
+                  },
+                });
               }
             }}
             accessibilityRole="button"
@@ -872,6 +878,7 @@ export default function StudentApplicationDetailsScreen() {
               endDate={application?.end_date}
               workSchedule={application?.work_schedule || getCleanDays(job)}
               agreedRate={application?.agreed_rate || job?.salary}
+              salaryType={job?.salary_type}
               contractTerms={application?.contract_terms}
               specialInstructions={application?.special_instructions}
               status={status}
@@ -913,12 +920,14 @@ export default function StudentApplicationDetailsScreen() {
         {/* Interview details */}
         {isInterview && (
           <InterviewInformationCard
+            applicationId={applicationId || application.id}
             interviewDetails={interviewDetails}
             companyName={companyName}
             fallbackLocation={job.location || resolveWorkAddress(job)}
             latitude={job.latitude}
             longitude={job.longitude}
             onAddToCalendar={handleAddToCalendar}
+            onJoinInterview={() => router.push({ pathname: '/online-interview-call', params: { applicationId: String(applicationId) } })}
             onOpenMap={(address) =>
               handleOpenMapViewer(
                 companyName,
@@ -1020,47 +1029,6 @@ export default function StudentApplicationDetailsScreen() {
         address={mapModalConfig.address}
         latitude={mapModalConfig.latitude}
         longitude={mapModalConfig.longitude}
-      />
-
-      {/* Incident Report Modal */}
-      <ReportModal
-        visible={reportModalVisible}
-        onClose={() => setReportModalVisible(false)}
-        targetName={job?.title || companyName}
-        targetType={job?.title ? 'job' : 'employer'}
-        jobId={application?.job_id || job?.id}
-        reportedUserId={
-          job?.employer?.user_id ||
-          job?.household?.user_id ||
-          job?.user_id ||
-          application?.job?.user_id
-        }
-        onSuccess={() => {
-          setHasReported(true);
-          setNotification({
-            visible: true,
-            title: 'Report Received',
-            message: 'Thank you for reporting. Your report has been submitted to the admin team for review and investigation.',
-            iconName: 'check-circle',
-            iconColor: '#16A34A',
-            iconBgColor: 'bg-emerald-50',
-            primaryButtonText: 'Done',
-            onPrimaryPress: closeNotification,
-          });
-        }}
-        onAlreadyReported={(msg) => {
-          setHasReported(true);
-          setNotification({
-            visible: true,
-            title: 'Report Already Submitted',
-            message: msg || 'You have already submitted a report for this job. Our safety and moderation team is currently reviewing your report.',
-            iconName: 'check-circle',
-            iconColor: '#16A34A',
-            iconBgColor: 'bg-emerald-50',
-            primaryButtonText: 'Understood',
-            onPrimaryPress: closeNotification,
-          });
-        }}
       />
 
       <NotificationModal

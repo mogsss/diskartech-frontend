@@ -1,19 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  Modal,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { WebView } from 'react-native-webview';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Colors } from '@/constants/colors';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { filterPinamalayanResults, isWithinPinamalayan, MAP_RING_CHECK_JS, LOCATION_RESTRICTION_MESSAGE,
+  locationSearchText, LocationSearchResult, PINAMALAYAN_BOUNDARY, PINAMALAYAN_CENTER,
+  PINAMALAYAN_VIEWBOX, safeLocationAddress } from '@/utils/pinamalayanLocation';
 
 interface LocationPickerProps {
   visible: boolean;
@@ -22,255 +15,196 @@ interface LocationPickerProps {
   initialLatitude?: number;
   initialLongitude?: number;
 }
-
-// Default coordinates: Calapan / Oriental Mindoro (o Metro Manila)
-const DEFAULT_LAT = 13.4115;
-const DEFAULT_LNG = 121.1803;
-
-// Eye-friendly accent red
 const ACCENT_RED = '#C53030';
+const GEOCODER_HEADERS = { 'User-Agent': 'DiskarTech-Mobile-App/1.0', 'Accept-Language': 'en' };
 
-export default function LocationPickerModal({
-  visible,
-  onClose,
-  onSelectLocation,
-  initialLatitude,
-  initialLongitude,
-}: LocationPickerProps) {
+export default function LocationPickerModal({ visible, onClose, onSelectLocation, initialLatitude, initialLongitude }: LocationPickerProps) {
   const { isDark, colors } = useDarkMode();
   const webViewRef = useRef<WebView>(null);
-
-  const [coords, setCoords] = useState({
-    latitude: initialLatitude || DEFAULT_LAT,
-    longitude: initialLongitude || DEFAULT_LNG,
-  });
-
-  const [formattedAddress, setFormattedAddress] = useState('Pinpoint a location on the map');
+  const coordsRef = useRef(PINAMALAYAN_CENTER);
+  const [coords, setCoords] = useState(PINAMALAYAN_CENTER);
+  const [formattedAddress, setFormattedAddress] = useState('');
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
-
-  // Search Location states
+  const [locationMessage, setLocationMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<LocationSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const searchTimeoutRef = useRef<any>(null);
+  const [searchMessage, setSearchMessage] = useState('');
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRevision = useRef(0);
+  const addressRevision = useRef(0);
+  const sessionRevision = useRef(0);
+  const isVisibleRef = useRef(false);
 
-  useEffect(() => {
-    if (visible) {
-      setSearchQuery('');
-      setSearchResults([]);
-      setShowResults(false);
-      if (!initialLatitude || !initialLongitude) {
-        getCurrentLocation();
-      } else {
-        fetchAddress(initialLatitude, initialLongitude);
-      }
-    }
-  }, [visible]);
+  const updateMap = useCallback((lat: number, lng: number) => {
+    if (!isWithinPinamalayan(lat, lng)) return;
+    webViewRef.current?.injectJavaScript('window.updateMapPosition && window.updateMapPosition(' + lat + ',' + lng + '); true;');
+  }, []);
 
-  // Kunin ang kasalukuyang GPS location ng user
-  const getCurrentLocation = async () => {
+  const fetchAddress = useCallback(async (lat: number, lng: number) => {
+    const revision = ++addressRevision.current;
+    setLoadingAddress(true);
+    setFormattedAddress('');
+    let address: string | null = null;
     try {
-      setLocatingUser(true);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        fetchAddress(coords.latitude, coords.longitude);
-        setLocatingUser(false);
+      const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      const result = results[0];
+      // Avoid assigning an adjacent town's address when a geocoder snaps across the border.
+      if (result && /pinamalayan/i.test(result.city || result.subregion || '')) {
+        address = safeLocationAddress([result.street, result.district || result.name, 'Pinamalayan', 'Oriental Mindoro']
+          .filter(Boolean).join(', '));
+      }
+    } catch { /* Native geocoding can require permission; use the HTTP fallback. */ }
+    if (!address && isVisibleRef.current && revision === addressRevision.current) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&addressdetails=1',
+          { headers: GEOCODER_HEADERS, signal: controller.signal });
+        if (response.ok) {
+          const data = await response.json();
+          const place = data.address?.city || data.address?.town || data.address?.municipality || '';
+          if (/pinamalayan/i.test(place)) address = safeLocationAddress(data.display_name);
+        }
+      } catch { /* Keep a coordinate-based address within the validated municipality. */ }
+      finally { clearTimeout(timeout); }
+    }
+    if (!isVisibleRef.current || revision !== addressRevision.current) return;
+    setFormattedAddress(address || 'Pinamalayan, Oriental Mindoro (' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ')');
+    setLoadingAddress(false);
+  }, []);
+
+  const selectCoordinates = useCallback((lat: number, lng: number) => {
+    if (!isWithinPinamalayan(lat, lng)) {
+      setLocationMessage(LOCATION_RESTRICTION_MESSAGE);
+      updateMap(coordsRef.current.latitude, coordsRef.current.longitude);
+      return false;
+    }
+    coordsRef.current = { latitude: lat, longitude: lng };
+    setCoords(coordsRef.current);
+    setLocationMessage('');
+    updateMap(lat, lng);
+    void fetchAddress(lat, lng);
+    return true;
+  }, [fetchAddress, updateMap]);
+
+  const getCurrentLocation = useCallback(async () => {
+    const session = sessionRevision.current;
+    const selection = addressRevision.current;
+    setLocatingUser(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!isVisibleRef.current || session !== sessionRevision.current) return;
+      if (permission.status !== 'granted') {
+        setLocationMessage('Location permission is off. Search or choose a pin within Pinamalayan.');
         return;
       }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const lat = location.coords.latitude;
-      const lng = location.coords.longitude;
-
-      setCoords({ latitude: lat, longitude: lng });
-      fetchAddress(lat, lng);
-
-      // I-pan at i-zoom ang OpenStreetMap sa bagong coordinates
-      if (webViewRef.current) {
-        webViewRef.current.injectJavaScript(`
-          if (window.updateMapPosition) {
-            window.updateMapPosition(${lat}, ${lng});
-          }
-          true;
-        `);
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (!isVisibleRef.current || session !== sessionRevision.current || selection !== addressRevision.current) return;
+      if (!isWithinPinamalayan(location.coords.latitude, location.coords.longitude)) {
+        setLocationMessage('Your current location is outside Pinamalayan. Choose a location inside the highlighted area.');
+        return;
       }
-    } catch (error) {
-      console.warn('Error getting current location:', error);
-      fetchAddress(coords.latitude, coords.longitude);
-    } finally {
-      setLocatingUser(false);
-    }
-  };
-
-  // I-convert ang coordinates patungong nababasang address (Reverse Geocoding)
-  const fetchAddress = async (lat: number, lng: number) => {
-    setLoadingAddress(true);
-    try {
-      // 1. Subukan gamit ang native expo-location reverse geocoder
-      const expoResult = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-      if (expoResult && expoResult.length > 0) {
-        const addr = expoResult[0];
-        const barangay = addr.district || addr.name || '';
-        const city = addr.city || addr.subregion || '';
-        const province = addr.region || '';
-        const street = addr.street || '';
-
-        const full = [street, barangay, city, province]
-          .filter((item) => item && item.trim() !== '')
-          .join(', ');
-
-        if (full) {
-          setFormattedAddress(full);
-          setLoadingAddress(false);
-          return;
-        }
-      }
-
-      // 2. Fallback: OpenStreetMap Nominatim Free Geocoder kung walang returned data ang native
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'DiskarTech-Mobile-App/1.0',
-            'Accept-Language': 'en',
-          },
-        }
-      );
-      const data = await res.json();
-      if (data && data.display_name) {
-        setFormattedAddress(data.display_name);
-      } else {
-        setFormattedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-      }
+      selectCoordinates(location.coords.latitude, location.coords.longitude);
     } catch {
-      setFormattedAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      if (isVisibleRef.current && session === sessionRevision.current) setLocationMessage('Could not get your location. Search or choose a pin within Pinamalayan.');
     } finally {
-      setLoadingAddress(false);
+      if (isVisibleRef.current && session === sessionRevision.current) setLocatingUser(false);
     }
-  };
+  }, [selectCoordinates]);
 
-  // Search Location via OpenStreetMap Nominatim API & Expo Location
-  const searchLocation = async (queryText: string) => {
-    const trimmed = queryText.trim();
-    if (!trimmed || trimmed.length < 2) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-
-    setSearching(true);
-    try {
-      // 1. Nominatim Philippines Search
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trimmed)}&countrycodes=ph&limit=5&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'DiskarTech-Mobile-App/1.0',
-            'Accept-Language': 'en',
-          },
-        }
-      );
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setSearchResults(data);
-        setShowResults(true);
-      } else {
-        // Fallback: expo-location native geocoding
-        const nativeResults = await Location.geocodeAsync(trimmed);
-        if (nativeResults && nativeResults.length > 0) {
-          const formatted = nativeResults.slice(0, 5).map((r, i) => ({
-            place_id: `native-${i}`,
-            lat: r.latitude,
-            lon: r.longitude,
-            display_name: trimmed,
-          }));
-          setSearchResults(formatted);
-          setShowResults(true);
-        } else {
-          setSearchResults([]);
-          setShowResults(false);
-        }
+  useEffect(() => {
+    const sessions = sessionRevision, searches = searchRevision, addresses = addressRevision;
+    isVisibleRef.current = visible;
+    ++sessionRevision.current;
+    ++searchRevision.current;
+    ++addressRevision.current;
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (visible) {
+      setSearchQuery(''); setSearchResults([]); setShowResults(false); setSearching(false); setLocatingUser(false); setSearchMessage('');
+      const initial = isWithinPinamalayan(initialLatitude, initialLongitude)
+        ? { latitude: initialLatitude!, longitude: initialLongitude! } : PINAMALAYAN_CENTER;
+      selectCoordinates(initial.latitude, initial.longitude);
+      if (initialLatitude !== undefined && initialLongitude !== undefined && !isWithinPinamalayan(initialLatitude, initialLongitude)) {
+        setLocationMessage('Your saved location is outside Pinamalayan. Please choose a new location.');
       }
-    } catch (err) {
-      console.warn('Error searching location:', err);
-      try {
-        const nativeResults = await Location.geocodeAsync(trimmed);
-        if (nativeResults && nativeResults.length > 0) {
-          const formatted = nativeResults.slice(0, 5).map((r, i) => ({
-            place_id: `native-${i}`,
-            lat: r.latitude,
-            lon: r.longitude,
-            display_name: trimmed,
-          }));
-          setSearchResults(formatted);
-          setShowResults(true);
-        }
-      } catch {}
-    } finally {
-      setSearching(false);
     }
+    return () => {
+      isVisibleRef.current = false;
+      ++sessions.current; ++searches.current; ++addresses.current;
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [visible, initialLatitude, initialLongitude, selectCoordinates]);
+
+  const searchLocation = async (query: string) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    const revision = ++searchRevision.current;
+    let trimmed: string;
+    try { trimmed = locationSearchText(query); }
+    catch (error) {
+      setSearchResults([]); setShowResults(true); setSearching(false); setSearchMessage((error as Error).message); return;
+    }
+    if (trimmed.length < 2) { setSearchResults([]); setShowResults(false); setSearching(false); return; }
+    setSearching(true); setSearchMessage(''); setShowResults(false);
+    let results: LocationSearchResult[] = [];
+    const scopedQuery = trimmed + ', Pinamalayan, Oriental Mindoro, Philippines';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(scopedQuery)
+        + '&countrycodes=ph&bounded=1&viewbox=' + PINAMALAYAN_VIEWBOX + '&limit=20&addressdetails=1',
+      { headers: GEOCODER_HEADERS, signal: controller.signal });
+      if (response.ok) results = filterPinamalayanResults(await response.json());
+    } catch { /* Try a scoped native search, with the same polygon check. */ }
+    finally { clearTimeout(timeout); }
+    if (!isVisibleRef.current || revision !== searchRevision.current) return;
+    if (!results.length) {
+      try {
+        const native = await Location.geocodeAsync(scopedQuery);
+        results = filterPinamalayanResults(native.map((r, i) => ({ place_id: 'native-' + i, lat: r.latitude, lon: r.longitude, display_name: scopedQuery })));
+      } catch { /* Show an empty state, without offering out-of-area results. */ }
+    }
+    if (!isVisibleRef.current || revision !== searchRevision.current) return;
+    setSearchResults(results); setShowResults(true); setSearching(false);
+    setSearchMessage(results.length ? '' : 'No matching places in Pinamalayan. Try a barangay or landmark, or choose a pin on the map.');
   };
 
   const handleQueryChange = (text: string) => {
-    setSearchQuery(text);
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    if (!text.trim()) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-    searchTimeoutRef.current = setTimeout(() => {
-      searchLocation(text);
-    }, 600);
+    // Keep spaces while typing; sanitize and validate before making a search request.
+    setSearchQuery(text.replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').slice(0, 120));
+    ++searchRevision.current;
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setSearchResults([]); setShowResults(false); setSearching(false);
+    if (text.trim().length < 2) return;
+    searchTimeoutRef.current = setTimeout(() => void searchLocation(text), 1000);
   };
 
-  const handleSelectSearchResult = (item: any) => {
-    const lat = parseFloat(item.lat);
-    const lng = parseFloat(item.lon);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      setCoords({ latitude: lat, longitude: lng });
-      setFormattedAddress(item.display_name || searchQuery);
-      setShowResults(false);
-      setSearchQuery('');
-      Keyboard.dismiss();
-
-      if (webViewRef.current) {
-        webViewRef.current.injectJavaScript(`
-          if (window.updateMapPosition) {
-            window.updateMapPosition(${lat}, ${lng});
-          }
-          true;
-        `);
-      }
+  const handleSelectSearchResult = (item: LocationSearchResult) => {
+    if (selectCoordinates(item.lat, item.lon)) {
+      ++searchRevision.current;
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      setShowResults(false); setSearching(false); setSearchQuery(''); Keyboard.dismiss();
     }
   };
 
-  // Tanggapin ang mensahe mula sa Leaflet kapag nag-tap o nag-drag ang user ng pin
-  const handleWebViewMessage = (event: any) => {
+  const handleWebViewMessage = (event: WebViewMessageEvent) => {
+    if (!isVisibleRef.current) return;
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'outside_boundary') { setLocationMessage(LOCATION_RESTRICTION_MESSAGE); return; }
       if (data.type === 'location_selected') {
-        const lat = Number(data.latitude);
-        const lng = Number(data.longitude);
-        setCoords({ latitude: lat, longitude: lng });
-        fetchAddress(lat, lng);
-        setShowResults(false);
-        Keyboard.dismiss();
+        selectCoordinates(data.latitude, data.longitude);
+        ++searchRevision.current;
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        setSearching(false); setShowResults(false); Keyboard.dismiss();
       }
-    } catch (err) {
-      console.warn('Error parsing map message:', err);
-    }
+    } catch { /* Ignore malformed messages; never move or save the pin. */ }
   };
 
-  // Pure HTML + Leaflet + OpenStreetMap (100% Free, Zero API Keys, No native crashes)
-  const leafletHTML = `
+  // Keep the WebView source stable while searches and address lookups update React state.
+  const mapSource = useMemo(() => ({ html: `
     <!DOCTYPE html>
     <html>
     <head>
@@ -320,18 +254,31 @@ export default function LocationPickerModal({
     <body>
       <div id="map"></div>
       <script>
-        var initialLat = ${coords.latitude};
-        var initialLng = ${coords.longitude};
+        var initialLat = ${PINAMALAYAN_CENTER.latitude};
+        var initialLng = ${PINAMALAYAN_CENTER.longitude};
+        var boundary = ${JSON.stringify(PINAMALAYAN_BOUNDARY)};
+        var withinRing = ${MAP_RING_CHECK_JS};
+        function allowed(lat, lng) {
+          var rings = boundary.geometry.coordinates;
+          return Number.isFinite(lat) && Number.isFinite(lng) && withinRing(lat, lng, rings[0])
+            && !rings.slice(1).some(function(ring) { return withinRing(lat, lng, ring); });
+        }
+        var bounds = L.latLngBounds([boundary.bbox[1], boundary.bbox[0]], [boundary.bbox[3], boundary.bbox[2]]);
 
         var map = L.map('map', {
           zoomControl: true,
-          attributionControl: false
+          attributionControl: true,
+          maxBounds: bounds.pad(0.05),
+          maxBoundsViscosity: 1,
+          minZoom: 11
         }).setView([initialLat, initialLng], 15);
 
         // OpenStreetMap Free Carto Tiles
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
+        L.geoJSON(boundary, { interactive: false, style: { color: '${ACCENT_RED}', weight: 2, fillOpacity: 0.06 } }).addTo(map);
 
         // Modern Red Pin Marker with Pulse
         var redIcon = L.divIcon({
@@ -356,32 +303,43 @@ export default function LocationPickerModal({
           }
         }
 
-        // Tap saanman sa mapa para ilipat ang pin
+        var lastValid = [initialLat, initialLng];
+        function movePin(lat, lng) {
+          if (!allowed(lat, lng)) {
+            marker.setLatLng(lastValid);
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'outside_boundary' }));
+            return false;
+          }
+          lastValid = [lat, lng];
+          marker.setLatLng(lastValid);
+          return true;
+        }
         map.on('click', function(e) {
           var lat = e.latlng.lat;
           var lng = e.latlng.lng;
-          marker.setLatLng([lat, lng]);
-          notifyApp(lat, lng);
+          if (movePin(lat, lng)) notifyApp(lat, lng);
         });
 
         // Pagkatapos i-drag ang pin
         marker.on('dragend', function(e) {
           var pos = e.target.getLatLng();
-          notifyApp(pos.lat, pos.lng);
+          if (movePin(pos.lat, pos.lng)) notifyApp(pos.lat, pos.lng);
         });
 
         // Function para baguhin ang center mula sa React Native
         window.updateMapPosition = function(newLat, newLng) {
+          if (!movePin(newLat, newLng)) return;
           map.setView([newLat, newLng], 16, { animate: true });
-          marker.setLatLng([newLat, newLng]);
         };
       </script>
     </body>
     </html>
-  `;
+  ` }), []);
+  const canConfirm = !loadingAddress && !locatingUser && !!safeLocationAddress(formattedAddress)
+    && isWithinPinamalayan(coords.latitude, coords.longitude);
 
   return (
-    <Modal visible={visible} animationType="slide">
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         {/* Top Header */}
         <View 
@@ -390,7 +348,7 @@ export default function LocationPickerModal({
         >
           <View className="flex-1 mr-3">
             <Text className="text-xl font-bold" style={{ color: colors.text }}>Pinpoint Your Location</Text>
-            <Text className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>Search, tap, or drag the pin on OpenStreetMap</Text>
+            <Text className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>Pinamalayan, Oriental Mindoro only</Text>
           </View>
           <TouchableOpacity
             onPress={onClose}
@@ -430,7 +388,8 @@ export default function LocationPickerModal({
                 value={searchQuery}
                 onChangeText={handleQueryChange}
                 onSubmitEditing={() => searchLocation(searchQuery)}
-                placeholder="Search city, barangay, landmark..."
+                placeholder="Search a barangay or landmark..."
+                maxLength={120}
                 placeholderTextColor={colors.textSecondary}
                 style={{
                   flex: 1,
@@ -445,9 +404,7 @@ export default function LocationPickerModal({
               ) : searchQuery ? (
                 <TouchableOpacity
                   onPress={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                    setShowResults(false);
+                    handleQueryChange('');
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
@@ -457,7 +414,7 @@ export default function LocationPickerModal({
             </View>
 
             {/* Search Results Dropdown List */}
-            {showResults && searchResults.length > 0 && (
+            {showResults && (
               <View
                 style={{
                   backgroundColor: colors.surface,
@@ -472,6 +429,7 @@ export default function LocationPickerModal({
                 className="mt-2 rounded-2xl border overflow-hidden"
               >
                 <ScrollView keyboardShouldPersistTaps="handled">
+                  {!!searchMessage && <Text className="px-4 py-3 text-xs leading-5" style={{ color: colors.textSecondary }}>{searchMessage}</Text>}
                   {searchResults.map((item, index) => (
                     <TouchableOpacity
                       key={item.place_id || index}
@@ -502,11 +460,12 @@ export default function LocationPickerModal({
             )}
           </View>
 
-          <WebView
+          {visible && <WebView
             ref={webViewRef}
             originWhitelist={['*']}
-            source={{ html: leafletHTML }}
+            source={mapSource}
             onMessage={handleWebViewMessage}
+            onLoadEnd={() => updateMap(coordsRef.current.latitude, coordsRef.current.longitude)}
             style={{ flex: 1 }}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -518,7 +477,7 @@ export default function LocationPickerModal({
                 <Text className="text-xs mt-2 font-medium" style={{ color: colors.textSecondary }}>Loading OpenStreetMap...</Text>
               </View>
             )}
-          />
+          />}
 
           {/* Floating Current Location (GPS) Button */}
           <TouchableOpacity
@@ -544,6 +503,10 @@ export default function LocationPickerModal({
           className="p-5 border-t shadow-sm"
           style={{ backgroundColor: colors.surface, borderColor: colors.border }}
         >
+          {!!locationMessage && <View className="flex-row items-start gap-2 mb-3">
+            <MaterialIcons name="info-outline" size={18} color={colors.textSecondary} />
+            <Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }} accessibilityRole="alert">{locationMessage}</Text>
+          </View>}
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center gap-1.5">
               <MaterialIcons name="place" size={16} color={ACCENT_RED} />
@@ -558,7 +521,7 @@ export default function LocationPickerModal({
           </View>
 
           <Text className="text-sm font-semibold mb-2 leading-5" numberOfLines={2} style={{ color: colors.text }}>
-            {formattedAddress}
+            {formattedAddress || 'Finding your selected address...'}
           </Text>
 
           {/* Coordinates Chip */}
@@ -578,7 +541,10 @@ export default function LocationPickerModal({
 
           {/* Confirm Button */}
           <TouchableOpacity
+            disabled={!canConfirm}
+            accessibilityState={{ disabled: !canConfirm }}
             onPress={() => {
+              if (!canConfirm) return;
               onSelectLocation({
                 latitude: coords.latitude,
                 longitude: coords.longitude,
@@ -586,7 +552,7 @@ export default function LocationPickerModal({
               });
               onClose();
             }}
-            style={{ backgroundColor: ACCENT_RED }}
+            style={{ backgroundColor: ACCENT_RED, opacity: canConfirm ? 1 : 0.5 }}
             className="rounded-2xl py-4 items-center justify-center shadow-sm flex-row gap-2 active:opacity-85"
           >
             <MaterialIcons name="check-circle" size={20} color="white" />

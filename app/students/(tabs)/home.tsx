@@ -14,7 +14,8 @@ import { router, useFocusEffect } from 'expo-router';
 import HomeJobCard from '@/components/student/HomeJobCard';
 import SearchBar from '@/components/ui/SearchBar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, { STORAGE_URL } from '@/api/axios';
+import api from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 import { matchJobWithQuery } from '@/utils/fuzzySearch';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
@@ -113,9 +114,7 @@ export default function HomeScreen() {
           const initials = nameParts.length >= 2
             ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
             : fullName.substring(0, 2).toUpperCase();
-          const avatarUrl = profile.avatar
-            ? (profile.avatar.startsWith('http') ? profile.avatar : `${STORAGE_URL}${profile.avatar}`)
-            : null;
+          const avatarUrl = resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture);
           setStudentProfile({
             name: fullName,
             avatarUri: avatarUrl,
@@ -460,7 +459,7 @@ export default function HomeScreen() {
         <HomeJobCard job={{
           jobTitle: job.title,
           companyName: owner?.household_name || owner?.employer_name || 'Employer',
-          companyLogo: rawAvatar ? (rawAvatar.startsWith('http') ? rawAvatar : `${STORAGE_URL}${rawAvatar}`) : '',
+          companyLogo: resolveMediaUrl(rawAvatar) ?? '',
           salary: Number.isFinite(numericSalary) ? `₱${numericSalary.toLocaleString('en-PH')}` : `₱${job.salary}`,
           salary_type: job.salary_type,
           location: owner?.location || 'Pinamalayan',

@@ -3,12 +3,14 @@ import { View, Text } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import ApplicationSection from '@/components/student/application-details/ApplicationSection';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { getSalaryUnit } from '@/utils/jobRate';
 
 interface EmploymentContractCardProps {
   startDate?: string;
   endDate?: string;
   workSchedule?: string;
   agreedRate?: string | number;
+  salaryType?: string | null;
   contractTerms?: string;
   specialInstructions?: string;
   status?: string;
@@ -19,6 +21,7 @@ export default function EmploymentContractCard({
   endDate,
   workSchedule,
   agreedRate,
+  salaryType,
   contractTerms,
   specialInstructions,
   status,
@@ -64,7 +67,7 @@ export default function EmploymentContractCard({
           style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC', borderColor: colors.border }}
         >
           <Text className="text-[10px] font-semibold uppercase" style={{ color: colors.textSecondary }}>Agreed Rate</Text>
-          <Text className="text-xs font-bold mt-0.5" style={{ color: isDark ? '#34D399' : '#047857' }}>₱{agreedRate || '0'}</Text>
+          <Text className="text-xs font-bold mt-0.5" style={{ color: isDark ? '#34D399' : '#047857' }}>₱{agreedRate || '0'} {getSalaryUnit(salaryType)}</Text>
         </View>
       </View>
 

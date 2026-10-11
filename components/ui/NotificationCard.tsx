@@ -1,77 +1,84 @@
-import { Notification } from '@/types';
 import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface NotificationCardProps {
-  notification: any; // Pinalitan pansamantala para maging flexible sa JSX message
+  notification: {
+    type?: string;
+    title?: string;
+    message?: React.ReactNode;
+    timestamp?: string;
+    read?: boolean;
+  };
   onPress: () => void;
 }
 
-const typeConfig: Record<string, { icon: any; color: string; bg: string }> = {
-  new_job: { icon: 'location-on', color: '#DC2626', bg: '#FEE2E2' },
-  job_recommendation: { icon: 'work', color: '#2196F3', bg: '#E3F2FD' },
-  application_accepted: { icon: 'check-circle', color: '#4CAF50', bg: '#E8F5E9' },
-  interview_reminder: { icon: 'event', color: '#FF9800', bg: '#FFF3E0' },
-  message: { icon: 'message', color: '#D32F2F', bg: '#FFEBEE' },
-  verification_verified: { icon: 'verified', color: '#10B981', bg: '#10B98115' },
-  verification_rejected: { icon: 'error-outline', color: '#EF4444', bg: '#EF444415' },
-  verification_pending: { icon: 'hourglass-empty', color: '#F59E0B', bg: '#F59E0B15' },
-  verification_required: { icon: 'assignment-late', color: '#64748B', bg: '#64748B15' },
-  verification: { icon: 'verified-user', color: '#9C27B0', bg: '#F3E5F5' },
-  application: { icon: 'assignment-ind', color: '#2563EB', bg: '#EFF6FF' },
-  application_status: { icon: 'assignment-turned-in', color: '#7C3AED', bg: '#F5F3FF' },
-  general: { icon: 'notifications', color: '#64748B', bg: '#F1F5F9' },
+type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
+const typeConfig: Record<string, { icon: IconName; label: string }> = {
+  new_job: { icon: 'location-on', label: 'Job alert' },
+  job_recommendation: { icon: 'work-outline', label: 'Job recommendation' },
+  application_accepted: { icon: 'check-circle-outline', label: 'Application' },
+  interview_reminder: { icon: 'event-available', label: 'Interview' },
+  message: { icon: 'chat-bubble-outline', label: 'Message' },
+  verification: { icon: 'verified-user', label: 'Verification' },
+  application: { icon: 'assignment-ind', label: 'Application' },
+  application_status: { icon: 'assignment', label: 'Application update' },
+  general: { icon: 'notifications-none', label: 'Update' },
 };
 
 export default function NotificationCard({ notification, onPress }: NotificationCardProps) {
   const { colors, isDark } = useDarkMode();
-  let configKey: string = notification.type;
-
+  const title = notification.title || 'Notification';
+  const normalizedTitle = title.toLowerCase();
+  let config = typeConfig[notification.type || 'general'] || typeConfig.general;
+  let iconColor = colors.accent;
   if (notification.type === 'verification') {
-    if (notification.title.includes('Verified')) configKey = 'verification_verified';
-    else if (notification.title.includes('Rejected')) configKey = 'verification_rejected';
-    else if (notification.title.includes('Pending')) configKey = 'verification_pending';
-    else if (notification.title.includes('Required')) configKey = 'verification_required';
+    if (normalizedTitle.includes('verified')) {
+      config = { icon: 'verified', label: 'Verification' };
+      iconColor = isDark ? '#4ADE80' : '#16A34A';
+    } else if (normalizedTitle.includes('rejected')) {
+      config = { icon: 'error-outline', label: 'Verification' };
+      iconColor = isDark ? '#F87171' : '#DC2626';
+    } else if (normalizedTitle.includes('pending') || normalizedTitle.includes('review')) {
+      config = { icon: 'hourglass-empty', label: 'Verification' };
+      iconColor = isDark ? '#FBBF24' : '#B45309';
+    }
+  } else if (notification.type !== 'message' && normalizedTitle.includes('interview')) {
+    config = { icon: 'event-available', label: 'Interview' };
   }
-
-  const config = typeConfig[configKey] || typeConfig.job_recommendation;
+  const unread = !notification.read;
+  const hasDestination = ['message', 'new_job', 'application', 'application_status', 'verification'].includes(notification.type || '');
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.7}
-      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-      className={`flex-row rounded-2xl p-4 mb-3 shadow-sm items-center border ${
-        !notification.read ? 'border-l-[3px] border-l-red-600' : ''
-      }`}
+      activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={title + (unread ? ', unread' : '')}
+      className="mb-3 flex-row items-start gap-3 rounded-2xl border p-4"
+      style={{ backgroundColor: colors.surface, borderColor: unread ? colors.accent + '40' : colors.border }}
     >
-      {/* Icon Container */}
-      <View
-        style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : config.bg }}
-        className="w-12 h-12 rounded-xl items-center justify-center mr-4"
-      >
-        <MaterialIcons name={config.icon as any} size={24} color={config.color} />
+      <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: iconColor + (isDark ? '20' : '12') }}>
+        <MaterialIcons name={config.icon} size={21} color={iconColor} />
       </View>
-
-      {/* Content */}
-      <View className="flex-1">
-        <View className="flex-row justify-between items-center mb-1">
-          <Text style={{ color: colors.text }} className="text-sm font-semibold flex-1 mr-2" numberOfLines={1}>
-            {notification.title}
-          </Text>
-          <Text style={{ color: colors.textSecondary }} className="text-xs">{notification.timestamp}</Text>
+      <View className="min-w-0 flex-1">
+        <View className="mb-1.5 flex-row items-center justify-between gap-2">
+          <Text className="text-[10px] font-medium" style={{ color: colors.textSecondary }}>{config.label}</Text>
+          {unread && <View className="h-2 w-2 rounded-full" style={{ backgroundColor: colors.accent }} />}
         </View>
-        {/* Dito natin pinapayagang mag-render ng JSX (gaya ng bold text) ang message */}
-        <Text style={{ color: colors.textSecondary }} className="text-xs leading-4" numberOfLines={3}>
+        <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }} numberOfLines={2}>{title}</Text>
+        <Text className="mt-1.5 text-xs leading-5" style={{ color: colors.textSecondary }} numberOfLines={3}>
           {notification.message}
         </Text>
+        <View className="mt-3 flex-row items-center justify-between gap-2">
+          <View className="flex-1 flex-row items-center gap-1">
+            <MaterialIcons name="access-time" size={12} color={colors.textSecondary} />
+            <Text className="flex-1 text-[10px]" style={{ color: colors.textSecondary }}>{notification.timestamp || 'Recent'}</Text>
+          </View>
+          {hasDestination && <MaterialIcons name="chevron-right" size={18} color={colors.textSecondary} />}
+        </View>
       </View>
-
-      {!notification.read && (
-        <View className="w-2 h-2 rounded-full bg-red-600 ml-2 self-start mt-1" />
-      )}
     </TouchableOpacity>
   );
 }

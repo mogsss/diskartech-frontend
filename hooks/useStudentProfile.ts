@@ -4,7 +4,8 @@ import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { clearPushToken } from '@/utils/notifications';
-import api, { BACKEND_URL, STORAGE_URL } from '@/api/axios';
+import api, { BACKEND_URL } from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 
 export function useStudentProfile() {
   const [studentName, setStudentName] = useState('Junnyl Mabini');
@@ -56,7 +57,7 @@ export function useStudentProfile() {
   // 👇 HELPER FUNCTION PARA KUNIN ANG FILENAME SA DULO NG PATH
   const getFilename = (path?: string) => {
     if (!path || typeof path !== 'string') return null;
-    return path.split('/').pop() || null; 
+    return path.split(/[?#]/)[0].split('/').pop() || null;
   };
 
   const fetchStudentProfile = async () => {
@@ -77,12 +78,7 @@ export function useStudentProfile() {
         if (profile.rating !== undefined) setRating(Number(profile.rating));
         if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
 
-        if (profile.avatar) {
-          const fullAvatarUrl = profile.avatar.startsWith('http')
-            ? profile.avatar
-            : `${STORAGE_URL}${profile.avatar}`;
-          setProfilePicUri(fullAvatarUrl);
-        }
+        setProfilePicUri(resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture));
 
         // 👇 IN-UPDATE PARA GAMITIN ANG GETFILENAME AT RAW PATHS
         setUploadedDocs({
@@ -132,12 +128,7 @@ export function useStudentProfile() {
           }
           if (apiProfile.rejection_reason !== undefined) setRejectionReason(apiProfile.rejection_reason);
 
-          if (apiProfile.avatar) {
-            const fullAvatarUrl = apiProfile.avatar.startsWith('http')
-              ? apiProfile.avatar
-              : `${STORAGE_URL}${apiProfile.avatar}`;
-            setProfilePicUri(fullAvatarUrl);
-          }
+          setProfilePicUri(resolveMediaUrl(apiProfile.avatar_url ?? apiProfile.avatar ?? apiProfile.profile_picture));
 
           setUploadedDocs({
             student_resume: getFilename(apiProfile.student_resume),
@@ -441,7 +432,7 @@ export function useStudentProfile() {
 
       if (response.ok) {
         const newPath = data.file_path || data.profile_picture;
-        const fullUrl = `${STORAGE_URL}${newPath}`;
+        const fullUrl = resolveMediaUrl(data.full_url || newPath);
         
         setProfilePicUri(fullUrl); 
 
@@ -449,6 +440,8 @@ export function useStudentProfile() {
         if (storedProfile) {
           const profile = JSON.parse(storedProfile);
           profile.avatar = newPath;
+          profile.avatar_url = fullUrl;
+          profile.profile_picture = newPath;
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
 

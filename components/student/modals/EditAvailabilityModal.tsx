@@ -3,6 +3,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { parseTimeSlots, serializeTimeSlots, toggleTimeSlot } from '@/data/jobSchedule';
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DAY_ROWS = [DAYS_OF_WEEK.slice(0, 4), DAYS_OF_WEEK.slice(4)];
@@ -12,6 +13,16 @@ const TIME_SLOTS = [
   { value: 'Evening (6PM - 10PM)', label: 'Evening', hours: '6 PM – 10 PM', icon: 'nightlight-round' },
   { value: 'Whole Day', label: 'Whole day', hours: 'Available throughout the day', icon: 'schedule' },
 ] as const;
+
+function savedTimeSlots(value: string): string[] {
+  const slots = parseTimeSlots(value).map((value) => TIME_SLOTS.find((slot) =>
+    slot.value === value || slot.label.toLowerCase() === value.toLowerCase())?.value).filter((value): value is NonNullable<typeof value> => !!value);
+  return slots.includes('Whole Day') ? ['Whole Day'] : [...new Set(slots)].slice(0, 2);
+}
+
+function savedDays(days: string[]): string[] {
+  return DAYS_OF_WEEK.filter((day) => days.some((value) => typeof value === 'string' && value.trim().slice(0, 3).toLowerCase() === day.toLowerCase()));
+}
 
 interface EditAvailabilityModalProps {
   visible: boolean;
@@ -24,15 +35,15 @@ interface EditAvailabilityModalProps {
 export default function EditAvailabilityModal({ visible, onClose, currentDays, currentTimeSlot, onSave }: EditAvailabilityModalProps) {
   const { colors, isDark } = useDarkMode();
   const insets = useSafeAreaInsets();
-  const [selectedDays, setSelectedDays] = useState<string[]>(currentDays);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState(currentTimeSlot);
+  const [selectedDays, setSelectedDays] = useState<string[]>(() => savedDays(currentDays));
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>(() => savedTimeSlots(currentTimeSlot));
   const wasVisible = useRef(false);
 
   // Load saved values on opening without overwriting edits during profile polling.
   useEffect(() => {
     if (visible && !wasVisible.current) {
-      setSelectedDays([...currentDays]);
-      setSelectedTimeSlot(currentTimeSlot);
+      setSelectedDays(savedDays(currentDays));
+      setSelectedTimeSlots(savedTimeSlots(currentTimeSlot));
     }
     wasVisible.current = visible;
   }, [visible, currentDays, currentTimeSlot]);
@@ -40,7 +51,8 @@ export default function EditAvailabilityModal({ visible, onClose, currentDays, c
   const accentText = isDark ? colors.accent : colors.primary;
   const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
   const subtle = isDark ? '#263449' : '#F1F5F9';
-  const canSave = selectedDays.length > 0 && !!selectedTimeSlot.trim();
+  const selectedTimeSlot = serializeTimeSlots(selectedTimeSlots);
+  const canSave = selectedDays.length > 0 && selectedTimeSlots.length > 0;
 
   const toggleDay = (day: string) => {
     setSelectedDays((days) => days.includes(day) ? days.filter((value) => value !== day) : [...days, day]);
@@ -93,12 +105,13 @@ export default function EditAvailabilityModal({ visible, onClose, currentDays, c
             </View>
 
             <Text className="text-sm font-semibold" style={{ color: colors.text }}>Preferred time</Text>
-            <Text className="text-xs leading-5 mt-1 mb-3" style={{ color: colors.textSecondary }}>Choose one time slot for your selected days.</Text>
-            <View accessibilityRole="radiogroup" className="gap-2">
+            <Text className="text-xs leading-5 mt-1 mb-3" style={{ color: colors.textSecondary }}>Choose up to 2 time slots, or select Whole Day.</Text>
+            <View className="gap-2">
               {TIME_SLOTS.map((slot) => {
-                const isSelected = selectedTimeSlot === slot.value;
+                const isSelected = selectedTimeSlots.includes(slot.value);
+                const disabled = !isSelected && slot.value !== 'Whole Day' && selectedTimeSlots.length >= 2;
                 return (
-                  <TouchableOpacity key={slot.value} onPress={() => setSelectedTimeSlot(slot.value)} activeOpacity={0.75} accessibilityRole="radio" accessibilityLabel={slot.label + ', ' + slot.hours} accessibilityState={{ checked: isSelected }} className="flex-row items-center gap-3 rounded-2xl border p-3" style={{ backgroundColor: isSelected ? accentSurface : colors.surface, borderColor: isSelected ? colors.primary : colors.border }}>
+                  <TouchableOpacity key={slot.value} onPress={() => setSelectedTimeSlots((current) => toggleTimeSlot(current, slot.value))} disabled={disabled} activeOpacity={0.75} accessibilityRole="checkbox" accessibilityLabel={slot.label + ', ' + slot.hours} accessibilityState={{ checked: isSelected, disabled }} className="flex-row items-center gap-3 rounded-2xl border p-3" style={{ backgroundColor: isSelected ? accentSurface : colors.surface, borderColor: isSelected ? colors.primary : colors.border, opacity: disabled ? 0.45 : 1 }}>
                     <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: isSelected ? accentSurface : subtle }}>
                       <MaterialIcons name={slot.icon} size={20} color={isSelected ? accentText : colors.textSecondary} />
                     </View>
@@ -106,7 +119,7 @@ export default function EditAvailabilityModal({ visible, onClose, currentDays, c
                       <Text className="text-sm font-semibold" style={{ color: isSelected ? accentText : colors.text }}>{slot.label}</Text>
                       <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{slot.hours}</Text>
                     </View>
-                    <MaterialIcons name={isSelected ? 'radio-button-checked' : 'radio-button-unchecked'} size={21} color={isSelected ? accentText : colors.textSecondary} />
+                    <MaterialIcons name={isSelected ? 'check-box' : 'check-box-outline-blank'} size={21} color={isSelected ? accentText : colors.textSecondary} />
                   </TouchableOpacity>
                 );
               })}

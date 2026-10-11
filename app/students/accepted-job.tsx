@@ -733,7 +733,7 @@ export default function AcceptedJobScreen() {
               </View>
               <View className="flex-1 bg-slate-50 rounded-2xl p-3 border border-slate-100">
                 <Text className="text-[10px] text-slate-400 font-semibold uppercase">Agreed Rate</Text>
-                <Text className="text-xs font-bold text-emerald-700 mt-0.5">₱{application.agreed_rate || activeJob.salary || '0'}</Text>
+                <Text className="text-xs font-bold text-emerald-700 mt-0.5">₱{application.agreed_rate || activeJob.salary || '0'} {getSalaryUnit(activeJob.salary_type)}</Text>
               </View>
             </View>
 

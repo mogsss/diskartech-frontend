@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Modal,
   View,
@@ -7,17 +7,24 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  KeyboardAvoidingView,
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AVAILABLE_DAYS, TIME_SLOTS, parseTimeSlots, serializeTimeSlots, toggleTimeSlot } from '@/data/jobSchedule';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { isAxiosError } from 'axios';
+import { getSalaryUnit } from '@/utils/jobRate';
+import { sanitizePlainText, containsMarkup, isValidCompensation } from '@/utils/plainTextInput';
+
+function startOfDay(value = new Date()): Date {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
 
 interface HireModalProps {
   visible: boolean;
@@ -33,6 +40,7 @@ interface HireModalProps {
   studentName?: string;
   jobTitle?: string;
   defaultRate?: string;
+  defaultSalaryType?: string | null;
   defaultWorkDays?: string | string[] | null;
   defaultWorkHours?: string | null;
 }
@@ -71,6 +79,7 @@ export default function HireModal({
   studentName = 'Student Applicant',
   jobTitle = 'Job Position',
   defaultRate = '',
+  defaultSalaryType = 'day',
   defaultWorkDays = [],
   defaultWorkHours = '',
 }: HireModalProps) {
@@ -78,6 +87,7 @@ export default function HireModal({
   const insets = useSafeAreaInsets();
   const accentColor = isDark ? colors.accent : '#B91C1C';
   const inputBackground = isDark ? colors.background : '#F8FAFC';
+  const rateUnit = getSalaryUnit(defaultSalaryType);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
@@ -89,12 +99,83 @@ export default function HireModal({
   );
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [modalHeight, setModalHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const modalRef = useRef<View>(null);
+  const viewportRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const rateRef = useRef<TextInput>(null);
+  const termsRef = useRef<TextInput>(null);
+  const instructionsRef = useRef<TextInput>(null);
+  const focusedInput = useRef<TextInput | null>(null);
+  const keyboardTop = useRef<number | null>(null);
+  const scrollOffset = useRef(0);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const revealFocusedInput = useCallback(() => {
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      scrollTimer.current = null;
+      if (keyboardTop.current === null) return;
+      const input = focusedInput.current;
+      input?.measureInWindow((_x, inputY, _width, inputHeight) => {
+        viewportRef.current?.measureInWindow((_left, viewportY, _w, viewportHeight) => {
+          if (focusedInput.current !== input || keyboardTop.current === null || viewportHeight <= 0) return;
+          const bottom = Math.min(viewportY + viewportHeight, keyboardTop.current) - 16;
+          const delta = inputY + Math.min(inputHeight, bottom - viewportY) > bottom
+            ? inputY + Math.min(inputHeight, bottom - viewportY) - bottom
+            : inputY < viewportY ? inputY - viewportY : 0;
+          if (Math.abs(delta) > 1) {
+            scrollRef.current?.scrollTo({ y: Math.max(0, scrollOffset.current + delta), animated: true });
+          }
+        });
+      });
+    }, 100);
+  }, []);
+
+  const updateKeyboardLayout = useCallback(() => {
+    modalRef.current?.measureInWindow((_x, y, _width, height) => {
+      // Account only for actual overlap: Android may already resize the modal.
+      setModalHeight(height);
+      setKeyboardInset(keyboardTop.current === null ? 0 : Math.max(0, y + height - keyboardTop.current));
+      revealFocusedInput();
+    });
+  }, [revealFocusedInput]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (event) => {
+      keyboardTop.current = event.endCoordinates.screenY;
+      setKeyboardVisible(true);
+      updateKeyboardLayout();
+    });
+    const change = Keyboard.addListener('keyboardWillChangeFrame', (event) => {
+      if (keyboardTop.current !== null) {
+        keyboardTop.current = event.endCoordinates.screenY;
+        updateKeyboardLayout();
+      }
+    });
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      keyboardTop.current = null;
+      setKeyboardVisible(false);
+      setKeyboardInset(0);
+    });
+    return () => {
+      show.remove(); change.remove(); hide.remove();
+      keyboardTop.current = null;
+      focusedInput.current = null;
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    };
+  }, [visible, updateKeyboardLayout]);
 
   // Date Pickers state
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [tempStartDate, setTempStartDate] = useState(new Date());
-  const [tempEndDate, setTempEndDate] = useState(new Date());
+  const [tempStartDate, setTempStartDate] = useState(() => startOfDay());
+  const [tempEndDate, setTempEndDate] = useState(() => startOfDay());
+  const today = startOfDay();
+  const minimumEndDate = startDate ? tempStartDate : today;
   const [notification, setNotification] = useState<{
     visible: boolean;
     title: string;
@@ -132,6 +213,10 @@ export default function HireModal({
 
   useEffect(() => {
     if (!visible) {
+      setKeyboardInset(0);
+      setKeyboardVisible(false);
+      setShowStartDatePicker(false);
+      setShowEndDatePicker(false);
       setNotification((current) => current.visible ? { ...current, visible: false } : current);
     }
   }, [visible]);
@@ -142,27 +227,33 @@ export default function HireModal({
       : [...currentDays, day]);
   };
 
-  const onStartDateChange = (event: any, selectedDate?: Date) => {
-    setShowStartDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setTempStartDate(selectedDate);
+  // Android reopens/updates its native dialog when onChange changes during polling.
+  const onStartDateChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowStartDatePicker(Platform.OS === 'ios' && event.type === 'set');
+    if (event.type === 'set' && selectedDate) {
+      setTempStartDate(startOfDay(selectedDate));
       const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' };
       setStartDate(selectedDate.toLocaleDateString('en-US', options));
     }
-  };
+  }, []);
 
-  const onEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setTempEndDate(selectedDate);
+  const onEndDateChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowEndDatePicker(Platform.OS === 'ios' && event.type === 'set');
+    if (event.type === 'set' && selectedDate) {
+      setTempEndDate(startOfDay(selectedDate));
       const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' };
       setEndDate(selectedDate.toLocaleDateString('en-US', options));
     }
-  };
+  }, []);
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
     if (!startDate.trim()) {
       showNotice('Start Date Required', 'Please select the contract start date.', 'calendar-today');
+      return;
+    }
+    if (endDate && endDate !== 'Until Project Completion' && tempEndDate < tempStartDate) {
+      showNotice('Invalid End Date', 'The contract end date cannot be earlier than the start date.', 'event');
       return;
     }
     if (selectedDays.length === 0) {
@@ -177,6 +268,21 @@ export default function HireModal({
       showNotice('Compensation Required', 'Please enter the agreed compensation rate.', 'payments');
       return;
     }
+    const cleanRate = sanitizePlainText(agreedRate);
+    const cleanInstructions = sanitizePlainText(specialInstructions);
+    const cleanTerms = sanitizePlainText(contractTerms);
+    if (!isValidCompensation(cleanRate)) {
+      showNotice('Invalid Compensation', 'Enter a positive amount with up to 9 whole-number digits and 2 decimal places.', 'payments');
+      return;
+    }
+    if (!cleanTerms || cleanTerms.length > 2000 || cleanInstructions.length > 2000 || workSchedule.length > 255) {
+      showNotice('Invalid Contract Details', 'Contract terms are required. Terms and instructions must be within 2,000 characters, and the schedule within 255 characters.');
+      return;
+    }
+    if ([cleanInstructions, cleanTerms, workSchedule].some(containsMarkup)) {
+      showNotice('Invalid Text', 'Use plain text for contract details. HTML and script tags are not allowed.');
+      return;
+    }
     if (!agreedToTerms) {
       showNotice('Contract Agreement', 'Please confirm and agree to the contract terms before submitting.', 'verified-user');
       return;
@@ -188,10 +294,10 @@ export default function HireModal({
       await onSubmit({
         start_date: startDate.trim(),
         end_date: endDate.trim() || 'Indefinite / Project-based',
-        work_schedule: workSchedule.trim(),
-        agreed_rate: agreedRate.trim(),
-        special_instructions: specialInstructions.trim(),
-        contract_terms: contractTerms.trim(),
+        work_schedule: sanitizePlainText(workSchedule),
+        agreed_rate: cleanRate,
+        special_instructions: cleanInstructions,
+        contract_terms: cleanTerms,
       });
     } catch (error: unknown) {
       console.error('Error submitting hire details:', error);
@@ -208,6 +314,8 @@ export default function HireModal({
 
   const handleClose = () => {
     if (!isSubmitting) {
+      Keyboard.dismiss();
+      focusedInput.current = null;
       closeNotification();
       onClose();
     }
@@ -221,12 +329,10 @@ export default function HireModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' }}
-      >
-        <View className="rounded-t-[28px] overflow-hidden border-t" style={{ height: '90%', backgroundColor: colors.surface, borderColor: colors.border }}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={handleClose}>
+      <View ref={modalRef} onLayout={updateKeyboardLayout} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)' }}>
+      <View style={{ flex: 1, justifyContent: 'flex-end', paddingBottom: keyboardInset }}>
+        <View className="rounded-t-[28px] overflow-hidden border-t" style={{ height: modalHeight > 0 ? Math.max(0, modalHeight - keyboardInset) * 0.9 : '90%', backgroundColor: colors.surface, borderColor: colors.border }}>
           <View className="px-5 pt-3 pb-3 border-b" style={{ borderBottomColor: colors.border }}>
             <View className="w-9 h-1 rounded-full self-center mb-3" style={{ backgroundColor: colors.border }} />
             <View className="flex-row items-center justify-between gap-3">
@@ -248,7 +354,11 @@ export default function HireModal({
             </View>
           </View>
 
+          <View ref={viewportRef} onLayout={revealFocusedInput} style={{ flex: 1 }}>
           <ScrollView
+            ref={scrollRef}
+            onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={16}
             className="flex-1"
             contentContainerStyle={{ padding: 20, paddingBottom: 16 }}
             showsVerticalScrollIndicator={false}
@@ -270,7 +380,12 @@ export default function HireModal({
               <View className="mb-4">
                 <Text className="text-xs font-medium mb-2" style={{ color: colors.text }}>Start date <Text style={{ color: accentColor }}>*</Text></Text>
                 <TouchableOpacity
-                  onPress={() => setShowStartDatePicker(true)}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowEndDatePicker(false);
+                    setShowStartDatePicker(true);
+                  }}
+                  disabled={isSubmitting}
                   accessibilityRole="button"
                   accessibilityLabel="Select contract start date"
                   activeOpacity={0.7}
@@ -282,7 +397,7 @@ export default function HireModal({
                 </TouchableOpacity>
                 {showStartDatePicker && (
                   <View className="mt-2">
-                    <DateTimePicker value={tempStartDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onStartDateChange} minimumDate={new Date()} themeVariant={isDark ? 'dark' : 'light'} />
+                    <DateTimePicker value={tempStartDate < today ? today : tempStartDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onStartDateChange} minimumDate={today} themeVariant={isDark ? 'dark' : 'light'} />
                     {Platform.OS === 'ios' && (
                       <TouchableOpacity onPress={() => setShowStartDatePicker(false)} accessibilityRole="button" accessibilityLabel="Done selecting start date" className="self-end px-3 py-2">
                         <Text className="text-xs font-semibold" style={{ color: accentColor }}>Done</Text>
@@ -297,7 +412,12 @@ export default function HireModal({
                   <Text className="text-[10px]" style={{ color: colors.textSecondary }}>Optional</Text>
                 </View>
                 <TouchableOpacity
-                  onPress={() => setShowEndDatePicker(true)}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowStartDatePicker(false);
+                    setShowEndDatePicker(true);
+                  }}
+                  disabled={isSubmitting}
                   accessibilityRole="button"
                   accessibilityLabel="Select contract end date"
                   activeOpacity={0.7}
@@ -309,7 +429,7 @@ export default function HireModal({
                 </TouchableOpacity>
                 {showEndDatePicker && (
                   <View className="mt-2">
-                    <DateTimePicker value={tempEndDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onEndDateChange} minimumDate={tempStartDate} themeVariant={isDark ? 'dark' : 'light'} />
+                    <DateTimePicker value={tempEndDate < minimumEndDate ? minimumEndDate : tempEndDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onEndDateChange} minimumDate={minimumEndDate} themeVariant={isDark ? 'dark' : 'light'} />
                     {Platform.OS === 'ios' && (
                       <TouchableOpacity onPress={() => setShowEndDatePicker(false)} accessibilityRole="button" accessibilityLabel="Done selecting end date" className="self-end px-3 py-2">
                         <Text className="text-xs font-semibold" style={{ color: accentColor }}>Done</Text>
@@ -388,22 +508,35 @@ export default function HireModal({
               <View className="flex-row items-center rounded-xl border px-3" style={{ backgroundColor: inputBackground, borderColor: colors.border }}>
                 <Text className="text-base font-semibold mr-2" style={{ color: colors.textSecondary }}>{'\u20B1'}</Text>
                 <TextInput
+                  ref={rateRef}
+                  onFocus={() => { focusedInput.current = rateRef.current; revealFocusedInput(); }}
+                  onBlur={() => { if (focusedInput.current === rateRef.current) focusedInput.current = null; }}
                   value={agreedRate}
-                  onChangeText={setAgreedRate}
-                  accessibilityLabel="Agreed compensation in pesos"
+                  onChangeText={(value) => { if (/^\d{0,9}(?:\.\d{0,2})?$/.test(value)) setAgreedRate(value); }}
+                  maxLength={12}
+                  editable={!isSubmitting}
+                  accessibilityLabel={`Agreed compensation in pesos ${getSalaryUnit(defaultSalaryType, 'long')}`}
                   placeholder="e.g. 500"
                   placeholderTextColor={colors.textSecondary}
                   keyboardType="decimal-pad"
                   className="flex-1 py-3"
                   style={{ minHeight: 48, color: colors.text, fontSize: 14 }}
                 />
+                <Text className="text-sm font-medium ml-2" style={{ color: colors.textSecondary }}>{rateUnit}</Text>
               </View>
+              <Text className="text-[11px] leading-5 mt-2" style={{ color: colors.textSecondary }}>Payment basis follows the job post: {getSalaryUnit(defaultSalaryType, 'long')}. Adjust the amount as agreed with the student.</Text>
             </HireSection>
 
             <HireSection title="Contract terms" icon="gavel">
               <TextInput
+                ref={termsRef}
+                onFocus={() => { focusedInput.current = termsRef.current; revealFocusedInput(); }}
+                onBlur={() => { if (focusedInput.current === termsRef.current) focusedInput.current = null; }}
+                onContentSizeChange={revealFocusedInput}
                 value={contractTerms}
                 onChangeText={setContractTerms}
+                maxLength={2000}
+                editable={!isSubmitting}
                 accessibilityLabel="Contract terms and termination conditions"
                 multiline
                 numberOfLines={6}
@@ -419,8 +552,14 @@ export default function HireModal({
             <HireSection title="First-day instructions" icon="assignment">
               <Text className="text-[11px] mb-2" style={{ color: colors.textSecondary }}>Optional</Text>
               <TextInput
+                ref={instructionsRef}
+                onFocus={() => { focusedInput.current = instructionsRef.current; revealFocusedInput(); }}
+                onBlur={() => { if (focusedInput.current === instructionsRef.current) focusedInput.current = null; }}
+                onContentSizeChange={revealFocusedInput}
                 value={specialInstructions}
                 onChangeText={setSpecialInstructions}
+                maxLength={2000}
+                editable={!isSubmitting}
                 accessibilityLabel="First-day instructions"
                 multiline
                 numberOfLines={3}
@@ -445,8 +584,9 @@ export default function HireModal({
               <Text className="flex-1 text-xs leading-5" style={{ color: colors.text }}>I approve this applicant under the stated employment contract terms, compensation, and schedule.</Text>
             </TouchableOpacity>
           </ScrollView>
+          </View>
 
-          <View className="px-5 pt-3 border-t" style={{ paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.surface, borderTopColor: colors.border }}>
+          <View className="px-5 pt-3 border-t" style={{ paddingBottom: keyboardVisible ? 12 : Math.max(insets.bottom, 16), backgroundColor: colors.surface, borderTopColor: colors.border }}>
             <View className="flex-row gap-2">
               <TouchableOpacity
                 onPress={handleClose}
@@ -475,7 +615,8 @@ export default function HireModal({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
+      </View>
       <NotificationModal
         visible={visible && notification.visible}
         title={notification.title}

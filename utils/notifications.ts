@@ -572,6 +572,8 @@ export interface SendAppNotificationParams {
   body: string;
   type: 'application' | 'application_status' | 'general' | 'new_job';
   targetId?: string | number;
+  applicationId?: string | number;
+  jobId?: string | number;
 }
 
 /**
@@ -590,6 +592,8 @@ export async function sendAppNotification(params: SendAppNotificationParams): Pr
       body: params.body,
       type: params.type,
       target_id: params.targetId != null ? String(params.targetId) : null,
+      application_id: params.applicationId != null ? String(params.applicationId) : null,
+      job_id: params.jobId != null ? String(params.jobId) : null,
       created_at: serverTimestamp(),
       read: false,
     });

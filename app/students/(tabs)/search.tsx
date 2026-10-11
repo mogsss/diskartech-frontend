@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import api, { STORAGE_URL } from '@/api/axios';
+import api from '@/api/axios';
+import { resolveMediaUrl } from '@/utils/media';
 import { matchJobWithQuery } from '@/utils/fuzzySearch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
@@ -81,9 +82,7 @@ export default function SearchScreen() {
           const initials = nameParts.length >= 2
             ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
             : fullName.substring(0, 2).toUpperCase();
-          const avatarUrl = profile.avatar
-            ? (profile.avatar.startsWith('http') ? profile.avatar : `${STORAGE_URL}${profile.avatar}`)
-            : null;
+          const avatarUrl = resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture);
           setStudentProfile({
             name: fullName,
             avatarUri: avatarUrl,
@@ -387,7 +386,7 @@ export default function SearchScreen() {
           job={{
             jobTitle: job.title,
             companyName: owner?.household_name || owner?.employer_name || 'Employer',
-            companyLogo: rawAvatar ? (rawAvatar.startsWith('http') ? rawAvatar : `${STORAGE_URL}${rawAvatar}`) : '',
+            companyLogo: resolveMediaUrl(rawAvatar) ?? '',
             salary: Number.isFinite(salary) ? `₱${salary.toLocaleString('en-PH')}` : `₱${job.salary}`,
             salary_type: job.salary_type,
             location: owner?.location || 'Pinamalayan',

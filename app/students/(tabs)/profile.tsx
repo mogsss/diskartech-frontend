@@ -10,7 +10,8 @@ import EditAvailabilityModal from '@/components/student/modals/EditAvailabilityM
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import DocumentViewerModal from '@/components/ui/modals/DocumentViewerModal';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
-import { STORAGE_URL } from '@/api/axios';
+import api from '@/api/axios';
+import { resolveMediaUrl, mediaFilename } from '@/utils/media';
 
 // Custom Hook natin!
 import { useStudentProfile } from '@/hooks/useStudentProfile';
@@ -55,16 +56,15 @@ export default function ProfileScreen() {
     title: string;
     uri: string | null;
     filename?: string | null;
+    field?: 'student_resume' | 'school_id' | 'coe';
   }>({ title: '', uri: null, filename: null });
 
-  const buildStorageUrl = (path?: string | null) => {
-    if (!path) return null;
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    const clean = path.replace(/^\/?storage\/?/, '').replace(/^\//, '');
-    return `${STORAGE_URL}${clean}`;
+  const fetchDocumentUri = async (field: 'student_resume' | 'school_id' | 'coe') => {
+    const response = await api.get('/user/profile');
+    return resolveMediaUrl(response.data?.profile?.[field]);
   };
 
-  const handleViewDocument = (title: string, rawPath?: string | null, filename?: string | null) => {
+  const handleViewDocument = async (type: 'student_resume' | 'school_id' | 'coe', title: string, rawPath?: string | null) => {
     if (!rawPath) {
       showAlertModal({
         title: 'Document Unavailable',
@@ -75,13 +75,15 @@ export default function ProfileScreen() {
       });
       return;
     }
-    const fullUrl = buildStorageUrl(rawPath);
-    setViewerConfig({
-      title,
-      uri: fullUrl,
-      filename: filename || (typeof rawPath === 'string' ? rawPath.split('/').pop() : null),
-    });
-    setViewerModalVisible(true);
+    try {
+      // Cached profile links may have expired; request a fresh authorized link.
+      const uri = await fetchDocumentUri(type);
+      if (!uri) throw new Error('Document unavailable');
+      setViewerConfig({ title, uri, filename: mediaFilename(uri), field: type });
+      setViewerModalVisible(true);
+    } catch {
+      showAlertModal({ title: 'Document Unavailable', message: 'Unable to load this document. Please try again.', iconName: 'warning' });
+    }
   };
 
   const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
@@ -144,12 +146,12 @@ export default function ProfileScreen() {
         </View>
         <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
           <View className="flex-row items-center gap-1.5">
-            <MaterialIcons name={verified ? 'verified' : rejected ? 'error-outline' : uploaded ? 'check-circle-outline' : 'upload-file'} size={14} color={documentColor} />
+            {!verified && <MaterialIcons name={rejected ? 'error-outline' : uploaded ? 'check-circle-outline' : 'upload-file'} size={14} color={documentColor} />}
             <Text className="text-xs font-medium" style={{ color: documentColor }}>{verified ? 'Verified' : rejected ? 'Needs update' : uploaded ? 'Uploaded' : 'Not uploaded'}</Text>
           </View>
           <View className="flex-row items-center gap-2">
-            {uploaded && <TouchableOpacity onPress={() => handleViewDocument(title, rawPath, filename)} accessibilityRole="button" accessibilityLabel={`View ${title}`} activeOpacity={0.75} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
-            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR' : title)} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
+            {uploaded && <TouchableOpacity onPress={() => handleViewDocument(type, title, rawPath)} accessibilityRole="button" accessibilityLabel={`View ${title}`} activeOpacity={0.75} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
+            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR/COE' : title)} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
           </View>
         </View>
       </View>
@@ -201,7 +203,7 @@ export default function ProfileScreen() {
           </View>
           {renderDocument('student_resume', 'Resume', 'description')}
           {renderDocument('school_id', 'School ID', 'badge', true)}
-          {renderDocument('coe', 'COR (Certificate of Registration)', 'insert-drive-file', true)}
+          {renderDocument('coe', 'COR/COE (Certificate of Enrolment/Registration)', 'insert-drive-file', true)}
           {isRejected && <View className="rounded-xl p-3 mt-4" style={{ backgroundColor: accentSurface }}><View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text></View><Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text></View>}
         </View>
 
@@ -292,7 +294,7 @@ export default function ProfileScreen() {
         onSecondaryPress={() => setLogoutModalVisible(false)}
         buttonLayout="row"
       />
-      <DocumentViewerModal visible={viewerModalVisible} onClose={() => setViewerModalVisible(false)} title={viewerConfig.title} uri={viewerConfig.uri} filename={viewerConfig.filename} />
+      <DocumentViewerModal visible={viewerModalVisible} onClose={() => setViewerModalVisible(false)} title={viewerConfig.title} uri={viewerConfig.uri} filename={viewerConfig.filename} refreshUri={() => viewerConfig.field ? fetchDocumentUri(viewerConfig.field) : Promise.resolve(null)} />
       <SideDrawerMenu visible={isDrawerVisible} onClose={() => setDrawerVisible(false)} user={{ name: String(studentName || 'Student'), role: 'student', avatarUri: profilePicUri || undefined, avatarInitials: studentName ? studentName.trim().substring(0, 2).toUpperCase() : 'ST', isVerified: Boolean(isVerified), rejectionReason: rejectionReason || null }} onLogout={handleLogout} />
     </View>
   );

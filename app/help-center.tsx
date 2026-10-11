@@ -1,8 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
-  Platform,
   RefreshControl,
   ScrollView,
   Text,
@@ -16,9 +14,10 @@ import { Colors } from '@/constants/colors';
 import api from '@/api/axios';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import ReportModal from '@/components/common/ReportModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import SupportAiModal from '@/components/common/SupportAiModal';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
-import { FAQ_DATA, FaqItem } from '@/data/faqs';
+import { FAQ_DATA } from '@/data/faqs';
 import { useDarkMode } from '@/hooks/useDarkMode';
 
 interface SubmittedReport {
@@ -69,6 +68,21 @@ export default function HelpCenterScreen() {
   });
 
   const closeNotification = () => setNotification((prev) => ({ ...prev, visible: false }));
+
+  const openReport = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('userData');
+      const user = stored ? JSON.parse(stored) : null;
+      if (user?.role === 'student' || (!user?.role && user?.student_school_name)) {
+        setAiChatModalVisible(false);
+        router.push({ pathname: '/students/report', params: { targetName: 'DiskarTech Platform Safety', targetType: 'user' } });
+        return;
+      }
+      setReportModalVisible(true);
+    } catch {
+      setNotification({ visible: true, title: 'Unable to open report', message: 'Please try again.', iconName: 'error-outline', iconColor: '#DC2626' });
+    }
+  };
 
   const fetchMyReports = async () => {
     try {
@@ -477,10 +491,10 @@ export default function HelpCenterScreen() {
               </View>
               <Text style={{ color: colors.text }} className="text-base font-bold">No Reports Filed</Text>
               <Text style={{ color: colors.textSecondary }} className="text-xs text-center max-w-xs mt-1">
-                You haven't submitted any incident reports. If you ever encounter scams, fraud, or unsafe workplace conditions, you can report them anytime.
+                You haven&apos;t submitted any incident reports. If you ever encounter scams, fraud, or unsafe workplace conditions, you can report them anytime.
               </Text>
               <TouchableOpacity
-                onPress={() => setReportModalVisible(true)}
+                onPress={openReport}
                 style={{ backgroundColor: ACCENT_RED }}
                 className="mt-4 px-5 py-2.5 rounded-xl active:opacity-80"
               >
@@ -627,7 +641,7 @@ export default function HelpCenterScreen() {
       <SupportAiModal
         visible={aiChatModalVisible}
         onClose={() => setAiChatModalVisible(false)}
-        onOpenFileReport={() => setReportModalVisible(true)}
+        onOpenFileReport={openReport}
       />
 
       <NotificationModal

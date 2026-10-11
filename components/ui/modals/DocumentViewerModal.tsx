@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -13,6 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { resolveMediaUrl } from '@/utils/media';
 
 interface DocumentViewerModalProps {
   visible: boolean;
@@ -20,6 +21,7 @@ interface DocumentViewerModalProps {
   title: string;
   uri: string | null;
   filename?: string | null;
+  refreshUri?: () => Promise<string | null>;
 }
 
 export default function DocumentViewerModal({
@@ -28,37 +30,76 @@ export default function DocumentViewerModal({
   title,
   uri,
   filename,
+  refreshUri,
 }: DocumentViewerModalProps) {
   const { colors, isDark } = useDarkMode();
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [displayUri, setDisplayUri] = useState(resolveMediaUrl(uri));
+  const [retryKey, setRetryKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const generation = useRef(0);
 
   // I-reset ang loading at error state tuwing bubuksan ang modal o magbabago ang URI
   useEffect(() => {
+    generation.current += 1;
+    setDisplayUri(resolveMediaUrl(uri));
+    setRefreshing(false);
     if (visible && uri) {
       setImageLoading(true);
       setImageError(false);
     }
+    return () => { generation.current += 1; };
   }, [visible, uri]);
 
-  if (!visible || !uri) return null;
+  if (!visible || !displayUri) return null;
 
   const isPdf =
-    Boolean(uri && uri.toLowerCase().includes('.pdf')) ||
+    Boolean(displayUri.split(/[?#]/)[0].toLowerCase().endsWith('.pdf')) ||
     Boolean(filename && filename.toLowerCase().endsWith('.pdf'));
 
-  const handleOpenExternal = async () => {
-    if (!uri) return;
+  const getFreshUri = async () => {
+    const next = refreshUri ? resolveMediaUrl(await refreshUri()) : displayUri;
+    if (!next) throw new Error('Document unavailable');
+    return next;
+  };
+
+  const handleRetry = async () => {
+    if (refreshing) return;
+    const current = generation.current;
+    setRefreshing(true);
     try {
-      // Para sa Android, buksan ang PDF gamit ang Google Docs Viewer para ma-render agad
-      const targetUrl = isPdf
-        ? `https://docs.google.com/viewer?url=${encodeURIComponent(uri)}&embedded=true`
-        : uri;
-      await WebBrowser.openBrowserAsync(targetUrl);
+      const next = await getFreshUri();
+      if (current !== generation.current) return;
+      setDisplayUri(next);
+      setRetryKey(key => key + 1);
+      setImageError(false);
+      setImageLoading(true);
     } catch {
-      Linking.openURL(uri).catch(() => {
-        Alert.alert('Notice', 'Unable to open document in browser.');
-      });
+      if (current === generation.current) Alert.alert('Document Unavailable', 'Unable to reload this document. Please try again.');
+    } finally {
+      if (current === generation.current) setRefreshing(false);
+    }
+  };
+
+  const handleOpenExternal = async () => {
+    if (refreshing) return;
+    const current = generation.current;
+    setRefreshing(true);
+    try {
+      const next = await getFreshUri();
+      if (current !== generation.current) return;
+      // Protected document links must not be forwarded to a third-party viewer.
+      const isProtected = next.includes('/media/');
+      const targetUrl = isPdf && !isProtected
+        ? `https://docs.google.com/viewer?url=${encodeURIComponent(next)}&embedded=true`
+        : next;
+      try { await WebBrowser.openBrowserAsync(targetUrl); }
+      catch { await Linking.openURL(next); }
+    } catch {
+      if (current === generation.current) Alert.alert('Notice', 'Unable to open document. Please try again.');
+    } finally {
+      if (current === generation.current) setRefreshing(false);
     }
   };
 
@@ -119,14 +160,14 @@ export default function DocumentViewerModal({
                   borderColor: isDark ? 'rgba(220, 38, 38, 0.3)' : '#FEE2E2',
                 }}
               >
-                <MaterialIcons name="verified-user" size={24} color={colors.accent} />
+                <MaterialIcons name="description" size={24} color={colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }} numberOfLines={1}>
                   {title}
                 </Text>
                 <Text style={{ fontSize: 12, color: colors.textSecondary }} numberOfLines={1}>
-                  DiskarTech Verification Document
+                  Uploaded document
                 </Text>
               </View>
             </View>
@@ -251,10 +292,11 @@ export default function DocumentViewerModal({
                       <MaterialIcons name="broken-image" size={44} color="#EF4444" />
                       <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, marginTop: 8 }}>Preview Unavailable</Text>
                       <Text style={{ color: '#94A3B8', fontSize: 12, textAlign: 'center', marginTop: 4, marginBottom: 16 }}>
-                        Unable to render direct preview in-app. Tap below to open full resolution.
+                        Reload the preview or open the document in your browser.
                       </Text>
                       <TouchableOpacity
-                        onPress={handleOpenExternal}
+                        onPress={handleRetry}
+                        disabled={refreshing}
                         style={{
                           paddingVertical: 10,
                           paddingHorizontal: 16,
@@ -265,14 +307,15 @@ export default function DocumentViewerModal({
                           gap: 6,
                         }}
                       >
-                        <MaterialIcons name="open-in-browser" size={16} color="#FFFFFF" />
-                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>Open in Browser</Text>
+                        <MaterialIcons name="refresh" size={16} color="#FFFFFF" />
+                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>{refreshing ? 'Reloading...' : 'Retry preview'}</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <View style={{ width: '100%', alignItems: 'center' }}>
                       <Image
-                        source={{ uri }}
+                        key={retryKey}
+                        source={{ uri: displayUri }}
                         style={{ width: '100%', height: 320 }}
                         resizeMode="contain"
                         onLoadStart={() => setImageLoading(true)}
@@ -309,7 +352,7 @@ export default function DocumentViewerModal({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 16, paddingHorizontal: 4 }}>
               <MaterialIcons name="lock-outline" size={14} color={colors.textSecondary} />
               <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                Verified official document stored securely for business accreditation.
+                Preview of your uploaded document.
               </Text>
             </View>
 
@@ -349,7 +392,7 @@ export default function DocumentViewerModal({
               >
                 <MaterialIcons name="open-in-new" size={18} color="#FFFFFF" />
                 <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' }}>
-                  Open Full Resolution
+                  {refreshing ? 'Loading...' : 'Open document'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -359,4 +402,3 @@ export default function DocumentViewerModal({
     </Modal>
   );
 }
-

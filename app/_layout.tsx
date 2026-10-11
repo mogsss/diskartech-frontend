@@ -193,6 +193,7 @@ function RootLayoutNav() {
         <Stack.Screen name="students/accepted-job" />
         <Stack.Screen name="students/application-details" />
         <Stack.Screen name="students/verification-status" />
+        <Stack.Screen name="students/report" />
 
         {/* Employer app — tabs group + stack screens */}
         <Stack.Screen name="employer/(tabs)" options={{ headerShown: false }} />
@@ -204,6 +205,7 @@ function RootLayoutNav() {
         <Stack.Screen name="chat" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="online-interview-call" />
         <Stack.Screen name="terms-and-conditions" />
         <Stack.Screen name="privacy-policy" />
         <Stack.Screen name="help-center" />

@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View, Keyb
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { formatInterviewTime } from '@/utils/interviewTime';
 
 interface InterviewModalProps {
   visible: boolean;
@@ -81,8 +82,7 @@ export default function InterviewModal({
   const onTimeChange = (event: any, selectedTime?: Date) => {
     setShowTimePicker(Platform.OS === 'ios');
     if (selectedTime) {
-      const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
-      setTime(selectedTime.toLocaleTimeString('en-US', options));
+      setTime(formatInterviewTime(selectedTime));
     }
   };
 
@@ -274,12 +274,13 @@ export default function InterviewModal({
             )}
 
             {/* Location / Venue Input */}
+            {interviewType === 'walk-in' ? <>
             <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>
-              {interviewType === 'walk-in' ? 'Office Address / Venue' : 'Google Meet / Zoom Link'}
+              Office Address / Venue
             </Text>
             <TextInput
               editable={!loading}
-              placeholder={interviewType === 'walk-in' ? 'Employer address' : 'e.g., https://meet.google.com/abc-xyz'}
+              placeholder="Employer address"
               placeholderTextColor={colors.textSecondary}
               value={location}
               onChangeText={setLocation}
@@ -295,6 +296,10 @@ export default function InterviewModal({
                 marginBottom: 24,
               }}
             />
+            </> : <View className="flex-row gap-3 rounded-2xl p-4 mb-6" style={{ backgroundColor: colors.accent + '12' }}>
+              <MaterialIcons name="videocam" size={22} color={colors.accent} />
+              <Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>The interview will take place in DiskarTech. You and the student can join the video call from application details.</Text>
+            </View>}
 
             <TouchableOpacity
               onPress={() => onSubmit(interviewType, date, time, location)}

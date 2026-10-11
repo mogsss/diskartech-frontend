@@ -5,6 +5,7 @@ import TerminateContractModal from '@/components/employer/modals/TerminateContra
 import DigitalSignatureModal from '@/components/employer/modals/DigitalSignatureModal';
 import CertificateModal from '@/components/common/CertificateModal';
 import DocumentViewerModal from '@/components/ui/modals/DocumentViewerModal';
+import { resolveMediaUrl, mediaFilename } from '@/utils/media';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import * as WebBrowser from 'expo-web-browser';
@@ -24,6 +25,8 @@ import {
   sendChatMessage,
 } from '@/utils/chat';
 import { sendAppNotification } from '@/utils/notifications';
+import { normalizeInterviewTime } from '@/utils/interviewTime';
+import { getSalaryUnit } from '@/utils/jobRate';
 import { useDarkMode } from '@/hooks/useDarkMode';
 
 export default function ApplicantDetailsScreen() {
@@ -93,7 +96,6 @@ export default function ApplicantDetailsScreen() {
   const [loadingCert, setLoadingCert] = useState(false);
   const [contractReview, setContractReview] = useState<any>(null);
 
-  const STORAGE_URL = api.defaults.baseURL ? api.defaults.baseURL.replace('/api', '/storage/') : 'https://diskartech-backend.onrender.com/storage/';
 
   // States para sa DocumentViewerModal ng Resume
   const [resumeModalVisible, setResumeModalVisible] = useState(false);
@@ -356,7 +358,7 @@ export default function ApplicantDetailsScreen() {
         const jobId = job.id || application.job_id || 'job';
         const jobTitle = job.title || 'Job Position';
 
-        const contractMsg = `🎉 Congratulations ${student.student_name}! Your employment contract has been approved and activated for "${jobTitle}".\n\n📋 Contract Details:\n• Start Date: ${data.start_date}\n• Contract End / Duration: ${data.end_date || 'Project-based / Ongoing'}\n• Work Schedule: ${data.work_schedule}\n• Agreed Compensation: ₱${data.agreed_rate}\n\n📜 Contract & Termination Terms:\n${data.contract_terms}${data.special_instructions ? `\n\n📌 1st Day Instructions:\n${data.special_instructions}` : ''}`;
+        const contractMsg = `🎉 Congratulations ${student.student_name}! Your employment contract has been approved and activated for "${jobTitle}".\n\n📋 Contract Details:\n• Start Date: ${data.start_date}\n• Contract End / Duration: ${data.end_date || 'Project-based / Ongoing'}\n• Work Schedule: ${data.work_schedule}\n• Agreed Compensation: ₱${data.agreed_rate} ${getSalaryUnit(job.salary_type)}\n\n📜 Contract & Termination Terms:\n${data.contract_terms}${data.special_instructions ? `\n\n📌 1st Day Instructions:\n${data.special_instructions}` : ''}`;
 
         const chatId = await ensureChatRoom({
           jobId,
@@ -552,10 +554,17 @@ export default function ApplicantDetailsScreen() {
 
   // I-handle ang Interview Invite mula sa Modal (may kasamang interviewType)
   const handleSendInterviewInvite = async (interviewType: string, date: string, time: string, location: string) => {
-    if (!date || !time || !location) {
+    if (!date || !time || (interviewType === 'walk-in' && !location.trim())) {
       showNotice('Incomplete Details', 'Please fill in all the required fields.');
       return;
     }
+    location = interviewType === 'online' ? 'DiskarTech video call' : location.trim();
+    const normalizedTime = normalizeInterviewTime(time);
+    if (!normalizedTime) {
+      showNotice('Invalid Interview Time', 'Please select the interview time again.');
+      return;
+    }
+    time = normalizedTime;
 
     try {
       const response = await api.put(`/employer/applications/${applicationId}/status`, {
@@ -586,7 +595,7 @@ export default function ApplicantDetailsScreen() {
           }
           const jobId = job.id || application.job_id || 'job';
 
-          const inviteMessage = `Hello ${student.student_name}! You are invited for a ${interviewType.toUpperCase()} interview for "${jobTitle}".\n\nDate: ${date}\nTime: ${time}\n${interviewType === 'walk-in' ? 'Address' : 'Link'}: ${location}`;
+          const inviteMessage = `Hello ${student.student_name}! You are invited for a ${interviewType.toUpperCase()} interview for "${jobTitle}".\n\nDate: ${date}\nTime: ${time}\n${interviewType === 'walk-in' ? 'Address: ' + location : 'Open application details and tap Join video call to attend your interview in DiskarTech. And be prepared. Join 5minutes before the set interview time. Dont be late'}`;
 
           const chatId = await ensureChatRoom({
             jobId,
@@ -648,19 +657,25 @@ export default function ApplicantDetailsScreen() {
     });
   };
 
-  const handleOpenResume = (resumePath: string) => {
+  const fetchResumeUri = async () => {
+    const response = await api.get(`/employer/applications/${applicationId}`);
+    return resolveMediaUrl(response.data?.application?.student?.student_resume);
+  };
+
+  const handleOpenResume = async (resumePath: string) => {
     if (!resumePath) {
       showNotice('Notice', 'No resume uploaded by this student.');
       return;
     }
-    const cleanPath = resumePath.replace(/^\/?storage\/?/, '').replace(/^\//, '');
-    const fullUrl = resumePath.startsWith('http')
-      ? resumePath
-      : `${STORAGE_URL}${cleanPath}`;
-
-    setResumeUrl(fullUrl);
-    setResumeFilename(cleanPath.split('/').pop() || 'Student Resume');
-    setResumeModalVisible(true);
+    try {
+      const uri = await fetchResumeUri();
+      if (!uri) throw new Error('Resume unavailable');
+      setResumeUrl(uri);
+      setResumeFilename(mediaFilename(uri) || 'Student Resume');
+      setResumeModalVisible(true);
+    } catch {
+      showNotice('Document Unavailable', 'Unable to load this resume. Please try again.');
+    }
   };
 
   const handleStartChat = async () => {
@@ -759,13 +774,15 @@ export default function ApplicantDetailsScreen() {
         <ApplicantDetailsContent
           application={application}
           contractReview={contractReview}
-          avatarUri={student.avatar ? (student.avatar.startsWith('http') ? student.avatar : `${STORAGE_URL}${student.avatar}`) : undefined}
+          avatarUri={resolveMediaUrl(student.avatar) ?? undefined}
           studentAddress={studentAddress}
           availableDaysText={availableDaysText}
           loadingCert={loadingCert}
           approvingCert={approvingCert}
           disabled={disabled}
           completing={busyAction === 'Complete'}
+          messaging={busyAction === 'chat'}
+          onMessage={() => withBusyAction('chat', handleStartChat)}
           onComplete={handleCompleteContract}
           onTerminate={() => setIsTerminateModalVisible(true)}
           onReview={handleReview}
@@ -773,25 +790,23 @@ export default function ApplicantDetailsScreen() {
           onApproveCertificate={handleApproveCertificate}
           onDownloadCertificate={handleDownloadPdf}
           onEditInterview={() => withBusyAction('prepareInterview', handleOpenInterviewModal)}
+          onJoinInterview={() => router.push({ pathname: '/online-interview-call', params: { applicationId: String(applicationId) } })}
           onOpenResume={() => handleOpenResume(student.student_resume || student.resume || student.resume_path)}
         />
       </ScrollView>
-      <View className="border-t px-5 pt-3" style={{ backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }}>
-        {isReviewable && <View className="flex-row mb-2">
+      {isReviewable && <View className="border-t px-5 pt-4" style={{ backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }}>
+        <View className="flex-row gap-3">
+          <ApplicantActionButton label="Reject" variant="danger" size="large" onPress={handleReject} disabled={disabled} loading={busyAction === 'Reject'} />
           <ApplicantActionButton
-            label={application.status === 'interview' ? 'Accept / Hire applicant' : 'Invite for interview'}
-            icon={application.status === 'interview' ? 'person-add-alt-1' : 'event-available'}
+            label={application.status === 'interview' ? 'Hire applicant' : 'Invite for interview'}
             variant="primary"
+            size="large"
             disabled={disabled}
             loading={busyAction === 'prepareInterview'}
             onPress={() => application.status === 'interview' ? setIsHireModalVisible(true) : withBusyAction('prepareInterview', handleOpenInterviewModal)}
           />
-        </View>}
-        <View className="flex-row gap-2">
-          {isReviewable && <ApplicantActionButton label="Reject" icon="close" variant="danger" onPress={handleReject} disabled={disabled} loading={busyAction === 'Reject'} />}
-          <ApplicantActionButton label="Message student" icon="chat-bubble-outline" onPress={() => withBusyAction('chat', handleStartChat)} disabled={disabled} loading={busyAction === 'chat'} />
         </View>
-      </View>
+      </View>}
 
       {/* Hire & Employment Contract Modal */}
       <HireModal
@@ -801,6 +816,7 @@ export default function ApplicantDetailsScreen() {
         studentName={student.student_name}
         jobTitle={job.title}
         defaultRate={job.salary?.toString()}
+        defaultSalaryType={job.salary_type}
         defaultWorkDays={job.available_days}
         defaultWorkHours={job.time_slot}
       />
@@ -872,6 +888,7 @@ export default function ApplicantDetailsScreen() {
         title="Student Resume"
         uri={resumeUrl}
         filename={resumeFilename}
+        refreshUri={fetchResumeUri}
       />
     </View>
   );
