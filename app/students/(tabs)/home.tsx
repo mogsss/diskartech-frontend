@@ -453,7 +453,6 @@ export default function HomeScreen() {
     const owner = job.household || job.employer;
     const rawAvatar = owner?.avatar || '';
     const numericSalary = Number(job.salary);
-    const matchPercentage = Number(job.match_percentage);
     return (
       <View className="px-6">
         <HomeJobCard job={{
@@ -472,7 +471,6 @@ export default function HomeScreen() {
           isApplied: job.isApplied ?? appliedJobIds.has(job.id?.toString()),
           verified: owner?.isVerified === true || owner?.isVerified === 1,
           applicants: job.applications_count ?? 0,
-          matchPercentage: activeTab === 'ai_match' && job.match_percentage != null && Number.isFinite(matchPercentage) ? Math.round(Math.max(0, Math.min(100, matchPercentage))) : undefined,
         }} onPress={() => handleJobPress(job.id.toString())} onBookmark={() => handleToggleBookmark(job.id.toString())} />
       </View>
     );

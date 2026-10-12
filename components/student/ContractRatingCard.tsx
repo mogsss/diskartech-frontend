@@ -8,14 +8,15 @@ interface ContractRatingCardProps {
   companyName: string;
   contractReview: any;
   onRatePress: () => void;
+  embedded?: boolean;
 }
 
-export default function ContractRatingCard({ companyName, contractReview, onRatePress }: ContractRatingCardProps) {
+export default function ContractRatingCard({ companyName, contractReview, onRatePress, embedded }: ContractRatingCardProps) {
   const { colors, isDark } = useDarkMode();
   const hasReviewed = contractReview?.has_reviewed;
   const myReview = contractReview?.my_review;
   return (
-    <ApplicationSection title="Rating & feedback" icon="star-outline">
+    <ApplicationSection title="Rating & feedback" icon="star-outline" embedded={embedded}>
       {hasReviewed ? (
         <View>
           <View className="flex-row items-center justify-between gap-2 mb-2">

@@ -10,20 +10,13 @@ interface EmployerContactCardProps {
   employerAvatar?: string;
   isHousehold?: boolean;
   fullAddress: string;
-  onCall: () => void;
-  onEmail: () => void;
   onMessage: () => void;
   onOpenMap: () => void;
 }
 
-export default function EmployerContactCard({ companyName, employerAvatar, isHousehold, fullAddress, onCall, onEmail, onMessage, onOpenMap }: EmployerContactCardProps) {
+export default function EmployerContactCard({ companyName, employerAvatar, isHousehold, fullAddress, onMessage, onOpenMap }: EmployerContactCardProps) {
   const { isDark, colors } = useDarkMode();
   const accent = isDark ? colors.accent : '#B91C1C';
-  const contacts = [
-    { label: 'Call', icon: 'phone' as const, onPress: onCall },
-    { label: 'Email', icon: 'mail-outline' as const, onPress: onEmail },
-    { label: 'Message', icon: 'chat-bubble-outline' as const, onPress: onMessage },
-  ];
   return (
     <ApplicationSection title={isHousehold ? 'Household information' : 'Employer information'} icon={isHousehold ? 'home' : 'business'}>
       <View className="flex-row items-center gap-3 mb-4">
@@ -34,22 +27,16 @@ export default function EmployerContactCard({ companyName, employerAvatar, isHou
           <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{companyName}</Text>
           <Text className="text-[11px] mt-1" style={{ color: colors.textSecondary }}>{isHousehold ? 'Household employer' : 'Business employer'}</Text>
         </View>
-      </View>
-      <View className="flex-row gap-2 mb-4">
-        {contacts.map((contact) => (
-          <TouchableOpacity
-            key={contact.label}
-            onPress={contact.onPress}
-            accessibilityRole="button"
-            accessibilityLabel={contact.label + ' employer'}
-            activeOpacity={0.7}
-            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5"
-            style={{ minHeight: 44, backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border }}
-          >
-            <MaterialIcons name={contact.icon} size={16} color={colors.textSecondary} />
-            <Text className="text-xs font-semibold" style={{ color: colors.text }}>{contact.label}</Text>
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity
+          onPress={onMessage}
+          accessibilityRole="button"
+          accessibilityLabel={isHousehold ? 'Message household' : 'Message employer'}
+          activeOpacity={0.7}
+          className="w-11 h-11 rounded-xl border items-center justify-center"
+          style={{ borderColor: colors.border }}
+        >
+          <MaterialIcons name="chat-bubble-outline" size={20} color={accent} accessible={false} />
+        </TouchableOpacity>
       </View>
       <View className="border-t pt-3" style={{ borderTopColor: colors.border }}>
         <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Workplace address</Text>

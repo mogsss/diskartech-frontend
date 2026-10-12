@@ -120,6 +120,7 @@ export default function RegisterStudentScreen() {
 
     try {
       const response = await api.post('/register/student', {
+        registered_with_google: isGoogleLinked,
         role: 'student',
         first_name: firstName,
         middle_name: middleName,
@@ -150,7 +151,7 @@ export default function RegisterStudentScreen() {
           role: 'student',
           isEmailVerified: false,
         };
-        await AsyncStorage.setItem('userData', JSON.stringify(userDataToSave));
+        await AsyncStorage.setItem('userData', JSON.stringify({ ...userDataToSave, registered_with_google: isGoogleLinked, authentication_method: isGoogleLinked ? 'google' : 'password' }));
 
         if (student_profile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(student_profile));

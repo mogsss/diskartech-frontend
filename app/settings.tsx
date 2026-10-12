@@ -2,6 +2,7 @@ import api from '@/api/axios';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { canChangePasswordForAccount } from '@/utils/passwordChange';
 import { clearPushToken, getPushNotificationSettings, setPushNotificationsEnabled } from '@/utils/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +27,7 @@ export default function SettingsScreen() {
   const { isDark, setDarkMode, colors } = useDarkMode();
   const insets = useSafeAreaInsets();
   const [role, setRole] = useState<Role | null>(null);
+  const [canChangePassword, setCanChangePassword] = useState(false);
   const [profile, setProfile] = useState<VerificationProfile | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [pushSettings, setPushSettings] = useState<Awaited<ReturnType<typeof getPushNotificationSettings>> | null>(null);
@@ -46,6 +48,7 @@ export default function SettingsScreen() {
 
   useFocusEffect(useCallback(() => {
     let active = true;
+    setCanChangePassword(false);
     const loadSettings = async () => {
       try {
         const [userString, profileString] = await Promise.all([
@@ -53,14 +56,17 @@ export default function SettingsScreen() {
         ]);
         if (!active) return;
         const user = userString ? JSON.parse(userString) : null;
+        setCanChangePassword(canChangePasswordForAccount(user));
         const userRole = user?.role === 'business' ? 'employer' : user?.role;
         if (['student', 'employer', 'household'].includes(userRole)) setRole(userRole);
         if (profileString) setProfile(JSON.parse(profileString));
         await refreshPushSettings();
         if (active) setSettingsLoading(false);
         if (user?.id) {
-          const response = await api.get('/user/profile');
-          if (active && response.data?.profile) setProfile(response.data.profile);
+          const [profileResult, accountResult] = await Promise.allSettled([api.get('/user/profile'), api.get('/user/account')]);
+          if (!active) return;
+          if (profileResult.status === 'fulfilled' && profileResult.value.data?.profile) setProfile(profileResult.value.data.profile);
+          if (accountResult.status === 'fulfilled') setCanChangePassword(canChangePasswordForAccount(accountResult.value.data?.account, user));
         }
       } catch {
         // Keep cached account information when the network is unavailable.
@@ -149,6 +155,7 @@ export default function SettingsScreen() {
       <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center px-6 pt-2" contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }} showsVerticalScrollIndicator={false}>
         <SettingsSection title="Account">
           <SettingsRow icon="person-outline" title="Edit profile" description="Update your personal and account details." onPress={() => router.push('/edit-profile')} />
+          {canChangePassword && <SettingsRow icon="lock-outline" title="Change password" description="Update your DiskarTech account password." onPress={() => router.push('/change-password')} />}
           <SettingsRow icon="verified-user" title="Account verification" description="Review your documents and verification status." onPress={role ? openVerification : undefined} last trailing={settingsLoading && !profile ? <ActivityIndicator size="small" color={colors.accent} /> : <Text className="text-[11px] font-semibold text-right max-w-24" style={{ color: statusColor }}>{verificationLabel}</Text>} />
         </SettingsSection>
         <SettingsSection title="Preferences">

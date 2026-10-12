@@ -1,5 +1,3 @@
-import { Alert, Platform } from 'react-native';
-
 export interface GoogleAuthProfile {
   id: string;
   email: string;
@@ -18,6 +16,7 @@ export const GOOGLE_CONFIG = {
 };
 
 let googleSigninConfigured = false;
+let pendingGoogleSignIn: Promise<GoogleAuthProfile | null> | null = null;
 
 function ensureGoogleSigninConfigured() {
   if (googleSigninConfigured) return;
@@ -25,8 +24,9 @@ function ensureGoogleSigninConfigured() {
     const { GoogleSignin } = require('@react-native-google-signin/google-signin');
     GoogleSignin.configure({
       webClientId: GOOGLE_CONFIG.webClientId,
-      offlineAccess: true,
-      forceCodeForRefreshToken: true,
+      // Login only uses the account profile; no server refresh-token flow is used.
+      offlineAccess: false,
+      forceCodeForRefreshToken: false,
     });
     googleSigninConfigured = true;
   } catch {
@@ -39,9 +39,21 @@ function ensureGoogleSigninConfigured() {
  * Triggers the official Android system account sheet on the phone.
  * If native module is not yet compiled into the running APK, returns null gracefully.
  */
-export async function promptNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
+export function promptNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
+  // A second tap or another screen must not launch another native sign-in activity.
+  if (pendingGoogleSignIn) return pendingGoogleSignIn;
+  const request = performNativeGoogleSignIn();
+  pendingGoogleSignIn = request;
+  const release = () => {
+    if (pendingGoogleSignIn === request) pendingGoogleSignIn = null;
+  };
+  void request.then(release, release);
+  return request;
+}
+
+async function performNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
   try {
-    const { GoogleSignin, statusCodes } = require('@react-native-google-signin/google-signin');
+    const { GoogleSignin } = require('@react-native-google-signin/google-signin');
     ensureGoogleSigninConfigured();
 
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });

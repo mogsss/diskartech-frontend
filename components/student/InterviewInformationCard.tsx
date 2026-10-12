@@ -52,8 +52,8 @@ export default function InterviewInformationCard({ applicationId, interviewDetai
             <Text className="text-xs font-semibold" style={{ color: accent }}>View directions</Text>
           </TouchableOpacity>
         )}
-        {isOnline && <TouchableOpacity onPress={onJoinInterview} disabled={!availability.canJoin} accessibilityState={{ disabled: !availability.canJoin }} accessibilityRole="button" className="flex-row items-center justify-center gap-2 rounded-xl px-3 py-3" style={{ minHeight: 44, backgroundColor: colors.primary, opacity: availability.canJoin ? 1 : 0.45 }}>
-          <MaterialIcons name="videocam" size={19} color="#FFFFFF" /><Text className="text-xs font-semibold text-white">Enter Interview Room</Text>
+        {isOnline && <TouchableOpacity onPress={onJoinInterview} disabled={!availability.canJoin} accessibilityState={{ disabled: !availability.canJoin }} accessibilityRole="button" accessibilityLabel="Join online interview" className="items-center justify-center rounded-xl px-3 py-3" style={{ minHeight: 48, backgroundColor: colors.primary, opacity: availability.canJoin ? 1 : 0.45 }}>
+          <Text className="text-sm font-semibold text-white text-center">Join interview</Text>
         </TouchableOpacity>}
         {isOnline && <Text className="text-[11px] text-center leading-5" style={{ color: colors.textSecondary }}>{availability.message}</Text>}
         {availability.canAddToCalendar && <TouchableOpacity onPress={onAddToCalendar} accessibilityRole="button" accessibilityLabel="Add interview to calendar" activeOpacity={0.8} className="flex-row items-center justify-center gap-2 rounded-xl border px-3 py-3" style={{ minHeight: 44, borderColor: colors.border }}>

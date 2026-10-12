@@ -11,16 +11,17 @@ interface CertificateOfEmploymentCardProps {
   onOpenCertificate: () => void;
   onDownloadPdf: () => void;
   onRequestCertificate: () => void;
+  embedded?: boolean;
 }
 
-export default function CertificateOfEmploymentCard({ certificateStatus, loadingCert, requestingCert, onOpenCertificate, onDownloadPdf, onRequestCertificate }: CertificateOfEmploymentCardProps) {
+export default function CertificateOfEmploymentCard({ certificateStatus, loadingCert, requestingCert, onOpenCertificate, onDownloadPdf, onRequestCertificate, embedded }: CertificateOfEmploymentCardProps) {
   const { colors, isDark } = useDarkMode();
   const isApproved = certificateStatus === 'approved';
   const isRequested = certificateStatus === 'requested';
   const accent = isDark ? colors.accent : '#B91C1C';
   const statusColor = isApproved ? (isDark ? '#6EE7B7' : '#047857') : colors.textSecondary;
   return (
-    <ApplicationSection title="Certificate of employment" icon="workspace-premium">
+    <ApplicationSection title="Certificate of employment" icon="workspace-premium" embedded={embedded}>
       <View className="self-start rounded-lg px-2 py-1 mb-3" style={{ backgroundColor: isApproved ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5') : (isDark ? colors.background : '#F1F5F9') }}>
         <Text className="text-[10px] font-semibold" style={{ color: statusColor }}>{isApproved ? 'Issued & ready' : isRequested ? 'Pending approval' : 'Available to request'}</Text>
       </View>

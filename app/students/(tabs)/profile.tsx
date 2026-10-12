@@ -8,10 +8,12 @@ import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import AddSkillModal from '@/components/student/modals/AddSkillModal';
 import EditAvailabilityModal from '@/components/student/modals/EditAvailabilityModal';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
+import LoadingModal from '@/components/ui/modals/LoadingModal';
 import DocumentViewerModal from '@/components/ui/modals/DocumentViewerModal';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import api from '@/api/axios';
 import { resolveMediaUrl, mediaFilename } from '@/utils/media';
+import { getDocumentAnalysisStatus } from '@/utils/documentAnalysis';
 
 // Custom Hook natin!
 import { useStudentProfile } from '@/hooks/useStudentProfile';
@@ -37,7 +39,7 @@ export default function ProfileScreen() {
     selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
     isLogoutModalVisible, setLogoutModalVisible, handleLogout,
     alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
-    handleUploadDocument, handleUploadProfilePic, fetchStudentProfile
+    handleUploadDocument, handleUploadProfilePic, fetchStudentProfile, uploadingDocument, uploadingProfilePicture
   } = useStudentProfile();
 
   const onRefresh = async () => {
@@ -106,9 +108,9 @@ export default function ProfileScreen() {
   };
 
   const renderSectionHeader = (title: string, description: string, action: string, onPress: () => void, icon: keyof typeof MaterialIcons.glyphMap = 'edit') => (
-    <View className="flex-row items-start justify-between gap-3 mb-4">
+    <View className="flex-row items-center justify-between gap-3 mb-2 px-1">
       <View className="flex-1">
-        <Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>{title}</Text>
+        <Text accessibilityRole="header" className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
         <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{description}</Text>
       </View>
       <TouchableOpacity onPress={onPress} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${action} ${title}`} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}>
@@ -131,12 +133,13 @@ export default function ProfileScreen() {
   const renderDocument = (type: 'student_resume' | 'school_id' | 'coe', title: string, icon: keyof typeof MaterialIcons.glyphMap, forVerification = false) => {
     const filename = uploadedDocs[type];
     const rawPath = uploadedDocs[`${type}_raw`];
-    const uploaded = Boolean(filename);
+    const uploaded = Boolean(rawPath);
     const verified = forVerification && isVerified && uploaded;
-    const rejected = forVerification && isRejected && uploaded;
-    const documentColor = rejected ? accentText : uploaded ? (isDark ? '#6EE7B7' : '#047857') : colors.textSecondary;
+    const status = type === 'student_resume' ? null : getDocumentAnalysisStatus(type, uploaded, uploadedDocs[`${type}_ai_is_valid`]);
+    const documentColor = status?.verdict === 'invalid' ? accentText : status?.verdict === 'pending' ? (isDark ? '#FCD34D' : '#B45309') : uploaded ? (isDark ? '#6EE7B7' : '#047857') : colors.textSecondary;
+    const documentIcon: keyof typeof MaterialIcons.glyphMap = status?.verdict === 'invalid' ? 'error-outline' : status?.verdict === 'pending' ? 'hourglass-empty' : uploaded ? 'check-circle-outline' : 'upload-file';
     return (
-      <View className="rounded-2xl border p-4 mt-3" style={{ borderColor: colors.border }}>
+      <View className={type === 'student_resume' ? 'rounded-2xl border p-4' : 'rounded-2xl border p-4 mt-3'} style={{ borderColor: colors.border }}>
         <View className="flex-row items-start gap-3">
           <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
           <View className="flex-1">
@@ -145,13 +148,13 @@ export default function ProfileScreen() {
           </View>
         </View>
         <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
-          <View className="flex-row items-center gap-1.5">
-            {!verified && <MaterialIcons name={rejected ? 'error-outline' : uploaded ? 'check-circle-outline' : 'upload-file'} size={14} color={documentColor} />}
-            <Text className="text-xs font-medium" style={{ color: documentColor }}>{verified ? 'Verified' : rejected ? 'Needs update' : uploaded ? 'Uploaded' : 'Not uploaded'}</Text>
+          <View className="flex-row items-center gap-1.5 shrink">
+            <MaterialIcons name={documentIcon} size={16} color={documentColor} />
+            <Text className="text-xs font-medium leading-5 shrink" style={{ color: documentColor }}>{status?.label ?? (uploaded ? 'Uploaded' : 'Not uploaded')}</Text>
           </View>
           <View className="flex-row items-center gap-2">
             {uploaded && <TouchableOpacity onPress={() => handleViewDocument(type, title, rawPath)} accessibilityRole="button" accessibilityLabel={`View ${title}`} activeOpacity={0.75} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
-            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR/COE' : title)} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
+            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR/COE' : title)} disabled={uploadingDocument !== null} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDocument !== null }} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDocument !== null ? 0.5 : 1 }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
           </View>
         </View>
       </View>
@@ -170,7 +173,7 @@ export default function ProfileScreen() {
           <View className="flex-row items-center gap-4">
             <View className="relative">
               <Avatar uri={profilePicUri} name={String(studentName || 'Student')} size={72} />
-              <TouchableOpacity onPress={handleUploadProfilePic} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
+              <TouchableOpacity onPress={handleUploadProfilePic} disabled={uploadingProfilePicture || uploadingDocument !== null} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDocument !== null }} className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
             </View>
             <View className="flex-1">
               <View className="flex-row items-center gap-1.5">
@@ -189,10 +192,10 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="flex-row items-start justify-between gap-3 mb-4">
+        <View className="mx-6 mb-5">
+          <View className="flex-row items-center justify-between gap-3 mb-2 px-1">
             <View className="flex-1">
-              <Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>Documents & verification</Text>
+              <Text accessibilityRole="header" className="text-sm font-semibold leading-5" style={{ color: colors.text }}>Documents & verification</Text>
               <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{isVerified ? 'Keep your documents ready.' : 'Keep your documents ready. Verify your account to apply for jobs.'}</Text>
             </View>
             {!isVerified && (
@@ -201,45 +204,57 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {renderDocument('student_resume', 'Resume', 'description')}
-          {renderDocument('school_id', 'School ID', 'badge', true)}
-          {renderDocument('coe', 'COR/COE (Certificate of Enrolment/Registration)', 'insert-drive-file', true)}
-          {isRejected && <View className="rounded-xl p-3 mt-4" style={{ backgroundColor: accentSurface }}><View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text></View><Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text></View>}
+          <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {renderDocument('student_resume', 'Resume', 'description')}
+            {renderDocument('school_id', 'School ID', 'badge', true)}
+            {renderDocument('coe', 'COR/COE (Certificate of Enrolment/Registration)', 'insert-drive-file', true)}
+            {(uploadedDocs.school_id_raw || uploadedDocs.coe_raw) && <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>AI checks help with review. Final account approval is by an admin.</Text>}
+            {isRejected && <View className="rounded-xl p-3 mt-4" style={{ backgroundColor: accentSurface }}><View className="flex-row items-center gap-2 mb-1"><Text className="text-xs font-semibold" style={{ color: accentText }}>Reason:</Text></View><Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text></View>}
+          </View>
         </View>
 
-        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <View className="mx-6 mb-5">
           {renderSectionHeader('Student information', 'Your school and contact details.', 'Edit', () => router.push('/edit-profile'))}
-          {renderInfoRow('school', 'School', school)}
-          {renderInfoRow('menu-book', 'Course', course)}
-          {renderInfoRow('format-list-numbered', 'Year level', yearLevel)}
-          {renderInfoRow('location-on', 'Location', location)}
+          <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {renderInfoRow('school', 'School', school)}
+            {renderInfoRow('menu-book', 'Course', course)}
+            {renderInfoRow('format-list-numbered', 'Year level', yearLevel)}
+            {renderInfoRow('location-on', 'Location', location)}
+          </View>
         </View>
 
-        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <View className="mx-6 mb-5">
           {renderSectionHeader('Skills', 'Add up to 5 skills you want to be known for.', 'Add', handleAddSkill, 'add')}
-          {validSkills.length > 0 ? <View className="flex-row flex-wrap gap-2">{skills.map((skill, index) => {
-            if (typeof skill !== 'string' || !skill.trim()) return null;
-            return <View key={`${skill}-${index}`} className="max-w-full flex-row items-center gap-1 rounded-xl pl-3 pr-1 py-1" style={{ backgroundColor: subtle }}><Text className="text-xs font-medium shrink" style={{ color: colors.text }}>{skill}</Text><TouchableOpacity onPress={() => handleSaveSkills(skills.filter((_, i) => i !== index))} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Remove ${skill} skill`} className="w-9 h-9 items-center justify-center rounded-lg"><MaterialIcons name="close" size={16} color={accentText} /></TouchableOpacity></View>;
-          })}</View> : <View className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: subtle }}><MaterialIcons name="auto-awesome" size={20} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>No skills yet. Add your strengths to help employers find you.</Text></View>}
+          <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {validSkills.length > 0 ? <View className="flex-row flex-wrap gap-2">{skills.map((skill, index) => {
+              if (typeof skill !== 'string' || !skill.trim()) return null;
+              return <View key={`${skill}-${index}`} className="max-w-full flex-row items-center gap-1 rounded-xl pl-3 pr-1 py-1" style={{ backgroundColor: subtle }}><Text className="text-xs font-medium shrink" style={{ color: colors.text }}>{skill}</Text><TouchableOpacity onPress={() => handleSaveSkills(skills.filter((_, i) => i !== index))} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Remove ${skill} skill`} className="w-9 h-9 items-center justify-center rounded-lg"><MaterialIcons name="close" size={16} color={accentText} /></TouchableOpacity></View>;
+            })}</View> : <View className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: subtle }}><MaterialIcons name="auto-awesome" size={20} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>No skills yet. Add your strengths to help employers find you.</Text></View>}
+          </View>
         </View>
 
-        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <View className="mx-6 mb-5">
           {renderSectionHeader('Availability', 'Let employers know when you can work.', 'Edit', () => setAvailabilityModalVisible(true))}
-          {renderInfoRow('schedule', 'Available schedule', formatScheduleText())}
-          {renderInfoRow('work-outline', 'Preferred job type', 'Part-time')}
+          <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {renderInfoRow('schedule', 'Available schedule', formatScheduleText())}
+            {renderInfoRow('work-outline', 'Preferred job type', 'Part-time')}
+          </View>
         </View>
 
-        <View className="mx-6 rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="px-5 pt-5 pb-2"><Text className="text-lg font-bold" style={{ color: colors.text }}>Account & support</Text></View>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity key={item.label} onPress={() => { if (item.danger) setLogoutModalVisible(true); else router.push(item.route as any); }} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
-              <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
-              <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
-              <MaterialIcons name="chevron-right" size={20} color={accentText} />
-            </TouchableOpacity>
-          ))}
+        <View className="mx-6">
+          <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Account & support</Text>
+          <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity key={item.label} onPress={() => { if (item.danger) setLogoutModalVisible(true); else router.push(item.route as any); }} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
+                <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
+                <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
+                <MaterialIcons name="chevron-right" size={20} color={accentText} />
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </ScrollView>
+      <LoadingModal visible={uploadingProfilePicture || uploadingDocument !== null} message={uploadingProfilePicture ? 'Uploading profile picture...' : uploadingDocument === 'student_resume' ? 'Uploading resume...' : 'Uploading verification document...'} />
       <AddSkillModal
         visible={isAddSkillModalVisible}
         existingSkills={skills}

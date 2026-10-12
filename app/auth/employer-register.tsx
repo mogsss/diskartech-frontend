@@ -111,6 +111,7 @@ export default function RegisterEmployerScreen() {
 
     try {
       const response = await api.post('/register/employer', {
+        registered_with_google: isGoogleLinked,
         role: 'employer',
         business_name: businessName,
         business_type: businessType,
@@ -141,7 +142,7 @@ export default function RegisterEmployerScreen() {
           last_name: lastName,
           isEmailVerified: false,
         };
-        await AsyncStorage.setItem('userData', JSON.stringify(userDataToSave));
+        await AsyncStorage.setItem('userData', JSON.stringify({ ...userDataToSave, registered_with_google: isGoogleLinked, authentication_method: isGoogleLinked ? 'google' : 'password' }));
 
         const profileData = profile || employer_profile;
         if (profileData) {

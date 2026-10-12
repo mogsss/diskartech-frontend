@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -6,6 +6,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { clearPushToken } from '@/utils/notifications';
 import api, { BACKEND_URL } from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
+import { normalizeAiResult } from '@/utils/documentAnalysis';
+
+type StudentDocumentType = 'student_resume' | 'school_id' | 'coe';
 
 export function useStudentProfile() {
   const [studentName, setStudentName] = useState('Junnyl Mabini');
@@ -29,6 +32,8 @@ export function useStudentProfile() {
     school_id_raw?: string | null;
     coe: string | null;
     coe_raw?: string | null;
+    school_id_ai_is_valid?: boolean | null;
+    coe_ai_is_valid?: boolean | null;
   }>({
     student_resume: null,
     student_resume_raw: null,
@@ -37,6 +42,12 @@ export function useStudentProfile() {
     coe: null,
     coe_raw: null
   });
+
+  const [uploadingDocument, setUploadingDocument] = useState<StudentDocumentType | null>(null);
+  const [uploadingProfilePicture, setUploadingProfilePicture] = useState(false);
+  const documentUploadBusy = useRef(false);
+  const profileRevision = useRef(0);
+  const needsFreshProfile = useRef(false);
 
   const [skills, setSkills] = useState<string[]>([]);
   const [isAddSkillModalVisible, setAddSkillModalVisible] = useState(false);
@@ -61,9 +72,12 @@ export function useStudentProfile() {
   };
 
   const fetchStudentProfile = async () => {
+    if (documentUploadBusy.current) return;
+    const revision = profileRevision.current;
     try {
-      const storedProfile = await AsyncStorage.getItem('userProfile');
+      const storedProfile = needsFreshProfile.current ? null : await AsyncStorage.getItem('userProfile');
       const storedUser = await AsyncStorage.getItem('userData');
+      if (documentUploadBusy.current || revision !== profileRevision.current) return;
 
       if (storedProfile && storedProfile !== 'null' && storedProfile !== 'undefined') {
         const profile = JSON.parse(storedProfile);
@@ -73,7 +87,7 @@ export function useStudentProfile() {
         if (profile.course) setCourse(profile.course);
         if (profile.year_level) setYearLevel(profile.year_level);
         if (profile.location) setLocation(profile.location);
-        if (profile.isVerified !== undefined) setIsVerified(profile.isVerified);
+        if (profile.isVerified !== undefined) setIsVerified(normalizeAiResult(profile.isVerified) === true);
         if (profile.rejection_reason !== undefined) setRejectionReason(profile.rejection_reason);
         if (profile.rating !== undefined) setRating(Number(profile.rating));
         if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
@@ -88,6 +102,8 @@ export function useStudentProfile() {
           school_id_raw: profile.school_id,
           coe: getFilename(profile.coe),
           coe_raw: profile.coe,
+          school_id_ai_is_valid: normalizeAiResult(profile.school_id_ai_is_valid),
+          coe_ai_is_valid: normalizeAiResult(profile.coe_ai_is_valid),
         });
 
         if (profile.skillset && Array.isArray(profile.skillset)) {
@@ -108,6 +124,7 @@ export function useStudentProfile() {
       // Live sync mula sa backend API
       try {
         const response = await api.get('/user/profile');
+        if (documentUploadBusy.current || revision !== profileRevision.current) return;
         const apiProfile = response.data?.profile;
         const apiRating = response.data?.rating !== undefined ? Number(response.data.rating) : 5.0;
         const apiReviewCount = response.data?.review_count !== undefined ? Number(response.data.review_count) : 0;
@@ -137,6 +154,8 @@ export function useStudentProfile() {
             school_id_raw: apiProfile.school_id,
             coe: getFilename(apiProfile.coe),
             coe_raw: apiProfile.coe,
+            school_id_ai_is_valid: normalizeAiResult(apiProfile.school_id_ai_is_valid),
+            coe_ai_is_valid: normalizeAiResult(apiProfile.coe_ai_is_valid),
           });
 
           if (apiProfile.skillset && Array.isArray(apiProfile.skillset)) {
@@ -147,6 +166,7 @@ export function useStudentProfile() {
           if (apiProfile.time_slot) setSelectedTimeSlot(apiProfile.time_slot);
 
           await AsyncStorage.setItem('userProfile', JSON.stringify(apiProfile));
+          needsFreshProfile.current = false;
         }
       } catch (apiErr: any) {
         console.warn('⚠️ Failed to sync student profile with backend:', apiErr?.response?.data || apiErr?.message);
@@ -271,7 +291,11 @@ export function useStudentProfile() {
     }
   };
 
-  const handleUploadDocument = async (documentType: string, title: string) => {
+  const handleUploadDocument = async (documentType: StudentDocumentType, title: string) => {
+    if (documentUploadBusy.current || (isVerified && documentType !== 'student_resume' && uploadedDocs[`${documentType}_raw`])) return;
+    documentUploadBusy.current = true;
+    profileRevision.current += 1;
+    let uploaded = false;
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
@@ -281,43 +305,59 @@ export function useStudentProfile() {
       if (result.canceled) return;
 
       const fileToUpload = result.assets[0];
+      if (!fileToUpload?.uri) throw new Error('Please choose a valid document.');
+      if (fileToUpload.size !== undefined && (fileToUpload.size <= 0 || fileToUpload.size > 5 * 1024 * 1024)) {
+        throw new Error('Please choose a non-empty document no larger than 5 MB.');
+      }
+      const fileName = (fileToUpload.name || 'document').split(/[\\/]/).pop()!
+        .replace(/[\x00-\x1F\x7F-\x9F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
+        .replace(/[<>:"|?*]/g, '').trim().slice(-180) || 'document';
+      setUploadingDocument(documentType);
       const formData = new FormData();
       formData.append('document_type', documentType);
       formData.append('file', {
         uri: fileToUpload.uri,
-        name: fileToUpload.name,
-        type: fileToUpload.mimeType || 'application/pdf',
+        name: fileName,
+        type: fileToUpload.mimeType || 'application/octet-stream',
       } as any);
 
-      const token = await AsyncStorage.getItem('userToken');
-
-      const response = await fetch(`${BACKEND_URL}/api/student/upload-doc`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-        body: formData,
+      const response = await api.post('/student/upload-doc', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000,
       });
+      const data = response.data;
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (data?.status === 'success') {
+        uploaded = true;
+        needsFreshProfile.current = true;
         const newPath = data.file_path || data[documentType];
 
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          profile[documentType] = newPath;
-          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-        }
+        try {
+          const storedProfile = await AsyncStorage.getItem('userProfile');
+          if (storedProfile) {
+            const profile = JSON.parse(storedProfile);
+            profile[documentType] = newPath;
+            if (documentType !== 'student_resume') {
+              profile[`${documentType}_ai_is_valid`] = null;
+              profile[`${documentType}_ai_remarks`] = null;
+              profile.isVerified = false;
+              profile.rejection_reason = null;
+            }
+            await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+          }
+        } catch { /* A cache failure does not invalidate a completed upload. */ }
 
         // 👇 IN-UPDATE PARA MAG-REFLECT AGAD ANG FILENAME AT RAW PATH SA SCREEN
         setUploadedDocs(prev => ({
           ...prev,
           [documentType]: getFilename(newPath),
           [`${documentType}_raw`]: newPath,
+          ...(documentType !== 'student_resume' ? { [`${documentType}_ai_is_valid`]: null } : {}),
         }));
+        if (documentType !== 'student_resume') {
+          setIsVerified(false);
+          setRejectionReason(null);
+        }
+        setUploadingDocument(null);
 
         showAlertModal({
           title: 'Upload Successful',
@@ -329,9 +369,8 @@ export function useStudentProfile() {
           onPrimaryPress: () => setAlertModalVisible(false),
         });
         
-        // Pwede pa ring i-call para ma-sync nang buo kung gusto mo
-        fetchStudentProfile();
       } else {
+        setUploadingDocument(null);
         showAlertModal({
           title: 'Upload Failed',
           message: data.message || `Failed to upload ${title}. Please try again.`,
@@ -342,17 +381,22 @@ export function useStudentProfile() {
           onPrimaryPress: () => setAlertModalVisible(false),
         });
       }
-    } catch (error) {
-      console.error('Error uploading document:', error);
+    } catch (error: any) {
+      setUploadingDocument(null);
+      const firstValidation = Object.values(error.response?.data?.errors || {}).flat().find((message) => typeof message === 'string');
       showAlertModal({
         title: 'Error',
-        message: 'An error occurred while uploading. Check your connection.',
+        message: String(firstValidation || error.response?.data?.message || error.message || 'An error occurred while uploading. Check your connection.'),
         iconName: 'wifi-off',
         iconColor: '#64748b',
         iconBgColor: 'bg-slate-100',
         primaryButtonText: 'OK',
         onPrimaryPress: () => setAlertModalVisible(false),
       });
+    } finally {
+      documentUploadBusy.current = false;
+      setUploadingDocument(null);
+      if (uploaded) void fetchStudentProfile();
     }
   };
 
@@ -390,6 +434,10 @@ export function useStudentProfile() {
   };
 
   const handleUploadProfilePic = async () => {
+    if (documentUploadBusy.current) return;
+    documentUploadBusy.current = true;
+    profileRevision.current += 1;
+    let uploaded = false;
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -401,6 +449,8 @@ export function useStudentProfile() {
       if (result.canceled) return;
 
       const fileToUpload = result.assets[0];
+      if (!fileToUpload?.uri) throw new Error('Please choose a valid profile picture.');
+      setUploadingProfilePicture(true);
       const formData = new FormData();
       formData.append('document_type', 'profile_picture'); 
       formData.append('file', {
@@ -409,60 +459,53 @@ export function useStudentProfile() {
         type: fileToUpload.mimeType || 'image/jpeg',
       } as any);
 
-      const token = await AsyncStorage.getItem('userToken');
-
-      const response = await fetch(`${BACKEND_URL}/api/student/upload-doc`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-        body: formData,
+      const response = await api.post('/student/upload-doc', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000,
       });
+      const data = response.data;
+      setUploadingProfilePicture(false);
 
-      const responseText = await response.text();
-      let data;
-      try { data = JSON.parse(responseText); } catch (e) {
-        showAlertModal({
-          title: 'Server Error', message: 'Nagbalik ng HTML page ang server.', iconName: 'error-outline',
-          iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-        });
-        return;
-      }
-
-      if (response.ok) {
+      if (data?.status === 'success') {
+        uploaded = true;
+        needsFreshProfile.current = true;
         const newPath = data.file_path || data.profile_picture;
         const fullUrl = resolveMediaUrl(data.full_url || newPath);
         
         setProfilePicUri(fullUrl); 
 
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          profile.avatar = newPath;
-          profile.avatar_url = fullUrl;
-          profile.profile_picture = newPath;
-          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-        }
+        try {
+          const storedProfile = await AsyncStorage.getItem('userProfile');
+          if (storedProfile) {
+            const profile = JSON.parse(storedProfile);
+            profile.avatar = newPath;
+            profile.avatar_url = fullUrl;
+            profile.profile_picture = newPath;
+            await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+          }
+        } catch { /* A cache failure does not invalidate a completed upload. */ }
 
         showAlertModal({
           title: 'Profile Updated', message: 'Profile picture uploaded successfully!', iconName: 'check-circle',
           iconColor: '#16a34a', iconBgColor: 'bg-green-50', primaryButtonText: 'Nice', onPrimaryPress: () => setAlertModalVisible(false),
         });
 
-        fetchStudentProfile(); 
       } else {
         showAlertModal({
           title: 'Upload Failed', message: data.message || 'Failed to upload profile picture', iconName: 'error-outline',
           iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
         });
       }
-    } catch (error) {
-      console.error('Error uploading profile picture:', error);
+    } catch (error: any) {
+      setUploadingProfilePicture(false);
+      const firstValidation = Object.values(error.response?.data?.errors || {}).flat().find(message => typeof message === 'string');
       showAlertModal({
-        title: 'Error', message: 'An error occurred while uploading profile picture.', iconName: 'error-outline',
+        title: 'Upload Failed', message: String(firstValidation || error.response?.data?.message || 'Unable to upload your profile picture. Please try again.'), iconName: 'error-outline',
         iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
       });
+    } finally {
+      documentUploadBusy.current = false;
+      setUploadingProfilePicture(false);
+      if (uploaded) void fetchStudentProfile();
     }
   };
 
@@ -477,6 +520,6 @@ export function useStudentProfile() {
     selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
     isLogoutModalVisible, setLogoutModalVisible, handleLogout,
     alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
-    handleUploadDocument, handleUploadProfilePic, fetchStudentProfile
+    handleUploadDocument, handleUploadProfilePic, fetchStudentProfile, uploadingDocument, uploadingProfilePicture
   };
 }

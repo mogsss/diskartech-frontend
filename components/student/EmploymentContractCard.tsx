@@ -14,6 +14,7 @@ interface EmploymentContractCardProps {
   contractTerms?: string;
   specialInstructions?: string;
   status?: string;
+  children?: React.ReactNode;
 }
 
 export default function EmploymentContractCard({
@@ -25,6 +26,7 @@ export default function EmploymentContractCard({
   contractTerms,
   specialInstructions,
   status,
+  children,
 }: EmploymentContractCardProps) {
   const { isDark, colors } = useDarkMode();
   const isTerminated = status === 'terminated';
@@ -103,6 +105,7 @@ export default function EmploymentContractCard({
           </Text>
         </View>
       )}
+      {children}
     </ApplicationSection>
   );
 }

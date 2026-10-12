@@ -113,6 +113,7 @@ export default function RegisterHouseholdScreen() {
 
     try {
       const response = await api.post('/register/household', {
+        registered_with_google: isGoogleLinked,
         role: 'household',
         first_name: firstName,
         middle_name: middleName,
@@ -141,7 +142,7 @@ export default function RegisterHouseholdScreen() {
           role: 'household',
           isEmailVerified: false,
         };
-        await AsyncStorage.setItem('userData', JSON.stringify(userDataToSave));
+        await AsyncStorage.setItem('userData', JSON.stringify({ ...userDataToSave, registered_with_google: isGoogleLinked, authentication_method: isGoogleLinked ? 'google' : 'password' }));
 
         if (profile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));

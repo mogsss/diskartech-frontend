@@ -9,6 +9,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
 
 type DocumentType = 'valid_id_path' | 'certificate_path';
 type VerificationProfile = {
@@ -20,12 +21,6 @@ type VerificationProfile = {
   cert_ai_is_valid?: boolean | number | string | null;
 };
 type IconName = keyof typeof MaterialIcons.glyphMap;
-
-const normalizeAiResult = (value: unknown): boolean | null => {
-  if (value === true || value === 1 || value === '1') return true;
-  if (value === false || value === 0 || value === '0') return false;
-  return null;
-};
 
 const fileTypes: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg',
@@ -178,12 +173,10 @@ export default function VerificationStatusScreen() {
 
   const renderDocument = (documentType: DocumentType, title: string, icon: IconName, uploaded: boolean) => {
     const editable = !isVerified || !uploaded;
-    const showAi = isRejected && uploaded;
-    const aiResult = normalizeAiResult(documentType === 'valid_id_path' ? profile?.ai_is_valid : profile?.cert_ai_is_valid);
-    const color = showAi ? aiResult === false ? accentText : aiResult === true ? verifiedColor : pendingText : isVerified && uploaded ? verifiedColor : uploaded ? pendingText : colors.textSecondary;
-    const fill = showAi ? aiResult === false ? accentSurface : aiResult === true ? verifiedSurface : pendingSurface : isVerified && uploaded ? verifiedSurface : uploaded ? pendingSurface : subtle;
-    const recommendation = aiResult === true ? documentType === 'valid_id_path' ? 'Valid ID' : 'Valid Business Permit / Certificate' : aiResult === false ? documentType === 'valid_id_path' ? 'Invalid ID' : 'Invalid Business Permit / Certificate' : 'Pending analysis';
-    const documentStatusIcon: IconName = showAi ? aiResult === false ? 'error-outline' : aiResult === true ? 'check-circle-outline' : 'hourglass-empty' : isVerified && uploaded ? 'check-circle-outline' : uploaded ? 'hourglass-empty' : 'upload-file';
+    const status = getDocumentAnalysisStatus(documentType, uploaded, documentType === 'valid_id_path' ? profile?.ai_is_valid : profile?.cert_ai_is_valid);
+    const color = status.verdict === 'valid' ? verifiedColor : status.verdict === 'invalid' ? accentText : uploaded ? pendingText : colors.textSecondary;
+    const fill = status.verdict === 'valid' ? verifiedSurface : status.verdict === 'invalid' ? accentSurface : uploaded ? pendingSurface : subtle;
+    const documentStatusIcon: IconName = status.verdict === 'valid' ? 'check-circle-outline' : status.verdict === 'invalid' ? 'error-outline' : uploaded ? 'hourglass-empty' : 'upload-file';
     return (
       <View className="rounded-2xl border p-4 mt-3" style={{ borderColor: colors.border }}>
         <View className="flex-row items-start gap-3">
@@ -191,9 +184,9 @@ export default function VerificationStatusScreen() {
           <View className="flex-1"><Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Required for verification</Text></View>
         </View>
         <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
-          <View className={showAi ? 'w-full flex-row items-start gap-1.5' : 'flex-row items-center gap-1.5'}>
-            <MaterialIcons name={documentStatusIcon} size={showAi ? 18 : 14} color={color} />
-            <Text className={showAi ? 'flex-1 text-xs font-medium leading-5' : 'text-xs font-medium'} style={{ color }}>{showAi ? recommendation : isVerified && uploaded ? 'Verified' : uploaded ? 'Uploaded' : 'Not uploaded'}</Text>
+          <View className="flex-row items-center gap-1.5 shrink">
+            <MaterialIcons name={documentStatusIcon} size={16} color={color} />
+            <Text className="text-xs font-medium leading-5 shrink" style={{ color }}>{status.label}</Text>
           </View>
           {editable && <TouchableOpacity onPress={() => handleUploadDocument(documentType)} disabled={isUploading} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: isUploading }} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3 ml-auto" style={{ backgroundColor: accentSurface, opacity: isUploading ? 0.5 : 1 }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{isRejected && uploaded ? 'Re-upload' : uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
         </View>
@@ -236,7 +229,7 @@ export default function VerificationStatusScreen() {
             <View className="mx-6 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
               <Text className="text-lg font-bold" style={{ color: colors.text }}>Documents</Text>
               <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{isHousehold ? 'A government-issued valid ID is required.' : 'A government-issued valid ID and Business Permit / Certificate are required.'}</Text>
-              {isRejected && <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Document checks help with review. Final account approval is by an admin.</Text>}
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>AI checks help with review. Final account approval is by an admin.</Text>
               {renderDocument('valid_id_path', 'Government Valid ID', 'badge', hasValidId)}
               {!isHousehold && renderDocument('certificate_path', 'Business Permit / Certificate', 'insert-drive-file', hasCertificate)}
               <View className="flex-row items-start gap-2 mt-4"><MaterialIcons name="info-outline" size={16} color={colors.textSecondary} /><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>Accepted files: PDF, JPG, PNG, WEBP, HEIC, HEIF, BMP or JFIF. Maximum file size: 5 MB.</Text></View>

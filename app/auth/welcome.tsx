@@ -150,32 +150,51 @@ export default function WelcomeScreen() {
             </View>
 
             {/* Direct Action Buttons */}
-            <View className="gap-3.5">
+            <View className="gap-3">
               {/* Primary Action: Direct to Registration */}
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => router.push('/auth/student-register')}
-                className="w-full py-4 rounded-2xl bg-red-600 flex-row items-center justify-center shadow-md shadow-red-600/30 active:scale-[0.99]"
+                accessibilityRole="button"
+                accessibilityLabel="Create an account"
+                style={{ minHeight: 50, backgroundColor: colors.primary }}
+                className="w-full px-4 py-3.5 rounded-xl flex-row items-center justify-center gap-2"
               >
-                <Text className="text-base font-extrabold text-white mr-2">
-                  Create an Account
+                <Text className="text-sm font-semibold text-white text-center">
+                  Create an account
                 </Text>
-                <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
               </TouchableOpacity>
 
-              {/* Secondary Action: Direct to Login */}
+              {/* Google sign-in through the existing login flow */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={() => router.push('/auth/login')}
+                onPress={() => router.push({ pathname: '/auth/login', params: { google: '1' } })}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
                 style={{
-                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.03)',
+                  minHeight: 50,
+                  backgroundColor: isDark ? colors.surface : '#FFFFFF',
                   borderColor: colors.border,
                 }}
-                className="w-full py-4 rounded-2xl items-center justify-center border active:scale-[0.99]"
+                className="w-full px-4 py-3.5 rounded-xl flex-row items-center justify-center gap-2.5 border"
               >
-                <Text className="text-sm font-bold" style={{ color: colors.text }}>
-                  I already have an account · Log In
+                <Image source={require('../../assets/images/google-g.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                <Text className="text-sm font-semibold text-center" style={{ color: colors.text }}>
+                  Continue with Google
                 </Text>
+              </TouchableOpacity>
+            </View>
+            <View className="flex-row flex-wrap items-center justify-center mt-3">
+              <Text className="text-xs" style={{ color: colors.textSecondary }}>Already have an account?</Text>
+              <TouchableOpacity
+                onPress={() => router.push('/auth/login')}
+                accessibilityRole="button"
+                accessibilityLabel="Log in to your account"
+                activeOpacity={0.7}
+                className="min-h-11 px-2 items-center justify-center"
+              >
+                <Text className="text-xs font-semibold" style={{ color: isDark ? colors.accent : colors.primary }}>Log in</Text>
               </TouchableOpacity>
             </View>
           </View>

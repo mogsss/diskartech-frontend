@@ -10,7 +10,7 @@ type HomeJob = Pick<Job,
   'jobTitle' | 'companyName' | 'salary' | 'salary_type' | 'location' | 'distance' | 'schedule' |
   'category' | 'bookmarked' | 'isApplied' | 'applicants' |
   'skills' | 'requirements'
-> & { companyLogo?: string; verified?: boolean; matchPercentage?: number };
+> & { companyLogo?: string; verified?: boolean };
 
 interface HomeJobCardProps {
   job: HomeJob;
@@ -49,12 +49,6 @@ export default function HomeJobCard({ job, onPress, onBookmark }: HomeJobCardPro
           <View className="rounded-lg px-2.5 py-1 max-w-full" style={{ backgroundColor: subtle }}>
             <Text className="text-xs font-semibold" style={{ color: colors.textSecondary }} numberOfLines={1}>{job.category}</Text>
           </View>
-          {job.matchPercentage != null && (
-            <View className="flex-row items-center gap-1 rounded-lg px-2.5 py-1" style={{ backgroundColor: accentSurface }}>
-              <MaterialIcons name="auto-awesome" size={13} color={accentText} />
-              <Text className="text-xs font-semibold" style={{ color: accentText }}>{job.matchPercentage}% match</Text>
-            </View>
-          )}
         </View>
 
         <View className="flex-row items-center flex-wrap gap-1.5 mt-4 mb-3">

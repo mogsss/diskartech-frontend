@@ -3,8 +3,8 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { MaterialIcons, AntDesign } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import api from '@/api/axios';
 import {
   Image,
@@ -27,6 +27,8 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 
 export default function LoginScreen() {
   const { isDark, colors } = useDarkMode();
+  const { google } = useLocalSearchParams<{ google?: string }>();
+  const automaticGoogleLoginStarted = useRef(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -80,7 +82,7 @@ export default function LoginScreen() {
         const { user, profile, token } = response.data;
 
         await AsyncStorage.setItem('userToken', token);
-        await AsyncStorage.setItem('userData', JSON.stringify(user));
+        await AsyncStorage.setItem('userData', JSON.stringify({ ...user, authentication_method: 'password' }));
         if (profile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
@@ -107,7 +109,7 @@ export default function LoginScreen() {
             await AsyncStorage.setItem('userToken', responseData.token);
           }
           if (responseData.user) {
-            await AsyncStorage.setItem('userData', JSON.stringify(responseData.user));
+            await AsyncStorage.setItem('userData', JSON.stringify({ ...responseData.user, authentication_method: 'password' }));
           }
 
           // Gagamitin na natin ang custom modal sa halip na Alert
@@ -182,7 +184,7 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = useCallback(async () => {
     try {
       setGoogleLoading(true);
       const profile = await promptNativeGoogleSignIn();
@@ -200,7 +202,7 @@ export default function LoginScreen() {
         const { user, profile: userProfile, token } = response.data;
 
         await AsyncStorage.setItem('userToken', token);
-        await AsyncStorage.setItem('userData', JSON.stringify(user));
+        await AsyncStorage.setItem('userData', JSON.stringify({ ...user, authentication_method: 'google' }));
         if (userProfile) {
           await AsyncStorage.setItem('userProfile', JSON.stringify(userProfile));
         }
@@ -222,7 +224,7 @@ export default function LoginScreen() {
         const token = responseData?.token;
         const user = responseData?.user;
         if (token) await AsyncStorage.setItem('userToken', token);
-        if (user) await AsyncStorage.setItem('userData', JSON.stringify(user));
+        if (user) await AsyncStorage.setItem('userData', JSON.stringify({ ...user, authentication_method: 'google' }));
 
         setModalConfig({
           title: 'Email Verification Required',
@@ -276,7 +278,13 @@ export default function LoginScreen() {
     } finally {
       setGoogleLoading(false);
     }
-  };
+  }, []);
+
+  React.useEffect(() => {
+    if (google !== '1' || automaticGoogleLoginStarted.current) return;
+    automaticGoogleLoginStarted.current = true;
+    void handleGoogleLogin();
+  }, [google, handleGoogleLogin]);
 
   return (
     <KeyboardAvoidingView
@@ -400,7 +408,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
 
               <Text style={{ color: colors.textSecondary }} className="text-base text-center mt-6">
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Text
                   className="text-red-600 font-semibold"
                   onPress={() => router.push('/auth/student-register')}

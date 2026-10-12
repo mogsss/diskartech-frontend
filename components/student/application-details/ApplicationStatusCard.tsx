@@ -3,6 +3,7 @@ import { View, Text } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { formatDate, getStatusIcon } from '@/utils/helpers';
+import ApplicationSection from '@/components/student/application-details/ApplicationSection';
 
 const statuses: Record<string, { label: string; message: string; light: string; dark: string; background: string }> = {
   pending: { label: 'Pending', message: 'Your application has been submitted and is waiting for the employer to review.', light: '#92400E', dark: '#FCD34D', background: '#FFFBEB' },
@@ -20,7 +21,7 @@ function dateLabel(value?: string) {
   return value && !Number.isNaN(new Date(value).getTime()) ? formatDate(value) : null;
 }
 
-export default function ApplicationStatusCard({ status, jobTitle, category, companyName, applicationId, appliedAt, updatedAt, terminationReason }: {
+export default function ApplicationStatusCard({ status, jobTitle, category, companyName, applicationId, appliedAt, updatedAt, terminationReason, children }: {
   status: string;
   jobTitle?: string;
   category?: string;
@@ -29,6 +30,7 @@ export default function ApplicationStatusCard({ status, jobTitle, category, comp
   appliedAt?: string;
   updatedAt?: string;
   terminationReason?: string;
+  children?: React.ReactNode;
 }) {
   const { colors, isDark } = useDarkMode();
   const details = statuses[status] ?? { label: status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Status unavailable', message: 'Message the employer for more information about your application.', light: '#475569', dark: '#CBD5E1', background: '#F1F5F9' };
@@ -38,7 +40,7 @@ export default function ApplicationStatusCard({ status, jobTitle, category, comp
   const showUpdated = ['accepted', 'completed', 'terminated'].includes(status) && updatedDate;
 
   return (
-    <View className="rounded-2xl border p-4 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+    <ApplicationSection title="Your application" icon="assignment">
       <View className="flex-row flex-wrap items-center gap-2 mb-3">
         <View className="px-2.5 py-1.5 rounded-lg" style={{ maxWidth: '100%', backgroundColor: isDark ? colors.background : '#F1F5F9' }}>
           <Text className="text-[11px] font-medium" style={{ color: colors.textSecondary }}>{category || 'General'}</Text>
@@ -66,6 +68,7 @@ export default function ApplicationStatusCard({ status, jobTitle, category, comp
           {showUpdated && <Text className="text-[11px]" style={{ color: colors.textSecondary }}>{(status === 'accepted' ? 'Accepted ' : status === 'completed' ? 'Completed ' : 'Concluded ') + updatedDate}</Text>}
         </View>
       )}
-    </View>
+      {children}
+    </ApplicationSection>
   );
 }

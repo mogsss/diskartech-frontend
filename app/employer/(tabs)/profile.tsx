@@ -2,13 +2,14 @@ import Avatar from '@/components/ui/Avatar';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import api from '@/api/axios';
 import { resolveMediaUrl, mediaFilename } from '@/utils/media';
+import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
 import { useFocusEffect } from '@react-navigation/native';
 import { clearPushToken } from '@/utils/notifications';
 import LoadingModal from '@/components/ui/modals/LoadingModal';
@@ -47,8 +48,12 @@ export default function EmployerProfileScreen() {
     valid_id_raw?: string | null;
     employer_certificate_path?: string | null;
     employer_certificate_raw?: string | null;
+    ai_is_valid?: boolean | null;
+    cert_ai_is_valid?: boolean | null;
   }>({});
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadingProfilePicture, setUploadingProfilePicture] = useState(false);
+  const avatarUploadBusy = useRef(false);
 
   const [viewerModalVisible, setViewerModalVisible] = useState(false);
   const [viewerConfig, setViewerConfig] = useState<{
@@ -143,6 +148,8 @@ export default function EmployerProfileScreen() {
           valid_id_raw: profile.valid_id_path,
           employer_certificate_path: getFilename(profile.employer_certificate_path),
           employer_certificate_raw: profile.employer_certificate_path,
+          ai_is_valid: normalizeAiResult(profile.ai_is_valid),
+          cert_ai_is_valid: normalizeAiResult(profile.cert_ai_is_valid),
         });
 
         setProfileData((prev) => ({
@@ -194,6 +201,8 @@ export default function EmployerProfileScreen() {
             valid_id_raw: profile.valid_id_path,
             employer_certificate_path: getFilename(profile.employer_certificate_path),
             employer_certificate_raw: profile.employer_certificate_path,
+            ai_is_valid: normalizeAiResult(profile.ai_is_valid),
+            cert_ai_is_valid: normalizeAiResult(profile.cert_ai_is_valid),
           });
 
           setProfileData((prev) => ({
@@ -238,6 +247,7 @@ export default function EmployerProfileScreen() {
   );
 
   const handlePickImage = async () => {
+    if (avatarUploadBusy.current || uploadingDoc) return;
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
@@ -266,6 +276,9 @@ export default function EmployerProfileScreen() {
   };
 
   const uploadProfile = async (uri: string) => {
+    if (avatarUploadBusy.current) return;
+    avatarUploadBusy.current = true;
+    setUploadingProfilePicture(true);
     try {
       const formData = new FormData();
 
@@ -283,7 +296,9 @@ export default function EmployerProfileScreen() {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 120000,
       });
+      setUploadingProfilePicture(false);
 
       if (response.data.status === 'success') {
         showAlertModal({
@@ -313,6 +328,7 @@ export default function EmployerProfileScreen() {
         fetchEmployerProfile();
       }
     } catch (error: any) {
+      setUploadingProfilePicture(false);
       console.error('Error uploading avatar:', error);
       showAlertModal({
         title: 'Upload Failed',
@@ -321,6 +337,9 @@ export default function EmployerProfileScreen() {
         iconColor: '#DC2626',
         iconBgColor: 'bg-red-50',
       });
+    } finally {
+      avatarUploadBusy.current = false;
+      setUploadingProfilePicture(false);
     }
   };
 
@@ -406,6 +425,8 @@ export default function EmployerProfileScreen() {
             valid_id_raw: updatedProfile.valid_id_path,
             employer_certificate_path: getFilename(updatedProfile.employer_certificate_path),
             employer_certificate_raw: updatedProfile.employer_certificate_path,
+            ai_is_valid: normalizeAiResult(updatedProfile.ai_is_valid),
+            cert_ai_is_valid: normalizeAiResult(updatedProfile.cert_ai_is_valid),
           });
           await AsyncStorage.setItem('userProfile', JSON.stringify(updatedProfile));
         }
@@ -504,29 +525,34 @@ export default function EmployerProfileScreen() {
     title: string, icon: keyof typeof MaterialIcons.glyphMap,
     rawPath: string | null | undefined, filename: string | null | undefined,
     field: 'valid_id_path' | 'certificate_path',
-  ) => (
-    <View key={field} className="rounded-2xl border p-4 mt-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-      <View className="flex-row items-start gap-3">
-        <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
-        <View className="flex-1">
-          <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
-          <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
+  ) => {
+    const status = getDocumentAnalysisStatus(field, !!rawPath, field === 'valid_id_path' ? uploadedDocs.ai_is_valid : uploadedDocs.cert_ai_is_valid);
+    const statusColor = status.verdict === 'valid' ? verifiedColor : status.verdict === 'invalid' ? accentText : rawPath ? pendingColor : colors.textSecondary;
+    const statusIcon: keyof typeof MaterialIcons.glyphMap = status.verdict === 'valid' ? 'check-circle-outline' : status.verdict === 'invalid' ? 'error-outline' : rawPath ? 'hourglass-empty' : 'file-upload';
+    return (
+      <View key={field} className="rounded-2xl border p-4 mt-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <View className="flex-row items-start gap-3">
+          <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
+            <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
+          </View>
+        </View>
+        <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
+          <View className="flex-row items-center gap-1.5 shrink">
+            <MaterialIcons name={statusIcon} size={16} color={statusColor} />
+            <Text className="text-xs font-medium leading-5 shrink" style={{ color: statusColor }}>{rawPath ? status.label : 'Required document'}</Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            {rawPath && <TouchableOpacity onPress={() => handleViewDocument(field, title, rawPath)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View ${title}`} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
+            {(!isVerified || !rawPath) && <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDoc ? 0.5 : 1 }}>
+              <MaterialIcons name={rawPath ? 'refresh' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{rawPath ? 'Change' : 'Upload'}</Text>
+            </TouchableOpacity>}
+          </View>
         </View>
       </View>
-      <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
-        <View className="flex-row items-center gap-1.5">
-          {!(isVerified && rawPath) && <MaterialIcons name={rawPath ? (isRejected ? 'error-outline' : 'schedule') : 'file-upload'} size={14} color={accentText} />}
-          <Text className="text-xs font-medium" style={{ color: isVerified && rawPath ? verifiedColor : isRejected && rawPath ? accentText : colors.textSecondary }}>{isVerified && rawPath ? 'Verified' : rawPath ? (isRejected ? 'Needs review' : 'Uploaded') : 'Required document'}</Text>
-        </View>
-        <View className="flex-row items-center gap-2">
-          {rawPath && <TouchableOpacity onPress={() => handleViewDocument(field, title, rawPath)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View ${title}`} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
-          {(!isVerified || !rawPath) && <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDoc ? 0.5 : 1 }}>
-            <MaterialIcons name={rawPath ? 'refresh' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{rawPath ? 'Change' : 'Upload'}</Text>
-          </TouchableOpacity>}
-        </View>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={{ backgroundColor: colors.background }} className="flex-1">
@@ -540,7 +566,7 @@ export default function EmployerProfileScreen() {
           <View className="flex-row items-center gap-4">
             <View className="relative">
               <Avatar uri={avatarUri || ''} name={profileData.avatarInitials} size={72} />
-              <TouchableOpacity onPress={handlePickImage} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
+              <TouchableOpacity onPress={handlePickImage} disabled={uploadingProfilePicture || uploadingDoc} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDoc }} className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
             </View>
             <View className="flex-1">
               <Text className="text-[10px] font-semibold tracking-wide mb-1" style={{ color: colors.textSecondary }}>{isHousehold ? 'HOUSEHOLD ACCOUNT' : 'EMPLOYER ACCOUNT'}</Text>
@@ -571,7 +597,8 @@ export default function EmployerProfileScreen() {
             {!isVerified && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel="View document verification status" className="w-12 h-12 items-center justify-center"><MaterialIcons name="chevron-right" size={24} color={accentText} /></TouchableOpacity>}
           </View>
           {renderDocument('Valid ID', 'badge', uploadedDocs.valid_id_raw, uploadedDocs.valid_id_path, 'valid_id_path')}
-          {!isHousehold && renderDocument('Business Permit', 'insert-drive-file', uploadedDocs.employer_certificate_raw, uploadedDocs.employer_certificate_path, 'certificate_path')}
+          {!isHousehold && renderDocument('Business Permit / Certificate', 'insert-drive-file', uploadedDocs.employer_certificate_raw, uploadedDocs.employer_certificate_path, 'certificate_path')}
+          {hasDocuments && <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>AI checks help with review. Final account approval is by an admin.</Text>}
           {isRejected && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Review verification rejection" className="rounded-xl p-3 mt-1" style={{ backgroundColor: accentSurface }}>
             <View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="flex-1 text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text><MaterialIcons name="chevron-right" size={18} color={accentText} /></View>
             <Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text>
@@ -608,7 +635,7 @@ export default function EmployerProfileScreen() {
         </View>
       </ScrollView>
 
-      <LoadingModal visible={uploadingDoc} message="Uploading verification document..." />
+      <LoadingModal visible={uploadingDoc || uploadingProfilePicture} message={uploadingProfilePicture ? 'Uploading profile picture...' : 'Uploading verification document...'} />
 
       <DocumentViewerModal
         visible={viewerModalVisible}

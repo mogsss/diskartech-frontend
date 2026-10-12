@@ -28,12 +28,7 @@ import { getCreatedApplicationId } from '@/utils/notificationFeed';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  JobScheduleCard,
-  JobDescriptionCard,
-  JobRequirementsCard,
-  JobSkillsCard,
-} from '@/components/employer/job-details/JobDetailsCards';
+import ApplicationSection from '@/components/student/application-details/ApplicationSection';
 
 export default function JobDetailsScreen() {
   const { colors, isDark } = useDarkMode();
@@ -69,10 +64,10 @@ export default function JobDetailsScreen() {
   // Helper para i-parse ang JSON arrays (requirements, skills)
   const parseJsonField = (field: any) => {
     if (!field) return [];
-    if (Array.isArray(field)) return field;
+    if (Array.isArray(field)) return field.filter((item): item is string => typeof item === 'string' && !!item.trim());
     try {
       const parsed = JSON.parse(field);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && !!item.trim()) : [];
     } catch {
       return [];
     }
@@ -242,6 +237,13 @@ export default function JobDetailsScreen() {
 
   const requirements = parseJsonField(job.requirements);
   const skills = parseJsonField(job.skills);
+  let parsedDays: unknown = job.available_days;
+  if (typeof parsedDays === 'string') {
+    try { parsedDays = JSON.parse(parsedDays); } catch { /* Keep plain-text schedules. */ }
+  }
+  const workDays = Array.isArray(parsedDays)
+    ? parsedDays.filter((day): day is string => typeof day === 'string' && !!day.trim()).join(', ') || 'Not specified'
+    : typeof parsedDays === 'string' && parsedDays.trim() ? parsedDays : 'Not specified';
   const amount = Number(job.salary);
   const hasRate = job.salary !== null && job.salary !== undefined && String(job.salary).trim() !== '' && Number.isFinite(amount);
   const dailyRate = hasRate ? '\u20B1' + amount.toLocaleString('en-PH', { maximumFractionDigits: 2 }) : 'Not specified';
@@ -503,12 +505,51 @@ export default function JobDetailsScreen() {
               <Text className="text-xs font-medium leading-5" style={{ color: colors.text }}>{location}</Text>
             </View>
           </View>
+          <View className="border-t pt-4 mt-4" style={{ borderTopColor: colors.border }}>
+            <Text className="text-sm font-semibold mb-2" style={{ color: colors.text }}>About the role</Text>
+            <Text className="text-sm leading-6" style={{ color: colors.text }}>{job.description || 'No description provided for this opening.'}</Text>
+          </View>
         </View>
 
-        <JobScheduleCard availableDays={job.available_days} timeSlot={job.time_slot} />
-        <JobDescriptionCard description={job.description} />
-        <JobRequirementsCard requirements={requirements} />
-        <JobSkillsCard skills={skills} />
+        <ApplicationSection title="Work schedule" icon="calendar-today">
+          <View className="mb-3">
+            <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Work days</Text>
+            <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{workDays}</Text>
+          </View>
+          <View className="border-t pt-3" style={{ borderTopColor: colors.border }}>
+            <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Time slot</Text>
+            <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{job.time_slot || 'Not specified'}</Text>
+          </View>
+        </ApplicationSection>
+        {(skills.length > 0 || requirements.length > 0) && (
+          <ApplicationSection title="Skills & requirements" icon="checklist">
+            {skills.length > 0 && (
+              <View>
+                <Text className="text-sm font-semibold mb-3" style={{ color: colors.text }}>Skills needed</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {skills.map((skill, index) => (
+                    <View key={index} className="rounded-lg px-3 py-2" style={{ maxWidth: '100%', backgroundColor: isDark ? colors.background : '#F1F5F9' }}>
+                      <Text className="text-xs font-medium leading-4" style={{ color: colors.text, flexShrink: 1 }}>{skill}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            {requirements.length > 0 && (
+              <View className={skills.length > 0 ? 'border-t pt-4 mt-4' : undefined} style={skills.length > 0 ? { borderTopColor: colors.border } : undefined}>
+                <Text className="text-sm font-semibold mb-3" style={{ color: colors.text }}>Requirements</Text>
+                <View className="gap-3">
+                  {requirements.map((requirement, index) => (
+                    <View key={index} className="flex-row items-start gap-2.5">
+                      <MaterialIcons name="check-circle-outline" size={16} color={accentColor} accessible={false} style={{ marginTop: 2 }} />
+                      <Text className="flex-1 text-sm leading-5" style={{ color: colors.text }}>{requirement}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </ApplicationSection>
+        )}
       </ScrollView>
 
       <View className="px-5 pt-3 border-t" style={{ paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.surface, borderTopColor: colors.border }}>

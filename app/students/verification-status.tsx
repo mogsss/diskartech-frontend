@@ -5,19 +5,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
 
 type DocumentType = 'school_id' | 'coe' | 'student_resume';
 type AiResults = { school_id: boolean | null; coe: boolean | null };
-
-const normalizeAiResult = (value: unknown): boolean | null => {
-  if (value === true || value === 1 || value === '1') return true;
-  if (value === false || value === 0 || value === '0') return false;
-  return null;
-};
 
 export default function StudentVerificationStatusScreen() {
   const { isDark, colors } = useDarkMode();
@@ -39,10 +34,15 @@ export default function StudentVerificationStatusScreen() {
     iconColor: string;
   }>({ visible: false, title: '', message: '', iconName: 'info-outline', iconColor: '#DC2626' });
   const [aiResults, setAiResults] = useState<AiResults>({ school_id: null, coe: null });
+  const uploadBusy = useRef(false);
+  const profileRevision = useRef(0);
 
   const checkVerificationDocs = useCallback(async (isBackground = false) => {
+    if (uploadBusy.current) return;
+    const revision = profileRevision.current;
     try {
       const response = await api.get('/user/profile');
+      if (uploadBusy.current || revision !== profileRevision.current) return;
       const profile = response.data?.profile;
       if (!profile) throw new Error('Profile unavailable');
       setHasSchoolId(!!profile.school_id);
@@ -56,9 +56,10 @@ export default function StudentVerificationStatusScreen() {
       try { await AsyncStorage.setItem('userProfile', JSON.stringify(profile)); }
       catch { console.warn('Unable to cache the latest verification profile.'); }
     } catch (error) {
+      if (uploadBusy.current || revision !== profileRevision.current) return;
       if (!isBackground) console.error('Error checking student verification status:', error);
       setLoadError(true);
-    } finally { setLoading(false); }
+    } finally { if (!uploadBusy.current && revision === profileRevision.current) setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -73,7 +74,9 @@ export default function StudentVerificationStatusScreen() {
   };
 
   const handleUploadDocument = async (documentType: DocumentType) => {
-    if (isUploading || (isVerified && documentType !== 'student_resume')) return;
+    if (uploadBusy.current || (isVerified && documentType !== 'student_resume')) return;
+    uploadBusy.current = true;
+    profileRevision.current += 1;
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ['image/jpeg', 'image/png', 'application/pdf'], copyToCacheDirectory: true });
       if (result.canceled) return;
@@ -96,7 +99,6 @@ export default function StudentVerificationStatusScreen() {
         setIsVerified(false);
         setAiResults((current) => ({ ...current, [documentType]: null }));
       }
-      await checkVerificationDocs();
       setNotification({ visible: true, title: 'Document uploaded', message: 'Your document has been uploaded successfully.', iconName: 'check-circle-outline', iconColor: '#15803D' });
     } catch (error: any) {
       console.error('Student document upload failed:', error);
@@ -104,7 +106,11 @@ export default function StudentVerificationStatusScreen() {
       const firstValidation = validationErrors ? Object.values(validationErrors).flat().find((message) => typeof message === 'string') : null;
       const message = firstValidation || error.response?.data?.message || error.message || 'Please check your connection and try again.';
       setNotification({ visible: true, title: 'Upload failed', message: String(message), iconName: 'error-outline', iconColor: '#DC2626' });
-    } finally { setIsUploading(false); }
+    } finally {
+      uploadBusy.current = false;
+      setIsUploading(false);
+      void checkVerificationDocs(true);
+    }
   };
 
   const isRejected = !isVerified && !!rejectionReason;
@@ -130,13 +136,11 @@ export default function StudentVerificationStatusScreen() {
 
   const renderDocument = (type: DocumentType, title: string, icon: keyof typeof MaterialIcons.glyphMap, uploaded: boolean, optional = false) => {
     const editable = optional || !isVerified;
-    const showAi = isRejected && uploaded && type !== 'student_resume';
-    const aiResult = type === 'student_resume' ? null : aiResults[type];
+    const status = type === 'student_resume' ? null : getDocumentAnalysisStatus(type, uploaded, aiResults[type]);
     const needsUpdate = !optional && isRejected;
-    const color = showAi ? aiResult === false ? accentText : aiResult === true ? verifiedColor : pendingText : uploaded ? verifiedColor : colors.textSecondary;
-    const fill = showAi ? aiResult === false ? accentSurface : aiResult === true ? verifiedSurface : pendingSurface : uploaded ? verifiedSurface : subtle;
-    const recommendation = aiResult === true ? type === 'school_id' ? 'Valid School ID' : 'Valid COE / COR' : aiResult === false ? type === 'school_id' ? 'Invalid ID' : 'Invalid COE' : 'Pending Analysis';
-    const documentStatusIcon: keyof typeof MaterialIcons.glyphMap = showAi ? aiResult === false ? 'error-outline' : aiResult === true ? 'check-circle-outline' : 'hourglass-empty' : uploaded ? 'check-circle-outline' : 'upload-file';
+    const color = status?.verdict === 'invalid' ? accentText : status?.verdict === 'pending' ? pendingText : uploaded ? verifiedColor : colors.textSecondary;
+    const fill = status?.verdict === 'invalid' ? accentSurface : status?.verdict === 'pending' ? pendingSurface : uploaded ? verifiedSurface : subtle;
+    const documentStatusIcon: keyof typeof MaterialIcons.glyphMap = status?.verdict === 'invalid' ? 'error-outline' : status?.verdict === 'pending' ? 'hourglass-empty' : uploaded ? 'check-circle-outline' : 'upload-file';
     return (
       <View className="rounded-2xl border p-4 mt-3" style={{ borderColor: colors.border }}>
         <View className="flex-row items-start gap-3">
@@ -144,9 +148,9 @@ export default function StudentVerificationStatusScreen() {
           <View className="flex-1"><Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{optional ? 'Optional for verification' : 'Required for verification'}</Text></View>
         </View>
         <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
-          <View className={showAi ? 'w-full flex-row items-start gap-1.5' : 'flex-row items-center gap-1.5'}>
-            <MaterialIcons name={documentStatusIcon} size={showAi ? 18 : 14} color={color} />
-            <Text className={showAi ? 'flex-1 text-xs font-medium leading-5' : 'text-xs font-medium'} style={{ color }}>{showAi ? recommendation : uploaded ? 'Uploaded' : 'Not uploaded'}</Text>
+          <View className="flex-row items-center gap-1.5 shrink">
+            <MaterialIcons name={documentStatusIcon} size={16} color={color} />
+            <Text className="text-xs font-medium leading-5 shrink" style={{ color }}>{status?.label ?? (uploaded ? 'Uploaded' : 'Not uploaded')}</Text>
           </View>
           {editable && <TouchableOpacity onPress={() => handleUploadDocument(type)} disabled={isUploading} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: isUploading }} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3 ml-auto" style={{ backgroundColor: accentSurface, opacity: isUploading ? 0.5 : 1 }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{needsUpdate ? 'Re-upload' : uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
         </View>
@@ -189,8 +193,8 @@ export default function StudentVerificationStatusScreen() {
             <View className="mx-6 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
               <Text className="text-lg font-bold" style={{ color: colors.text }}>Documents</Text>
               <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>School ID and COR / COE are required. Your resume is optional.</Text>
-              {isRejected && <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>AI results are recommendations. Final account approval is by an admin.</Text>}
-              {renderDocument('school_id', 'Valid School ID', 'badge', hasSchoolId)}
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>AI checks help with review. Final account approval is by an admin.</Text>
+              {renderDocument('school_id', 'School ID', 'badge', hasSchoolId)}
               {renderDocument('coe', 'Certificate of Enrolment (COR / COE)', 'insert-drive-file', hasCoe)}
               {renderDocument('student_resume', 'Student resume', 'description', hasResume, true)}
               <View className="flex-row items-start gap-2 mt-4"><MaterialIcons name="info-outline" size={16} color={colors.textSecondary} /><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>Accepted files: PDF, JPG or PNG. Maximum file size: 5 MB.</Text></View>
@@ -198,7 +202,7 @@ export default function StudentVerificationStatusScreen() {
           </>
         )}
       </ScrollView>
-      <LoadingModal visible={isUploading} title="Uploading document" message="Please wait while your document is uploaded." />
+      <LoadingModal visible={isUploading} message="Uploading document..." />
       <NotificationModal visible={notification.visible} title={notification.title} message={notification.message} iconName={notification.iconName} iconColor={notification.iconColor} iconBgColor={notification.iconName === 'check-circle-outline' ? 'bg-emerald-50' : notification.iconColor === '#D97706' ? 'bg-amber-50' : 'bg-red-50'} onPrimaryPress={() => setNotification((current) => ({ ...current, visible: false }))} />
     </View>
   );

@@ -3,9 +3,12 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
+  Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -46,6 +49,7 @@ import ApplicationStatusCard from '@/components/student/application-details/Appl
 export default function StudentApplicationDetailsScreen() {
   const { colors, isDark } = useDarkMode();
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const accentColor = isDark ? colors.accent : '#B91C1C';
   const { applicationId } = useLocalSearchParams<{ applicationId?: string }>();
 
@@ -57,6 +61,7 @@ export default function StudentApplicationDetailsScreen() {
   const [isHousehold, setIsHousehold] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   // States para sa Reviews at Certificate
   const [contractReview, setContractReview] = useState<any>(null);
@@ -297,6 +302,7 @@ export default function StudentApplicationDetailsScreen() {
       return () => {
         isMounted = false;
         clearInterval(pollInterval);
+        setMenuVisible(false);
       };
     }, [applicationId])
   );
@@ -305,21 +311,6 @@ export default function StudentApplicationDetailsScreen() {
     return api.defaults.baseURL
       ? api.defaults.baseURL.replace('/api', '')
       : 'https://diskartech-backend.onrender.com';
-  };
-
-  const handleCallEmployer = () => {
-    const rawPhone =
-      job?.employer?.phone_number ||
-      job?.household?.contact_number ||
-      job?.employer?.contact_number ||
-      job?.contact_phone ||
-      application?.job?.employer?.phone_number ||
-      application?.job?.household?.contact_number;
-    if (rawPhone) {
-      Linking.openURL(`tel:${rawPhone}`);
-    } else {
-      Alert.alert('Notice', 'No contact phone number provided for this employer.');
-    }
   };
 
   const handleRequestCertificate = () => {
@@ -674,9 +665,24 @@ export default function StudentApplicationDetailsScreen() {
   const status = (application.status || '').toLowerCase();
   const canCancel = ['pending', 'viewed'].includes(status);
   const canDelete = ['cancelled', 'rejected', 'completed'].includes(status);
+  const managingApplication = cancelling || deleting;
   const isAccepted = status === 'accepted';
   const isInterview = status === 'interview';
   const job = application.job || {};
+  const hasEmploymentDetails = (isAccepted || status === 'terminated' || status === 'completed') && Boolean(
+    application.start_date || application.work_schedule || application.agreed_rate || job.salary
+  );
+  const certificateCard = (isAccepted || status === 'completed') ? (
+    <CertificateOfEmploymentCard
+      embedded={hasEmploymentDetails}
+      certificateStatus={application.certificate_status}
+      loadingCert={loadingCert}
+      requestingCert={requestingCert}
+      onOpenCertificate={handleOpenCertificate}
+      onDownloadPdf={handleDownloadPdf}
+      onRequestCertificate={handleRequestCertificate}
+    />
+  ) : null;
 
   const contactNumber =
     job?.employer?.phone ||
@@ -689,6 +695,7 @@ export default function StudentApplicationDetailsScreen() {
     job?.household?.phone_number ||
     job?.phone ||
     job?.contact_number ||
+    job?.contact_phone ||
     job?.employer?.user?.phone ||
     job?.household?.user?.phone ||
     application?.job?.employer?.phone ||
@@ -698,28 +705,7 @@ export default function StudentApplicationDetailsScreen() {
     application?.employer?.phone ||
     application?.household?.phone ||
     '';
-
-  const employerEmail =
-    job?.employer?.user?.email ||
-    job?.household?.user?.email ||
-    job?.user?.email ||
-    job?.employer?.email ||
-    job?.household?.email ||
-    job?.email ||
-    job?.contact_email ||
-    job?.employer_email ||
-    job?.household_email ||
-    job?.employer?.business_email ||
-    job?.employer?.company_email ||
-    application?.job?.employer?.user?.email ||
-    application?.job?.household?.user?.email ||
-    application?.job?.user?.email ||
-    application?.employer_email ||
-    application?.job?.employer?.email ||
-    application?.job?.household?.email ||
-    application?.employer?.email ||
-    application?.household?.email ||
-    '';
+  const hasContactNumber = Boolean(String(contactNumber).trim());
 
   const activeProfile =
     job?.employer ||
@@ -763,21 +749,30 @@ export default function StudentApplicationDetailsScreen() {
     }
   };
 
-  const handleEmail = () => {
-    if (employerEmail) {
-      Linking.openURL(`mailto:${employerEmail}`).catch(() => {
-        Alert.alert('Cannot Open Email', `Email address: ${employerEmail}`);
+  const handleReportApplication = () => {
+    setMenuVisible(false);
+    if (hasReported) {
+      setNotification({
+        visible: true,
+        title: 'Report Already Submitted',
+        message: 'You have already reported this. Our safety and moderation team is currently reviewing your report.',
+        iconName: 'check-circle',
+        iconColor: '#16A34A',
+        iconBgColor: isDark ? 'rgba(22, 163, 74, 0.15)' : 'bg-emerald-50',
+        primaryButtonText: 'Understood',
+        onPrimaryPress: closeNotification,
       });
-    } else {
-      Alert.alert(
-        'No Public Email Listed',
-        'The employer did not provide a public email address for this job. You can message them directly anytime via DiskarTech Chat!',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Chat', onPress: handleSendMessage },
-        ]
-      );
+      return;
     }
+    router.push({
+      pathname: '/students/report',
+      params: {
+        targetName: job.title || companyName,
+        targetType: job.title ? 'job' : 'employer',
+        jobId: String(application.job_id || job.id || ''),
+        reportedUserId: String(job.employer?.user_id || job.household?.user_id || job.user_id || ''),
+      },
+    });
   };
 
   return (
@@ -799,37 +794,18 @@ export default function StudentApplicationDetailsScreen() {
             <Text className="flex-1 text-sm font-semibold" style={{ color: colors.text }}>Application details</Text>
           </View>
           <TouchableOpacity
-            onPress={() => {
-              if (hasReported) {
-                setNotification({
-                  visible: true,
-                  title: 'Report Already Submitted',
-                  message: 'You have already reported this. Our safety and moderation team is currently reviewing your report.',
-                  iconName: 'check-circle',
-                  iconColor: '#16A34A',
-                  iconBgColor: isDark ? 'rgba(22, 163, 74, 0.15)' : 'bg-emerald-50',
-                  primaryButtonText: 'Understood',
-                  onPrimaryPress: closeNotification,
-                });
-              } else {
-                router.push({
-                  pathname: '/students/report',
-                  params: {
-                    targetName: job?.title || companyName,
-                    targetType: job?.title ? 'job' : 'employer',
-                    jobId: String(application?.job_id || job?.id || ''),
-                    reportedUserId: String(job?.employer?.user_id || job?.household?.user_id || job?.user_id || application?.job?.user_id || ''),
-                  },
-                });
-              }
-            }}
+            onPress={() => setMenuVisible(true)}
+            disabled={managingApplication}
             accessibilityRole="button"
-            accessibilityLabel="Report listing or hirer"
+            accessibilityLabel="Application options"
+            accessibilityState={{ expanded: menuVisible, disabled: managingApplication, busy: managingApplication }}
             activeOpacity={0.7}
             className="w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: hasReported ? (isDark ? 'rgba(220, 38, 38, 0.12)' : '#FEF2F2') : (isDark ? colors.background : '#F1F5F9') }}
+            style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
           >
-            <MaterialIcons name="outlined-flag" size={20} color={hasReported ? accentColor : colors.text} />
+            {managingApplication ? <ActivityIndicator size="small" color={colors.text} /> : (
+              <MaterialIcons name="more-vert" size={21} color={colors.text} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -837,7 +813,7 @@ export default function StudentApplicationDetailsScreen() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 20, paddingBottom: 8 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: Math.max(insets.bottom + 20, 24) }}
       >
         <ApplicationStatusCard
           status={status}
@@ -848,76 +824,26 @@ export default function StudentApplicationDetailsScreen() {
           appliedAt={application.created_at}
           updatedAt={application.terminated_at || application.updated_at}
           terminationReason={application.termination_reason}
-        />
-
-        {/* Contract rating */}
-        {(status === 'terminated' || status === 'completed') && (
-          <ContractRatingCard
-            companyName={companyName}
-            contractReview={contractReview}
-            onRatePress={() => {
-              const query = new URLSearchParams({
-                applicationId: (application?.id || applicationId).toString(),
-                companyName: companyName || '',
-                employerAvatar: employerAvatar || '',
-                jobTitle: job?.title || '',
-              }).toString();
-              router.push(`/reviews/rate-contract?${query}` as any);
-            }}
-          />
-        )}
-
-        {/* Employment contract */}
-        {(isAccepted || status === 'terminated' || status === 'completed') &&
-          (application?.start_date ||
-            application?.work_schedule ||
-            application?.agreed_rate ||
-            job?.salary) && (
-            <EmploymentContractCard
-              startDate={application?.start_date}
-              endDate={application?.end_date}
-              workSchedule={application?.work_schedule || getCleanDays(job)}
-              agreedRate={application?.agreed_rate || job?.salary}
-              salaryType={job?.salary_type}
-              contractTerms={application?.contract_terms}
-              specialInstructions={application?.special_instructions}
-              status={status}
+        >
+          {(status === 'terminated' || status === 'completed') && (
+            <ContractRatingCard
+              embedded
+              companyName={companyName}
+              contractReview={contractReview}
+              onRatePress={() => {
+                const query = new URLSearchParams({
+                  applicationId: (application?.id || applicationId).toString(),
+                  companyName: companyName || '',
+                  employerAvatar: employerAvatar || '',
+                  jobTitle: job?.title || '',
+                }).toString();
+                router.push(`/reviews/rate-contract?${query}` as any);
+              }}
             />
           )}
+        </ApplicationStatusCard>
 
-        {/* Certificate of employment */}
-        {status !== 'terminated' && (isAccepted || status === 'completed') && (
-          <CertificateOfEmploymentCard
-            certificateStatus={application?.certificate_status}
-            loadingCert={loadingCert}
-            requestingCert={requestingCert}
-            onOpenCertificate={handleOpenCertificate}
-            onDownloadPdf={handleDownloadPdf}
-            onRequestCertificate={handleRequestCertificate}
-          />
-        )}
-
-        {/* Employer and workplace */}
-        <EmployerContactCard
-          companyName={companyName}
-          employerAvatar={employerAvatar}
-          isHousehold={isHousehold}
-          fullAddress={fullAddress}
-          onCall={handleCall}
-          onEmail={handleEmail}
-          onMessage={handleSendMessage}
-          onOpenMap={() =>
-            handleOpenMapViewer(
-              companyName,
-              'Workplace Location & Directions',
-              fullAddress,
-              job.latitude,
-              job.longitude
-            )
-          }
-        />
-
-        {/* Interview details */}
+        {/* Interview schedule and actions */}
         {isInterview && (
           <InterviewInformationCard
             applicationId={applicationId || application.id}
@@ -940,78 +866,152 @@ export default function StudentApplicationDetailsScreen() {
           />
         )}
 
-        {/* Job details */}
+        {/* Employment contract and certificate */}
+        {hasEmploymentDetails && (
+          <EmploymentContractCard
+            startDate={application?.start_date}
+            endDate={application?.end_date}
+            workSchedule={application?.work_schedule || getCleanDays(job)}
+            agreedRate={application?.agreed_rate || job?.salary}
+            salaryType={job?.salary_type}
+            contractTerms={application?.contract_terms}
+            specialInstructions={application?.special_instructions}
+            status={status}
+          >
+            {certificateCard}
+          </EmploymentContractCard>
+        )}
+        {!hasEmploymentDetails && certificateCard}
+
+        {/* Employer and workplace */}
+        <EmployerContactCard
+          companyName={companyName}
+          employerAvatar={employerAvatar}
+          isHousehold={isHousehold}
+          fullAddress={fullAddress}
+          onMessage={handleSendMessage}
+          onOpenMap={() =>
+            handleOpenMapViewer(
+              companyName,
+              'Workplace Location & Directions',
+              fullAddress,
+              job.latitude,
+              job.longitude
+            )
+          }
+        />
+
         <JobOverviewCard
           job={job}
           cleanDays={getCleanDays(job)}
         />
       </ScrollView>
 
-      <View className="px-5 pt-3 border-t" style={{ paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.surface, borderTopColor: colors.border }}>
-        <View className="flex-row gap-2">
-          {(isAccepted || status === 'terminated' || status === 'completed') && (
-            <TouchableOpacity
-              onPress={handleCallEmployer}
-              accessibilityRole="button"
-              accessibilityLabel="Call employer"
-              activeOpacity={0.7}
-              className="w-12 rounded-2xl border items-center justify-center"
-              style={{ minHeight: 48, backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border }}
-            >
-              <MaterialIcons name="phone" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={handleSendMessage}
+      <Modal
+        transparent
+        visible={menuVisible}
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <View className="flex-1">
+          <Pressable
+            onPress={() => setMenuVisible(false)}
             accessibilityRole="button"
-            accessibilityLabel="Message employer"
-            activeOpacity={0.8}
-            className="flex-1 flex-row items-center justify-center gap-2 px-3 py-3 rounded-2xl bg-red-600"
-            style={{ minHeight: 48 }}
+            accessibilityLabel="Close application options"
+            className="absolute inset-0 bg-black/30"
+          />
+          <View
+            accessibilityViewIsModal
+            className="absolute right-5 rounded-2xl border p-3"
+            style={{ top: insets.top + 64, width: 280, maxWidth: '90%', maxHeight: Math.max(144, screenHeight - insets.top - insets.bottom - 84), backgroundColor: colors.surface, borderColor: colors.border }}
           >
-            <MaterialIcons name="chat-bubble-outline" size={18} color="#FFFFFF" />
-            <Text className="text-sm font-semibold text-white">Message</Text>
-          </TouchableOpacity>
-          {canCancel && (
-            <TouchableOpacity
-              onPress={handleCancelApplication}
-              disabled={cancelling}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel application"
-              accessibilityState={{ disabled: cancelling, busy: cancelling }}
-              activeOpacity={0.7}
-              className="flex-1 flex-row items-center justify-center gap-1.5 px-3 py-3 rounded-2xl border"
-              style={{ minHeight: 48, backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, opacity: cancelling ? 0.5 : 1 }}
-            >
-              {cancelling ? <ActivityIndicator size="small" color={colors.text} /> : (
-                <>
-                  <MaterialIcons name="remove-circle-outline" size={18} color={colors.textSecondary} />
-                  <Text className="text-[13px] font-semibold" style={{ color: colors.text }}>Cancel</Text>
-                </>
+            <View className="flex-row items-center justify-between gap-2 pl-2 mb-1">
+              <Text className="flex-1 text-sm font-semibold" style={{ color: colors.text }}>Application options</Text>
+              <TouchableOpacity
+                onPress={() => setMenuVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close application options"
+                activeOpacity={0.7}
+                className="w-11 h-11 items-center justify-center rounded-xl"
+              >
+                <MaterialIcons name="close" size={19} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
+              <TouchableOpacity
+                onPress={() => { setMenuVisible(false); void handleSendMessage(); }}
+                accessibilityRole="button"
+                accessibilityLabel={isHousehold ? 'Message household' : 'Message employer'}
+                activeOpacity={0.7}
+                className="flex-row items-center gap-3 px-3 py-3 rounded-xl"
+                style={{ minHeight: 48 }}
+              >
+                <MaterialIcons name="chat-bubble-outline" size={20} color={colors.textSecondary} accessible={false} />
+                <Text className="flex-1 text-sm font-medium" style={{ color: colors.text }}>{isHousehold ? 'Message household' : 'Message employer'}</Text>
+              </TouchableOpacity>
+              {hasContactNumber && (
+                <TouchableOpacity
+                  onPress={() => { setMenuVisible(false); handleCall(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={isHousehold ? 'Call household' : 'Call employer'}
+                  activeOpacity={0.7}
+                  className="flex-row items-center gap-3 px-3 py-3 rounded-xl"
+                  style={{ minHeight: 48 }}
+                >
+                  <MaterialIcons name="phone" size={20} color={colors.textSecondary} accessible={false} />
+                  <Text className="flex-1 text-sm font-medium" style={{ color: colors.text }}>{isHousehold ? 'Call household' : 'Call employer'}</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          )}
-          {(canDelete || status === 'terminated') && (
-            <TouchableOpacity
-              onPress={handleDeleteApplication}
-              disabled={deleting}
-              accessibilityRole="button"
-              accessibilityLabel="Delete application"
-              accessibilityState={{ disabled: deleting, busy: deleting }}
-              activeOpacity={0.7}
-              className="flex-row items-center justify-center gap-1.5 px-4 py-3 rounded-2xl border"
-              style={{ minHeight: 48, backgroundColor: isDark ? 'rgba(220, 38, 38, 0.08)' : '#FEF2F2', borderColor: isDark ? 'rgba(248, 113, 113, 0.25)' : '#FECACA', opacity: deleting ? 0.5 : 1 }}
-            >
-              {deleting ? <ActivityIndicator size="small" color={accentColor} /> : (
-                <>
-                  <MaterialIcons name="delete-outline" size={18} color={accentColor} />
-                  <Text className="text-[13px] font-semibold" style={{ color: accentColor }}>Delete</Text>
-                </>
+              <View className="border-t my-2" style={{ borderTopColor: colors.border }} />
+              <TouchableOpacity
+                onPress={handleReportApplication}
+                accessibilityRole="button"
+                accessibilityLabel={hasReported ? 'View report status' : 'Report listing or hirer'}
+                activeOpacity={0.7}
+                className="flex-row items-center gap-3 px-3 py-3 rounded-xl"
+                style={{ minHeight: 48 }}
+              >
+                <MaterialIcons name={hasReported ? 'check-circle-outline' : 'outlined-flag'} size={20} color={hasReported ? colors.textSecondary : accentColor} accessible={false} />
+                <Text className="flex-1 text-sm font-medium" style={{ color: hasReported ? colors.textSecondary : accentColor }}>{hasReported ? 'Report submitted' : 'Report listing or hirer'}</Text>
+              </TouchableOpacity>
+              {canCancel && (
+                <TouchableOpacity
+                  onPress={() => { setMenuVisible(false); handleCancelApplication(); }}
+                  disabled={cancelling}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel application"
+                  accessibilityState={{ disabled: cancelling, busy: cancelling }}
+                  activeOpacity={0.7}
+                  className="flex-row items-center gap-3 px-3 py-3 rounded-xl"
+                  style={{ minHeight: 48, opacity: cancelling ? 0.5 : 1 }}
+                >
+                  {cancelling ? <ActivityIndicator size="small" color={accentColor} /> : (
+                    <MaterialIcons name="cancel" size={20} color={accentColor} accessible={false} />
+                  )}
+                  <Text className="flex-1 text-sm font-medium" style={{ color: accentColor }}>Cancel application</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          )}
+              {(canDelete || status === 'terminated') && (
+                <TouchableOpacity
+                  onPress={() => { setMenuVisible(false); handleDeleteApplication(); }}
+                  disabled={deleting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete application"
+                  accessibilityState={{ disabled: deleting, busy: deleting }}
+                  activeOpacity={0.7}
+                  className="flex-row items-center gap-3 px-3 py-3 rounded-xl"
+                  style={{ minHeight: 48, opacity: deleting ? 0.5 : 1 }}
+                >
+                  {deleting ? <ActivityIndicator size="small" color={accentColor} /> : (
+                    <MaterialIcons name="delete-outline" size={20} color={accentColor} accessible={false} />
+                  )}
+                  <Text className="flex-1 text-sm font-medium" style={{ color: accentColor }}>Delete application</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
         </View>
-      </View>
+      </Modal>
 
       {/* Certificate Modal */}
       <CertificateModal
