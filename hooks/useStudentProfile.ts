@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { isCancel } from 'axios';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { clearPushToken } from '@/utils/notifications';
@@ -9,6 +10,11 @@ import { resolveMediaUrl } from '@/utils/media';
 import { normalizeAiResult } from '@/utils/documentAnalysis';
 
 type StudentDocumentType = 'student_resume' | 'school_id' | 'coe';
+
+const getFilename = (path?: string) => {
+  if (!path || typeof path !== 'string') return null;
+  return path.split(/[?#]/)[0].split('/').pop() || null;
+};
 
 export function useStudentProfile() {
   const [studentName, setStudentName] = useState('Junnyl Mabini');
@@ -48,6 +54,7 @@ export function useStudentProfile() {
   const documentUploadBusy = useRef(false);
   const profileRevision = useRef(0);
   const needsFreshProfile = useRef(false);
+  const profileActive = useRef(true);
 
   const [skills, setSkills] = useState<string[]>([]);
   const [isAddSkillModalVisible, setAddSkillModalVisible] = useState(false);
@@ -65,19 +72,15 @@ export function useStudentProfile() {
     setAlertModalVisible(true);
   };
 
-  // 👇 HELPER FUNCTION PARA KUNIN ANG FILENAME SA DULO NG PATH
-  const getFilename = (path?: string) => {
-    if (!path || typeof path !== 'string') return null;
-    return path.split(/[?#]/)[0].split('/').pop() || null;
-  };
-
-  const fetchStudentProfile = async () => {
-    if (documentUploadBusy.current) return;
+  const fetchStudentProfile = useCallback(async () => {
+    if (!profileActive.current || documentUploadBusy.current) return;
     const revision = profileRevision.current;
     try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token || !profileActive.current || revision !== profileRevision.current) return;
       const storedProfile = needsFreshProfile.current ? null : await AsyncStorage.getItem('userProfile');
       const storedUser = await AsyncStorage.getItem('userData');
-      if (documentUploadBusy.current || revision !== profileRevision.current) return;
+      if (!profileActive.current || documentUploadBusy.current || revision !== profileRevision.current) return;
 
       if (storedProfile && storedProfile !== 'null' && storedProfile !== 'undefined') {
         const profile = JSON.parse(storedProfile);
@@ -124,7 +127,8 @@ export function useStudentProfile() {
       // Live sync mula sa backend API
       try {
         const response = await api.get('/user/profile');
-        if (documentUploadBusy.current || revision !== profileRevision.current) return;
+        const currentToken = await AsyncStorage.getItem('userToken');
+        if (currentToken !== token || !profileActive.current || documentUploadBusy.current || revision !== profileRevision.current) return;
         const apiProfile = response.data?.profile;
         const apiRating = response.data?.rating !== undefined ? Number(response.data.rating) : 5.0;
         const apiReviewCount = response.data?.review_count !== undefined ? Number(response.data.review_count) : 0;
@@ -169,24 +173,30 @@ export function useStudentProfile() {
           needsFreshProfile.current = false;
         }
       } catch (apiErr: any) {
-        console.warn('⚠️ Failed to sync student profile with backend:', apiErr?.response?.data || apiErr?.message);
+        if (!profileActive.current || isCancel(apiErr) || apiErr?.response?.status === 401) return;
+        console.warn('Unable to refresh the student profile.');
       }
 
     } catch (error) {
       console.error('Error loading student profile from storage:', error);
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    fetchStudentProfile();
+  useFocusEffect(useCallback(() => {
+    profileActive.current = true;
+    void fetchStudentProfile();
 
     // Live auto-polling bawat 3 segundo para live ang verification status ng student
     const pollInterval = setInterval(() => {
       fetchStudentProfile();
     }, 3000);
 
-    return () => clearInterval(pollInterval);
-  }, []);
+    return () => {
+      profileActive.current = false;
+      profileRevision.current += 1;
+      clearInterval(pollInterval);
+    };
+  }, [fetchStudentProfile]));
 
   const handleSaveAvailability = async (days: string[], timeSlot: string) => {
     try {
@@ -401,6 +411,8 @@ export function useStudentProfile() {
   };
 
   const handleLogout = async () => {
+    profileActive.current = false;
+    profileRevision.current += 1;
     try {
       const token = await AsyncStorage.getItem('userToken');
       await fetch(`${BACKEND_URL}/api/logout`, {

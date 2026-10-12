@@ -29,6 +29,8 @@ function deferred() {
 function harness() {
   const slots = [];
   let cursor = 0;
+  let focusEffect, focusCleanup;
+  const timers = { poll: null };
   const react = {
     useState(initial) {
       const index = cursor++;
@@ -40,22 +42,64 @@ function harness() {
       if (!(index in slots)) slots[index] = { current: initial };
       return slots[index];
     },
-    useEffect() {}, // Polling is driven explicitly in these asynchronous regression checks.
+    useCallback(callback) { return callback; },
   };
   const initial = { coe: 'old.pdf', coe_ai_is_valid: false, school_id: 'school.jpg', school_id_ai_is_valid: true, isVerified: false, rejection_reason: 'Old document needs replacement' };
-  const cache = new Map([['userProfile', JSON.stringify(initial)]]);
+  const cache = new Map([['userProfile', JSON.stringify(initial)], ['userToken', 'test-session']]);
   const storage = { getItem: async key => cache.get(key) ?? null, setItem: async (key, value) => cache.set(key, value) };
   const api = { get: async () => ({ data: { profile: JSON.parse(cache.get('userProfile')) } }), post: async () => { throw new Error('Upload mock not configured'); } };
   const picker = { getDocumentAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///test/coe.pdf', name: 'coe.pdf', mimeType: 'application/pdf', size: 50 }] }) };
   const imagePicker = { launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///test/avatar.jpg', fileName: 'avatar.jpg', mimeType: 'image/jpeg' }] }) };
   const hook = load('hooks/useStudentProfile.ts', {
     react, '@react-native-async-storage/async-storage': storage,
-    'expo-router': { router: {} }, 'expo-document-picker': picker, 'expo-image-picker': imagePicker,
+    'expo-router': { router: {}, useFocusEffect(effect) { focusEffect = effect; } },
+    axios: require('axios'), testTimers: timers,
+    'expo-document-picker': picker, 'expo-image-picker': imagePicker,
     '@/utils/notifications': {}, '@/api/axios': api,
     '@/utils/media': { resolveMediaUrl: value => value ?? null }, '@/utils/documentAnalysis': analysis,
-  }, 'const FormData = class { fields = new Map(); append(key, value) { this.fields.set(key, value); } };\n');
-  return { api, picker, imagePicker, cache, storage, render() { cursor = 0; return hook.useStudentProfile(); } };
+  }, 'const FormData = class { fields = new Map(); append(key, value) { this.fields.set(key, value); } };\nconst setInterval = callback => { require("testTimers").poll = callback; return 1; };\nconst clearInterval = () => { require("testTimers").poll = null; };\n');
+  return { api, picker, imagePicker, cache, storage, timers,
+    focus() { focusCleanup = focusEffect(); }, blur() { focusCleanup(); },
+    render() { cursor = 0; return hook.useStudentProfile(); } };
 }
+
+test('logged-out profile refreshes do not request the backend or restore cached user data', async () => {
+  const app = harness();
+  app.cache.delete('userToken');
+  let requests = 0;
+  app.api.get = async () => { requests++; throw new Error('Must not request without a session'); };
+  await app.render().fetchStudentProfile();
+  assert.equal(requests, 0);
+  assert.equal(app.render().uploadedDocs.coe_raw, null);
+});
+
+test('leaving the profile stops polling and discards an in-flight response', async () => {
+  const app = harness();
+  const request = deferred();
+  app.api.get = () => request.promise;
+  app.render(); app.focus();
+  await tick();
+  assert.equal(typeof app.timers.poll, 'function');
+  app.blur();
+  assert.equal(app.timers.poll, null);
+  request.resolve({ data: { profile: { coe: 'late.pdf' } } });
+  await tick();
+  assert.equal(JSON.parse(app.cache.get('userProfile')).coe, 'old.pdf');
+  assert.equal(app.render().uploadedDocs.coe_raw, 'old.pdf');
+});
+
+test('a profile response from the previous session cannot overwrite a new account cache', async () => {
+  const app = harness();
+  const request = deferred();
+  app.api.get = () => request.promise;
+  const refresh = app.render().fetchStudentProfile();
+  await tick();
+  app.cache.set('userToken', 'new-session');
+  app.cache.set('userProfile', JSON.stringify({ coe: 'new-account.pdf' }));
+  request.resolve({ data: { profile: { coe: 'previous-account.pdf' } } });
+  await refresh;
+  assert.equal(JSON.parse(app.cache.get('userProfile')).coe, 'new-account.pdf');
+});
 
 test('profile picture upload shows loading, blocks duplicate uploads, and updates the avatar', async () => {
   const app = harness();

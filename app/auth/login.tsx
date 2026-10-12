@@ -2,7 +2,7 @@ import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { Colors } from '@/constants/colors';
 import { useDarkMode } from '@/hooks/useDarkMode';
-import { MaterialIcons, AntDesign } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import api from '@/api/axios';
@@ -330,7 +330,7 @@ export default function LoginScreen() {
             <View className="gap-2">
               <InputField
                 label="Email"
-                placeholder="Enter your email"
+                placeholder="juandelacruz@gmail.com"
                 value={email}
                 onChangeText={(text) => { setEmail(text); setEmailError(''); }}
                 error={emailError}
@@ -341,7 +341,7 @@ export default function LoginScreen() {
 
               <InputField
                 label="Password"
-                placeholder="Enter your password"
+                placeholder="********"
                 value={password}
                 onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
                 error={passwordError}
@@ -366,7 +366,7 @@ export default function LoginScreen() {
                   </View>
                   <Text style={{ color: colors.textSecondary }} className="text-sm">Remember me</Text>
                 </TouchableOpacity>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/auth/forgot-password')} disabled={loading || googleLoading} accessibilityRole="button" accessibilityLabel="Forgot password">
                   <Text className="text-sm text-red-600 font-semibold">Forgot Password?</Text>
                 </TouchableOpacity>
               </View>
@@ -379,10 +379,19 @@ export default function LoginScreen() {
                 disabled={loading || googleLoading}
               />
 
+              <View className="flex-row items-center gap-4 my-3">
+                <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
+                <Text className="text-sm" style={{ color: colors.textSecondary }}>or</Text>
+                <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
+              </View>
+
               {/* Google Login */}
               <TouchableOpacity
                 onPress={handleGoogleLogin}
                 disabled={googleLoading || loading}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                accessibilityState={{ disabled: googleLoading || loading, busy: googleLoading }}
                 activeOpacity={0.85}
                 style={{
                   backgroundColor: isDark ? colors.surface : '#FFFFFF',
@@ -393,13 +402,18 @@ export default function LoginScreen() {
                   shadowRadius: 6,
                   elevation: 2,
                 }}
-                className="flex-row items-center justify-center gap-2.5 border rounded-2xl py-[14px] mt-4"
+                className="flex-row items-center justify-center gap-2.5 border rounded-2xl py-[14px]"
               >
                 {googleLoading ? (
                   <ActivityIndicator size="small" color="#EA4335" />
                 ) : (
                   <>
-                    <AntDesign name="google" size={20} color="#EA4335" />
+                    <Image
+                      source={require('../../assets/images/google-g.png')}
+                      style={{ width: 20, height: 20 }}
+                      resizeMode="contain"
+                      accessible={false}
+                    />
                     <Text style={{ color: colors.text }} className="text-base font-bold">
                       Continue with Google
                     </Text>

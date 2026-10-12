@@ -11,7 +11,7 @@ const loaded = new Module(filename, module);
 loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, filename);
-const { canChangePasswordForAccount, validatePasswordChange, passwordChecks } = loaded.exports;
+const { canChangePasswordForAccount, validatePasswordChange, validateNewPassword, passwordChecks } = loaded.exports;
 const values = { current_password: 'Original-password1!', password: 'Updated-password2!', password_confirmation: 'Updated-password2!' };
 
 test('Google registration or Google login hides password changes independently', () => {
@@ -33,6 +33,14 @@ test('valid credentials pass and spaces and punctuation remain exact', () => {
   const exact = { current_password: ' Original-password1! ', password: ' <Updated-password2!> ', password_confirmation: ' <Updated-password2!> ' };
   assert.deepEqual(validatePasswordChange(exact), {});
   assert.equal(exact.password, ' <Updated-password2!> ');
+});
+
+test('forgot-password validation requires confirmation without an existing password', () => {
+  assert.deepEqual(validateNewPassword(' <Updated-password2!> ', ' <Updated-password2!> '), {});
+  assert.ok(validateNewPassword('Updated-password2!', '').password_confirmation);
+  assert.ok(validateNewPassword('Updated-password2!', 'Different1!').password_confirmation);
+  assert.ok(validateNewPassword('lowercase2!', 'lowercase2!').password);
+  assert.ok(validateNewPassword('é'.repeat(34) + 'Ab1!xx', 'é'.repeat(34) + 'Ab1!xx').password);
 });
 
 test('live checks enforce the mobile registration password requirements', () => {

@@ -32,16 +32,22 @@ function utf8Length(value: string) {
   }, 0);
 }
 
-export function validatePasswordChange(values: PasswordChangeValues): PasswordChangeErrors {
+export function validateNewPassword(password: string, confirmation: string): PasswordChangeErrors {
   const errors: PasswordChangeErrors = {};
+  const controls = /[\u0000-\u001f\u007f]/;
+  if (!passwordChecks(password).every(check => check.valid)) errors.password = 'Please meet all password requirements.';
+  else if (utf8Length(password) > 72) errors.password = 'Please choose a shorter password.';
+  else if (controls.test(password)) errors.password = 'The password contains unsupported characters.';
+  if (!confirmation) errors.password_confirmation = 'Confirm your new password.';
+  else if (confirmation !== password) errors.password_confirmation = 'The password confirmation does not match.';
+  return errors;
+}
+
+export function validatePasswordChange(values: PasswordChangeValues): PasswordChangeErrors {
+  const errors = validateNewPassword(values.password, values.password_confirmation);
   const controls = /[\u0000-\u001f\u007f]/;
   if (!values.current_password.trim()) errors.current_password = 'Enter your current DiskarTech password.';
   else if (Array.from(values.current_password).length > 4096 || controls.test(values.current_password)) errors.current_password = 'The current password contains unsupported characters.';
-  if (!passwordChecks(values.password).every(check => check.valid)) errors.password = 'Please meet all password requirements.';
-  else if (utf8Length(values.password) > 72) errors.password = 'Please choose a shorter password.';
-  else if (controls.test(values.password)) errors.password = 'The password contains unsupported characters.';
-  else if (values.password === values.current_password) errors.password = 'Choose a different password from your current password.';
-  if (!values.password_confirmation) errors.password_confirmation = 'Confirm your new password.';
-  else if (values.password_confirmation !== values.password) errors.password_confirmation = 'The password confirmation does not match.';
+  if (!errors.password && values.password === values.current_password) errors.password = 'Choose a different password from your current password.';
   return errors;
 }
