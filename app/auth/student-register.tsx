@@ -52,10 +52,15 @@ export default function RegisterStudentScreen() {
   const [registrationError, setRegistrationError] = useState('');
 
   const handleGoogleProfile = (profile: GoogleAuthProfile) => {
-    if (profile.firstName) setFirstName(profile.firstName);
-    if (profile.lastName) setLastName(profile.lastName);
+    setFirstName(profile.firstName);
+    setMiddleName('');
+    setLastName(profile.lastName);
     setEmail(profile.email);
-    if (profile.photoUrl) setAvatarUrl(profile.photoUrl);
+    setAvatarUrl(profile.photoUrl || '');
+    setEmailError('');
+    setPasswordError('');
+    setConfirmPasswordError('');
+    setRegistrationError('');
     // Secure random password meeting requirements: Uppercase, Lowercase, Number, Special char, 8+ chars
     const generatedPwd = `G_${Math.random().toString(36).slice(-5).toUpperCase()}${Math.floor(100 + Math.random() * 900)}!x`;
     setPassword(generatedPwd);
@@ -203,6 +208,7 @@ export default function RegisterStudentScreen() {
           <GoogleRegisterButton
             onGoogleProfileLoaded={handleGoogleProfile}
             linkedEmail={isGoogleLinked ? email : undefined}
+            disabled={loading}
             linkedName={isGoogleLinked ? `${firstName} ${lastName}`.trim() : undefined}
             linkedPhoto={isGoogleLinked ? avatarUrl : undefined}
             onUnlink={() => {
@@ -319,6 +325,7 @@ export default function RegisterStudentScreen() {
             <GoogleRegisterButton
               onGoogleProfileLoaded={handleGoogleProfile}
               linkedEmail={email}
+              disabled={loading}
               linkedName={`${firstName} ${lastName}`.trim()}
               linkedPhoto={avatarUrl}
             />

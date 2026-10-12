@@ -40,7 +40,7 @@ test('protected requests without a token are canceled before reaching the networ
 
 test('login and registration still reach the network without a session', async () => {
   const app = harness(null);
-  const paths = ['/login', '/google-login', '/register/student', '/register/employer', '/register/household', '/password/forgot', '/password/verify-code', '/password/reset'];
+  const paths = ['/login', '/google-login', '/register/check-email', '/register/student', '/register/employer', '/register/household', '/password/forgot', '/password/verify-code', '/password/reset'];
   const sent = [];
   app.api.defaults.adapter = async config => { sent.push(config.url); return { status: 200, data: {}, config, headers: {}, statusText: 'OK' }; };
   for (const url of paths) await app.api.post(url, {});

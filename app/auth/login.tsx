@@ -27,9 +27,9 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 
 export default function LoginScreen() {
   const { isDark, colors } = useDarkMode();
-  const { google } = useLocalSearchParams<{ google?: string }>();
+  const { google, email: initialEmail } = useLocalSearchParams<{ google?: string; email?: string }>();
   const automaticGoogleLoginStarted = useRef(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(typeof initialEmail === 'string' ? initialEmail : '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -187,7 +187,7 @@ export default function LoginScreen() {
   const handleGoogleLogin = useCallback(async () => {
     try {
       setGoogleLoading(true);
-      const profile = await promptNativeGoogleSignIn();
+      const profile = await promptNativeGoogleSignIn({ selectAccount: true });
       if (!profile?.email) {
         setGoogleLoading(false);
         return;

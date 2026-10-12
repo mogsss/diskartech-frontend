@@ -37,7 +37,8 @@ function harness() {
     '@/utils/passwordChange': load('utils/passwordChange.ts', {}),
     '@expo/vector-icons': { MaterialIcons: 'Icon' },
     'expo-router': { router: { back() {}, replace: route => redirects.push(route) }, Stack: { Screen: 'Screen' } },
-    'react-native': { ActivityIndicator: 'Spinner', Keyboard: { dismiss() {} }, Text: 'Text', TouchableOpacity: 'Button', View: 'View' },
+    'react-native': { ActivityIndicator: 'Spinner', Image: 'Image', Keyboard: { dismiss() {} }, Text: 'Text', TouchableOpacity: 'Button', View: 'View' },
+    '../../assets/images/google-g.png': 1,
     'react-native-keyboard-aware-scroll-view': { KeyboardAwareScrollView: 'Scroll' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
   }).default;

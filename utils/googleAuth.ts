@@ -37,12 +37,12 @@ function ensureGoogleSigninConfigured() {
 /**
  * Perform Native Android Google Play Services Sign-In
  * Triggers the official Android system account sheet on the phone.
- * If native module is not yet compiled into the running APK, returns null gracefully.
+ * Returns null only when the user cancels. Native errors are reported without provider data.
  */
-export function promptNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
+export function promptNativeGoogleSignIn(options: { selectAccount?: boolean } = {}): Promise<GoogleAuthProfile | null> {
   // A second tap or another screen must not launch another native sign-in activity.
   if (pendingGoogleSignIn) return pendingGoogleSignIn;
-  const request = performNativeGoogleSignIn();
+  const request = performNativeGoogleSignIn(options.selectAccount !== false);
   pendingGoogleSignIn = request;
   const release = () => {
     if (pendingGoogleSignIn === request) pendingGoogleSignIn = null;
@@ -51,12 +51,15 @@ export function promptNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
   return request;
 }
 
-async function performNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
+async function performNativeGoogleSignIn(selectAccount: boolean): Promise<GoogleAuthProfile | null> {
   try {
     const { GoogleSignin } = require('@react-native-google-signin/google-signin');
     ensureGoogleSigninConfigured();
 
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    // Every interactive Google sign-in opens account selection by default.
+    // This leaves the registration form intact until a new selection succeeds.
+    if (selectAccount) await GoogleSignin.signOut();
     const response = await GoogleSignin.signIn();
 
     // Support both v13+ response.data.user and older response.user
@@ -88,7 +91,7 @@ async function performNativeGoogleSignIn(): Promise<GoogleAuthProfile | null> {
       // User dismissed the native dialog
       return null;
     }
-    console.warn('Native Google Play Services Sign-In:', error?.message || error);
+    throw new Error('Google sign-in is unavailable right now. Please try again or register with email instead.');
   }
   return null;
 }
