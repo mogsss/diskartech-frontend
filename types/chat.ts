@@ -64,9 +64,18 @@ export interface NormalizedChat extends ChatDocumentFields {
   id: string;
 }
 
+export interface ChatAttachment {
+  id: string;
+  filename: string;
+  mime_type: string;
+  kind: 'image' | 'file';
+  size: number;
+}
+
 export interface ChatMessage {
   id: string;
   text: string;
+  attachment?: ChatAttachment;
   sender_id: string;
   sender_name: string;
   sender_avatar: string;

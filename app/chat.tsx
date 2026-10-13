@@ -5,11 +5,12 @@ import UserProfileModal, { UserProfileData } from '@/components/ui/modals/UserPr
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import api from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
-import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
+  Image,
   Keyboard,
   Platform,
   ScrollView,
@@ -42,6 +43,12 @@ import {
 } from '@/utils/chat';
 import { setActiveChatScreen } from '@/utils/notifications';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import ChatAttachmentBubble from '@/components/chat/ChatAttachmentBubble';
+import { useChatAttachments } from '@/hooks/useChatAttachments';
+import { formatAttachmentSize, normalizeChatAttachment, sanitizeChatText } from '@/utils/chatAttachments';
+import type { ChatAttachment } from '@/types/chat';
+import { randomUUID } from 'expo-crypto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ChatScreen() {
   const { colors, isDark } = useDarkMode();
@@ -60,7 +67,7 @@ export default function ChatScreen() {
 
   const [message, setMessage] = useState('');
   const [messagesList, setMessagesList] = useState<
-    { id: string; sender: 'me' | 'other'; text: string; timestamp: string }[]
+    { id: string; sender: 'me' | 'other'; text: string; timestamp: string; attachment: ChatAttachment | null }[]
   >([]);
   const [isOptionsModalVisible, setOptionsModalVisible] = useState(false);
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
@@ -123,6 +130,12 @@ export default function ChatScreen() {
   });
 
   const closeNotification = () => setNotification((prev) => ({ ...prev, visible: false }));
+  const [attachmentMenu, setAttachmentMenu] = useState(false);
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const messageId = useRef<string | null>(null);
+  const attachments = useChatAttachments(conversationId, (errorMessage) => setNotification({ visible: true, title: 'Attachment', message: errorMessage, iconName: 'error-outline', onPrimaryPress: closeNotification }));
+  const canSend = (!!message.trim() || !!attachments.draft) && !sending && !attachments.selecting && !!chatUser.id && currentUserId !== 'unknown';
 
   const scrollViewRef = useRef<ScrollView>(null);
   const isInitialLoad = useRef(true);
@@ -256,6 +269,7 @@ export default function ChatScreen() {
               id: docSnap.id,
               sender: isMe ? ('me' as const) : ('other' as const),
               text: String(data.text ?? ''),
+              attachment: normalizeChatAttachment(data.attachment),
               timestamp: timeString,
             };
           });
@@ -322,12 +336,16 @@ export default function ChatScreen() {
   }, []);
 
   const handleSend = async () => {
-    const textToSend = message.trim();
-    if (!textToSend || !conversationId) return;
-
-    setMessage('');
+    const textToSend = sanitizeChatText(message).trim();
+    if (sendingRef.current || !canSend || !conversationId) return;
+    sendingRef.current = true; setSending(true); setAttachmentMenu(false);
+    messageId.current ||= randomUUID();
 
     try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token || await getLoggedInUserId() !== currentUserId) throw new Error('Your session changed. Open this conversation again before sending.');
+      const attachment = await attachments.prepare();
+      if (await AsyncStorage.getItem('userToken') !== token || await getLoggedInUserId() !== currentUserId) throw new Error('Your session changed. Open this conversation again before sending.');
       await sendChatMessage({
         chatId: conversationId,
         senderId: currentUserId,
@@ -335,24 +353,26 @@ export default function ChatScreen() {
         receiverName: chatUser.name,
         receiverAvatar: chatUser.avatar,
         text: textToSend,
+        attachment,
+        messageId: messageId.current,
       });
+      setMessage(''); attachments.clear(); messageId.current = null;
 
       setTimeout(() => {
         scrollToBottom(true);
       }, 100);
     } catch (error) {
-      console.error('Error sending message: ', error);
       setNotification({
         visible: true,
         title: 'Error',
-        message: 'Failed to send message. Please try again.',
+        message: error instanceof Error && /attachment|uploads|conversation/i.test(error.message) ? error.message : 'Failed to send message. Your draft is saved here. Please try again.',
         iconName: 'error-outline',
         iconColor: '#DC2626',
         iconBgColor: 'bg-red-50',
         primaryButtonText: 'OK',
         onPrimaryPress: closeNotification,
       });
-    }
+    } finally { sendingRef.current = false; setSending(false); }
   };
 
   return (
@@ -378,7 +398,7 @@ export default function ChatScreen() {
               borderBottomColor: colors.border,
             }}
           >
-            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 16 }}>
+            <TouchableOpacity onPress={() => router.back()} disabled={sending} accessibilityRole="button" accessibilityLabel="Back" accessibilityState={{ disabled: sending }} style={{ marginRight: 16, opacity: sending ? 0.5 : 1 }}>
               <MaterialIcons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <TouchableOpacity
@@ -435,7 +455,8 @@ export default function ChatScreen() {
                 borderColor: msg.sender === 'me' ? 'transparent' : colors.border,
               }}
             >
-              <Text
+              {msg.attachment && <ChatAttachmentBubble chatId={conversationId} attachment={msg.attachment} mine={msg.sender === 'me'} />}
+              {!!msg.text && <Text
                 style={{
                   fontSize: 14,
                   lineHeight: 20,
@@ -443,7 +464,7 @@ export default function ChatScreen() {
                 }}
               >
                 {msg.text}
-              </Text>
+              </Text>}
               <Text
                 style={{
                   fontSize: 11,
@@ -457,6 +478,26 @@ export default function ChatScreen() {
             </View>
           ))}
         </ScrollView>
+
+        {attachmentMenu && (
+          <View style={{ flexDirection: 'row', gap: 12, padding: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border }}>
+            {(['photo', 'file'] as const).map(kind => (
+              <TouchableOpacity key={kind} disabled={sending || attachments.selecting} onPress={() => { setAttachmentMenu(false); Keyboard.dismiss(); void attachments.pick(kind); messageId.current = null; }} accessibilityRole="button" accessibilityLabel={kind === 'photo' ? 'Choose photo' : 'Choose file'} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 12 }}>
+                <MaterialIcons name={kind === 'photo' ? 'photo-library' : 'description'} size={22} color={colors.accent} /><Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>{kind === 'photo' ? 'Photo' : 'File'}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {attachments.draft && (
+          <View style={{ padding: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              {attachments.draft.kind === 'image' ? <Image source={{ uri: attachments.draft.uri }} style={{ width: 56, height: 56, borderRadius: 10 }} resizeMode="cover" /> : <MaterialIcons name="description" size={32} color={colors.accent} />}
+              <View style={{ flex: 1, gap: 4 }}><Text numberOfLines={2} style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{attachments.draft.filename}</Text><Text style={{ fontSize: 12, color: colors.textSecondary }}>{sending ? attachments.uploading ? `Uploading ${attachments.progress}%` : 'Sending message...' : formatAttachmentSize(attachments.draft.size)}</Text></View>
+              <TouchableOpacity disabled={sending || attachments.selecting} onPress={() => { attachments.clear(); messageId.current = null; }} accessibilityRole="button" accessibilityLabel="Remove attachment" style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.4 : 1 }}><MaterialIcons name="close" size={22} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+            {sending && <View style={{ height: 4, borderRadius: 2, marginTop: 10, backgroundColor: colors.border }}><View style={{ height: 4, borderRadius: 2, width: `${attachments.progress}%`, backgroundColor: colors.primary }} /></View>}
+          </View>
+        )}
 
         {/* Input Bar */}
         <View
@@ -472,8 +513,8 @@ export default function ChatScreen() {
             gap: 8,
           }}
         >
-          <TouchableOpacity style={{ padding: 8 }}>
-            <MaterialIcons name="attach-file" size={24} color={colors.textSecondary} />
+          <TouchableOpacity onPress={() => { Keyboard.dismiss(); setAttachmentMenu(value => !value); }} disabled={sending || attachments.selecting || !chatUser.id} accessibilityRole="button" accessibilityLabel="Add attachment" accessibilityState={{ expanded: attachmentMenu, disabled: sending || attachments.selecting || !chatUser.id }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+            {attachments.selecting ? <ActivityIndicator color={colors.accent} /> : <MaterialIcons name={attachmentMenu ? 'close' : 'add'} size={26} color={colors.accent} />}
           </TouchableOpacity>
           <TextInput
             style={{
@@ -486,10 +527,12 @@ export default function ChatScreen() {
               color: colors.text,
               maxHeight: 120,
             }}
-            placeholder="Type a message..."
+            placeholder={attachments.draft ? 'Add a message (optional)...' : 'Type a message...'}
             placeholderTextColor={colors.textSecondary}
             value={message}
-            onChangeText={setMessage}
+            onChangeText={text => { setMessage(sanitizeChatText(text)); messageId.current = null; }}
+            maxLength={2000}
+            editable={!sending}
             onFocus={() => {
               setTimeout(() => scrollToBottom(true), 150);
             }}
@@ -497,20 +540,24 @@ export default function ChatScreen() {
           />
           <TouchableOpacity
             onPress={handleSend}
+            disabled={!canSend}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: !canSend, busy: sending }}
             style={{
               width: 40,
               height: 40,
               borderRadius: 20,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: message.trim() ? '#DC2626' : (isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0'),
+              backgroundColor: canSend || sending ? '#DC2626' : (isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0'),
             }}
           >
-            <MaterialIcons
+            {sending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <MaterialIcons
               name="send"
               size={20}
-              color={message.trim() ? '#FFFFFF' : colors.textSecondary}
-            />
+              color={canSend ? '#FFFFFF' : colors.textSecondary}
+            />}
           </TouchableOpacity>
         </View>
 

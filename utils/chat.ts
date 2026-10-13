@@ -1,6 +1,5 @@
 import { db } from '@/utils/firebase';
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -12,11 +11,12 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import {
-  ChatDocumentFields,
   NormalizedChat,
   ParticipantSummary,
   LoggedInRole,
+  ChatAttachment,
 } from '@/types/chat';
+import { attachmentSummary, normalizeChatAttachment, sanitizeChatText } from './chatAttachments';
 import {
   isGenericName,
   pickFirstNonGeneric,
@@ -519,10 +519,15 @@ export async function sendChatMessage(params: {
   receiverName?: string;
   receiverAvatar?: string;
   text: string;
+  attachment?: ChatAttachment;
+  messageId?: string;
 }): Promise<void> {
   const { chatId, senderId, text } = params;
-  const trimmed = text.trim();
-  if (!trimmed || !chatId) return;
+  const trimmed = sanitizeChatText(text).trim();
+  const attachment = params.attachment ? normalizeChatAttachment(params.attachment) : null;
+  if (params.attachment && !attachment) throw new Error('Invalid attachment.');
+  if ((!trimmed && !attachment) || !chatId || !senderId || senderId === 'unknown') return;
+  const preview = trimmed || (attachment ? attachmentSummary(attachment) : '');
 
   let senderName = params.senderName || '';
   let senderAvatar = params.senderAvatar || '';
@@ -549,7 +554,9 @@ export async function sendChatMessage(params: {
     }
   }
 
-  await addDoc(collection(db, CHATS_COLLECTION, chatId, 'messages'), {
+  const messageRef = params.messageId ? doc(db, CHATS_COLLECTION, chatId, 'messages', params.messageId) : doc(collection(db, CHATS_COLLECTION, chatId, 'messages'));
+  const batch = writeBatch(db);
+  batch.set(messageRef, {
     text: trimmed,
     sender_id: senderId,
     sender_name: senderName || 'User',
@@ -557,10 +564,11 @@ export async function sendChatMessage(params: {
     receiver_id: receiverId,
     receiver_name: receiverName || 'User',
     created_at: serverTimestamp(),
+    ...(attachment ? { attachment } : {}),
   });
 
   const updateData: Record<string, unknown> = {
-    last_message: trimmed,
+    last_message: preview,
     last_sender_id: senderId,
     last_message_at: serverTimestamp(),
     updated_at: serverTimestamp(),
@@ -574,11 +582,12 @@ export async function sendChatMessage(params: {
     if (receiverName) updateData.receiver_name = receiverName;
     if (params.receiverAvatar) updateData.receiver_avatar = params.receiverAvatar;
     updateData.unread_user_ids = [receiverId];
-    updateData[`last_message_for_${receiverId}`] = trimmed;
+    updateData[`last_message_for_${receiverId}`] = preview;
     updateData[`last_message_at_for_${receiverId}`] = serverTimestamp();
   }
 
-  await setDoc(chatDocRef, updateData, { merge: true });
+  batch.set(chatDocRef, updateData, { merge: true });
+  await batch.commit();
 
   // Remote Push Notification para matanggap kahit patay/sarado ang app!
   if (receiverId) {
@@ -588,7 +597,7 @@ export async function sendChatMessage(params: {
         await sendRemotePushNotification({
           toToken: recipientToken,
           title: senderName || 'New Message',
-          body: trimmed,
+          body: preview,
           data: {
             chatId,
             url: `/chat?id=${chatId}`,
