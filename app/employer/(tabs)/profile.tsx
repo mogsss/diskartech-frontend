@@ -24,6 +24,17 @@ const getFilename = (path?: string | null) => {
   return path.split(/[?#]/)[0].split('/').pop() || null;
 };
 
+const getEmployerPlan = (isSubscribed: unknown, expiresAt: unknown): 'Basic' | 'Premium' => {
+  if (isSubscribed !== true && isSubscribed !== 1 && isSubscribed !== '1') return 'Basic';
+  if (expiresAt === null || expiresAt === undefined || expiresAt === '') return 'Premium';
+  if (typeof expiresAt !== 'string') return 'Basic';
+
+  // Unzoned database timestamps use the backend's UTC timezone.
+  const timestamp = expiresAt.trim().replace(' ', 'T');
+  const expires = Date.parse(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(timestamp) ? `${timestamp}Z` : timestamp);
+  return Number.isFinite(expires) && expires > Date.now() ? 'Premium' : 'Basic';
+};
+
 export default function EmployerProfileScreen() {
   const { colors, isDark } = useDarkMode();
   const { type } = useLocalSearchParams<{ type?: string }>();
@@ -42,6 +53,7 @@ export default function EmployerProfileScreen() {
   const [rating, setRating] = useState<number>(5.0);
   const [reviewCount, setReviewCount] = useState<number>(0);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<'Basic' | 'Premium' | null>(null);
 
   const [uploadedDocs, setUploadedDocs] = useState<{
     valid_id_path?: string | null;
@@ -120,6 +132,7 @@ export default function EmployerProfileScreen() {
 
       if (storedProfile) {
         const profile = JSON.parse(storedProfile);
+        setSubscriptionPlan(getEmployerPlan(profile.isSubscribed, profile.subscription_expires_at));
         if (profile.rating !== undefined) setRating(Number(profile.rating));
         if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
         const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true || profile.isVerified === '1';
@@ -173,6 +186,7 @@ export default function EmployerProfileScreen() {
         setReviewCount(apiReviewCount);
 
         if (profile) {
+          setSubscriptionPlan(getEmployerPlan(profile.isSubscribed, profile.subscription_expires_at));
           profile.rating = apiRating;
           profile.review_count = apiReviewCount;
           const verifiedStatus = profile.isVerified === 1 || profile.isVerified === true || profile.isVerified === '1';
@@ -530,7 +544,7 @@ export default function EmployerProfileScreen() {
     const statusColor = status.verdict === 'valid' ? verifiedColor : status.verdict === 'invalid' ? accentText : rawPath ? pendingColor : colors.textSecondary;
     const statusIcon: keyof typeof MaterialIcons.glyphMap = status.verdict === 'valid' ? 'check-circle-outline' : status.verdict === 'invalid' ? 'error-outline' : rawPath ? 'hourglass-empty' : 'file-upload';
     return (
-      <View key={field} className="rounded-2xl border p-4 mt-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+      <View key={field} className={field === 'valid_id_path' ? 'rounded-2xl border p-4' : 'rounded-2xl border p-4 mt-3'} style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
         <View className="flex-row items-start gap-3">
           <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
           <View className="flex-1">
@@ -563,13 +577,21 @@ export default function EmployerProfileScreen() {
       </View>
       <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}>
         <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          {!isHousehold && <View className="flex-row flex-wrap items-center justify-between gap-2 mb-3">
+            <Text className="text-[10px] font-semibold tracking-wide" style={{ color: colors.textSecondary }}>EMPLOYER ACCOUNT</Text>
+            {subscriptionPlan && <TouchableOpacity onPress={() => router.push('/employer/subscription')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${subscriptionPlan} plan. Manage subscription`} className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3 ml-auto" style={{ backgroundColor: subscriptionPlan === 'Premium' ? pendingSurface : isDark ? '#263449' : '#F1F5F9' }}>
+              <MaterialIcons name={subscriptionPlan === 'Premium' ? 'workspace-premium' : 'layers'} size={16} color={subscriptionPlan === 'Premium' ? pendingColor : colors.textSecondary} />
+              <Text className="text-xs font-semibold" style={{ color: subscriptionPlan === 'Premium' ? pendingColor : colors.textSecondary }}>{subscriptionPlan} plan</Text>
+              <MaterialIcons name="chevron-right" size={16} color={subscriptionPlan === 'Premium' ? pendingColor : colors.textSecondary} />
+            </TouchableOpacity>}
+          </View>}
           <View className="flex-row items-center gap-4">
             <View className="relative">
               <Avatar uri={avatarUri || ''} name={profileData.avatarInitials} size={72} />
               <TouchableOpacity onPress={handlePickImage} disabled={uploadingProfilePicture || uploadingDoc} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDoc }} className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
             </View>
             <View className="flex-1">
-              <Text className="text-[10px] font-semibold tracking-wide mb-1" style={{ color: colors.textSecondary }}>{isHousehold ? 'HOUSEHOLD ACCOUNT' : 'EMPLOYER ACCOUNT'}</Text>
+              {isHousehold && <Text className="text-[10px] font-semibold tracking-wide mb-1" style={{ color: colors.textSecondary }}>HOUSEHOLD ACCOUNT</Text>}
               <View className="flex-row items-center gap-1.5">
                 <Text className="text-xl font-bold leading-7 tracking-tight shrink" style={{ color: colors.text }} numberOfLines={2}>{profileData.name}</Text>
                 {isVerified && <MaterialIcons name="verified" size={20} color={verifiedColor} accessibilityLabel="Verified account" />}
@@ -588,50 +610,59 @@ export default function EmployerProfileScreen() {
           </View>
         </View>
 
-        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="flex-row items-start justify-between gap-3 mb-4">
+        <View className="mx-6 mb-5">
+          <View className="flex-row items-center justify-between gap-3 mb-2 px-1">
             <View className="flex-1">
-              <Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>Documents & verification</Text>
+              <Text accessibilityRole="header" className="text-sm font-semibold leading-5" style={{ color: colors.text }}>Documents & verification</Text>
               <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{isVerified ? 'Your account documents.' : 'Upload your documents to verify your account and post jobs.'}</Text>
             </View>
             {!isVerified && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel="View document verification status" className="w-12 h-12 items-center justify-center"><MaterialIcons name="chevron-right" size={24} color={accentText} /></TouchableOpacity>}
           </View>
-          {renderDocument('Valid ID', 'badge', uploadedDocs.valid_id_raw, uploadedDocs.valid_id_path, 'valid_id_path')}
-          {!isHousehold && renderDocument('Business Permit / Certificate', 'insert-drive-file', uploadedDocs.employer_certificate_raw, uploadedDocs.employer_certificate_path, 'certificate_path')}
-          {hasDocuments && <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>AI checks help with review. Final account approval is by an admin.</Text>}
-          {isRejected && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Review verification rejection" className="rounded-xl p-3 mt-1" style={{ backgroundColor: accentSurface }}>
-            <View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="flex-1 text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text><MaterialIcons name="chevron-right" size={18} color={accentText} /></View>
-            <Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text>
-          </TouchableOpacity>}
-        </View>
-
-        <View className="mx-6 mb-4 rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="flex-row items-start justify-between gap-3 mb-4">
-            <View className="flex-1"><Text className="text-lg font-bold" style={{ color: colors.text }}>{isHousehold ? 'Household information' : 'Business information'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Your location and contact details.</Text></View>
-            <TouchableOpacity onPress={() => router.push('/edit-profile')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Edit profile information" className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="edit" size={15} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Edit</Text></TouchableOpacity>
+          <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {renderDocument('Valid ID', 'badge', uploadedDocs.valid_id_raw, uploadedDocs.valid_id_path, 'valid_id_path')}
+            {!isHousehold && renderDocument('Business Permit / Certificate', 'insert-drive-file', uploadedDocs.employer_certificate_raw, uploadedDocs.employer_certificate_path, 'certificate_path')}
+            {hasDocuments && <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>AI checks help with review. Final account approval is by an admin.</Text>}
+            {isRejected && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Review verification rejection" className="rounded-xl p-3 mt-1" style={{ backgroundColor: accentSurface }}>
+              <View className="flex-row items-center gap-2 mb-1"><MaterialIcons name="error-outline" size={17} color={accentText} /><Text className="flex-1 text-xs font-semibold" style={{ color: accentText }}>Verification needs an update</Text><MaterialIcons name="chevron-right" size={18} color={accentText} /></View>
+              <Text className="text-xs leading-5" style={{ color: accentText }}>{rejectionReason}</Text>
+            </TouchableOpacity>}
           </View>
-          {!isHousehold && <>
-            <InfoRow icon="person-outline" label="Hirer name" value={profileData.hirerName} />
-            <InfoRow icon="store" label="Business type" value={profileData.businessType} />
-          </>}
-          <InfoRow icon="location-on" label={isHousehold ? 'Home address' : 'Business location'} value={profileData.locationValue} />
-          <InfoRow icon="phone" label="Contact number" value={profileData.contactNumber} />
-          <InfoRow icon="mail-outline" label="Email address" value={profileData.email} />
         </View>
 
-        {!isHousehold && <TouchableOpacity onPress={() => router.push('/employer/subscription')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Manage subscription plans" className="mx-6 mb-4 rounded-3xl border p-5 flex-row items-center gap-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="w-11 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="workspace-premium" size={23} color={accentText} /></View>
-          <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: colors.text }}>Subscription plans</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>View available plans and options.</Text></View>
-          <MaterialIcons name="chevron-right" size={22} color={accentText} />
-        </TouchableOpacity>}
+        <View className="mx-6 mb-5">
+          <View className="flex-row items-center justify-between gap-3 mb-2 px-1">
+            <View className="flex-1"><Text accessibilityRole="header" className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{isHousehold ? 'Household information' : 'Business information'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Your location and contact details.</Text></View>
+            <TouchableOpacity onPress={() => router.push('/edit-profile')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Edit profile information" className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="edit" size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Edit</Text></TouchableOpacity>
+          </View>
+          <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {!isHousehold && <>
+              <InfoRow icon="person-outline" label="Hirer name" value={profileData.hirerName} />
+              <InfoRow icon="store" label="Business type" value={profileData.businessType} />
+            </>}
+            <InfoRow icon="location-on" label={isHousehold ? 'Home address' : 'Business location'} value={profileData.locationValue} />
+            <InfoRow icon="phone" label="Contact number" value={profileData.contactNumber} />
+            <InfoRow icon="mail-outline" label="Email address" value={profileData.email} />
+          </View>
+        </View>
 
-        <View className="mx-6 rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="px-5 pt-5 pb-2"><Text className="text-lg font-bold" style={{ color: colors.text }}>Account & support</Text></View>
-          {menuItems.map((item, index) => <TouchableOpacity key={item.label} onPress={() => handleMenuPress(item.route)} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
-            <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
-            <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={accentText} />
-          </TouchableOpacity>)}
+        {!isHousehold && <View className="mx-6 mb-5">
+          <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Subscription plans</Text>
+          <TouchableOpacity onPress={() => router.push('/employer/subscription')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Manage subscription plans" className="rounded-3xl border p-5 flex-row items-center gap-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <View className="w-11 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="workspace-premium" size={23} color={accentText} /></View>
+            <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: colors.text }}>View plans</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>View available plans and options.</Text></View>
+            <MaterialIcons name="chevron-right" size={22} color={accentText} />
+          </TouchableOpacity>
+        </View>}
+
+        <View className="mx-6">
+          <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Account & support</Text>
+          <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            {menuItems.map((item, index) => <TouchableOpacity key={item.label} onPress={() => handleMenuPress(item.route)} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
+              <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
+              <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
+              <MaterialIcons name="chevron-right" size={20} color={accentText} />
+            </TouchableOpacity>)}
+          </View>
         </View>
       </ScrollView>
 

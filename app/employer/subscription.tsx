@@ -1,193 +1,110 @@
-import { Colors } from '@/constants/colors';
+import SafeStatusBar from '@/components/ui/SafeStatusBar';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useEmployerSubscription } from '@/hooks/useEmployerSubscription';
+import { BillingCycle } from '@/utils/employerSubscription';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View, Alert } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const plans = [
-  { id: 'free', name: 'Free Plan', price: '₱0', period: 'Lifetime', description: 'Limited job postings and applicant review.' },
-  { 
-    id: 'pro', 
-    name: 'Employer Pro', 
-    monthlyPrice: '₱149', 
-    annualPrice: '₱1,490', 
-    monthlyPeriod: 'per month', 
-    annualPeriod: 'per year (Save 16%)', 
-    description: 'Featured jobs, unlimited applicants, priority support.' 
-  },
-];
-
-const paymentChannels = [
-  { id: 'gcash', name: 'GCash', icon: 'account-balance-wallet' },
-  { id: 'maya', name: 'Maya', icon: 'credit-card' },
-  { id: 'card', name: 'Credit / Debit Card', icon: 'payment' },
-];
+const pesos = (amount: number) => `₱${(amount / 100).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
 
 export default function SubscriptionScreen() {
   const { colors, isDark } = useDarkMode();
-  const [selectedPlan, setSelectedPlan] = useState('pro');
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annually'>('monthly');
-  const [selectedChannel, setSelectedChannel] = useState('gcash');
-
-  const handleSubscribe = () => {
-    const priceDisplay = selectedPlan === 'free' ? '₱0' : billingCycle === 'monthly' ? '₱149/mo' : '₱1,490/yr';
-    Alert.alert(
-      "Success!", 
-      `You have successfully subscribed to the ${selectedPlan.toUpperCase()} plan (${billingCycle}) for ${priceDisplay} via ${selectedChannel.toUpperCase()}.`,
-      [{ text: "OK", onPress: () => router.back() }]
-    );
-  };
+  const insets = useSafeAreaInsets();
+  const { data, busy, notice, dismissNotice, refresh, checkPayment, checkout } = useEmployerSubscription();
+  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'premium'>('premium');
+  const [selectedCycle, setSelectedCycle] = useState<BillingCycle>('monthly');
+  const pending = data?.payment && ['creating', 'pending'].includes(data.payment.status) ? data.payment : null;
+  const cycle = pending?.billing_cycle ?? selectedCycle;
+  const active = data?.subscription.plan === 'premium';
+  const amount = data?.subscription.prices[cycle];
+  const accentText = isDark ? colors.accent : colors.primary;
+  const accentSurface = isDark ? 'rgba(220,38,38,0.12)' : '#FFF1F2';
+  const buttonDisabled = busy || !data;
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
-      {/* Header */}
-      <View 
-        className="flex-row items-center px-6 pt-12 pb-4 border-b"
-        style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }}
-      >
-        <TouchableOpacity 
-          onPress={() => router.back()} 
-          className="w-10 h-10 rounded-full items-center justify-center mr-4"
-          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
-        >
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+      <SafeStatusBar />
+      <View className="w-full max-w-2xl self-center px-6 pt-2 pb-3 flex-row items-center gap-3">
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Back to profile" className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <MaterialIcons name="arrow-back" size={23} color={colors.text} />
         </TouchableOpacity>
-        <Text className="text-xl font-bold" style={{ color: colors.text }}>Manage Subscription</Text>
+        <Text className="flex-1 text-xl font-bold" style={{ color: colors.text }}>Subscription plans</Text>
       </View>
 
-      <ScrollView className="flex-1" contentContainerClassName="p-6 pb-10" showsVerticalScrollIndicator={false}>
-        <Text className="text-base font-bold mb-3" style={{ color: colors.text }}>Choose Your Plan</Text>
-        
-        {/* Plan Cards */}
-        {plans.map((plan) => {
-          const isSelected = selectedPlan === plan.id;
-          const displayPrice = plan.id === 'free' 
-            ? plan.price 
-            : billingCycle === 'monthly' ? plan.monthlyPrice : plan.annualPrice;
-          
-          const displayPeriod = plan.id === 'free' 
-            ? plan.period 
-            : billingCycle === 'monthly' ? plan.monthlyPeriod : plan.annualPeriod;
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerClassName="w-full max-w-2xl self-center px-6 pt-2 pb-6">
+        <View className="rounded-2xl px-4 py-3 mb-5 flex-row items-start gap-2" style={{ backgroundColor: isDark ? '#3B321D' : '#FFFBEB' }}>
+          <MaterialIcons name="science" size={19} color={isDark ? '#FCD34D' : '#92400E'} />
+          <Text className="flex-1 text-xs leading-5" style={{ color: isDark ? '#FCD34D' : '#92400E' }}>Test checkout. Payments are simulated and no real money is charged.</Text>
+        </View>
 
-          return (
-            <TouchableOpacity
-              key={plan.id}
-              onPress={() => setSelectedPlan(plan.id)}
-              className="rounded-2xl p-5 mb-3 border-2"
-              style={{
-                backgroundColor: isSelected 
-                  ? (isDark ? 'rgba(220, 38, 38, 0.12)' : 'rgba(254, 242, 242, 0.7)') 
-                  : colors.surface,
-                borderColor: isSelected ? '#DC2626' : colors.border,
-              }}
-            >
-              <View className="flex-row justify-between items-center mb-1">
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-lg font-bold" style={{ color: colors.text }}>{plan.name}</Text>
-                  {plan.id === 'pro' && (
-                    <View 
-                      className="px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.25)' : '#FEE2E2' }}
-                    >
-                      <Text className="text-[10px] font-bold text-red-600 uppercase">Popular</Text>
-                    </View>
-                  )}
-                </View>
-                <Text className="text-base font-extrabold text-red-600">
-                  {displayPrice} <Text className="text-xs font-normal" style={{ color: colors.textSecondary }}>{displayPeriod}</Text>
-                </Text>
+        <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Your current plan</Text>
+        <View className="rounded-3xl border p-5 mb-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          {data ? <>
+            <View className="flex-row items-center gap-3">
+              <View className="w-11 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={active ? 'workspace-premium' : 'layers'} size={22} color={accentText} /></View>
+              <View className="flex-1">
+                <Text className="text-base font-semibold" style={{ color: colors.text }}>{active ? 'Premium' : 'Basic'} plan</Text>
+                <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{active && data.subscription.expires_at ? `Valid until ${new Date(data.subscription.expires_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}` : active ? 'Your Premium plan is active.' : 'Your standard employer account.'}</Text>
               </View>
-              <Text className="text-xs" style={{ color: colors.textSecondary }}>{plan.description}</Text>
-            </TouchableOpacity>
-          );
+            </View>
+            {active && <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>No automatic renewal. Renewing adds time to your current plan.</Text>}
+          </> : <View className="flex-row items-center justify-between gap-3">
+            <Text className="flex-1 text-sm" style={{ color: colors.textSecondary }}>{busy ? 'Loading subscription…' : 'Subscription details are unavailable.'}</Text>
+            {busy ? <ActivityIndicator color={colors.primary} /> : <TouchableOpacity onPress={() => void refresh()} accessibilityRole="button" className="min-h-12 justify-center px-3"><Text className="text-sm font-semibold" style={{ color: accentText }}>Try again</Text></TouchableOpacity>}
+          </View>}
+        </View>
+
+        {pending && <View className="rounded-2xl border p-4 mb-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <Text className="text-sm font-semibold" style={{ color: colors.text }}>Payment pending</Text>
+          <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>You have an unfinished {pending.billing_cycle === 'monthly' ? 'monthly' : 'annual'} checkout. Resume it or check whether your payment has completed.</Text>
+          <View className="flex-row flex-wrap gap-2 mt-3">
+            <TouchableOpacity onPress={() => void checkout(pending.billing_cycle)} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy }} className="min-h-12 rounded-xl px-3 justify-center" style={{ backgroundColor: accentSurface, opacity: busy ? 0.5 : 1 }}><Text className="text-xs font-semibold" style={{ color: accentText }}>Resume checkout</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => void checkPayment()} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy }} className="min-h-12 rounded-xl border px-3 justify-center" style={{ borderColor: colors.border, opacity: busy ? 0.5 : 1 }}><Text className="text-xs font-semibold" style={{ color: colors.text }}>Check payment</Text></TouchableOpacity>
+          </View>
+        </View>}
+
+        <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Choose your plan</Text>
+        {(['basic', 'premium'] as const).map(plan => {
+          const selected = selectedPlan === plan;
+          return <TouchableOpacity key={plan} onPress={() => setSelectedPlan(plan)} disabled={busy} activeOpacity={0.75} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: busy }} className="rounded-3xl border p-5 mb-3" style={{ backgroundColor: selected ? accentSurface : colors.surface, borderColor: selected ? colors.primary : colors.border }}>
+            <View className="flex-row flex-wrap items-center justify-between gap-2">
+              <Text className="text-base font-semibold" style={{ color: colors.text }}>{plan === 'basic' ? 'Basic' : 'Premium'}</Text>
+              <Text className="text-sm font-semibold" style={{ color: accentText }}>{plan === 'basic' ? 'Free' : amount ? `${pesos(amount)} / ${cycle === 'monthly' ? 'month' : 'year'}` : 'Loading price…'}</Text>
+            </View>
+            <Text className="text-xs leading-5 mt-2" style={{ color: colors.textSecondary }}>{plan === 'basic' ? 'Use your standard employer account without a paid plan.' : 'Upgrade your account for one month or one year. Renew when you need to.'}</Text>
+          </TouchableOpacity>;
         })}
 
-        {/* Billing Cycle Choices (Monthly / Annually) para sa Pro Plan */}
-        {selectedPlan === 'pro' && (
-          <View 
-            className="rounded-2xl p-4 mb-4 border shadow-sm"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            <Text className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>Billing Cycle</Text>
+        {selectedPlan === 'premium' && <View className="mt-2">
+          <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Plan duration</Text>
+          <View className="rounded-3xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
             <View className="flex-row gap-2">
-              <TouchableOpacity
-                onPress={() => setBillingCycle('monthly')}
-                className="flex-1 py-3 rounded-xl items-center justify-center border"
-                style={{
-                  backgroundColor: billingCycle === 'monthly' ? '#DC2626' : (isDark ? colors.background : '#F8FAFC'),
-                  borderColor: billingCycle === 'monthly' ? '#DC2626' : colors.border,
-                }}
-              >
-                <Text 
-                  className="text-xs font-bold"
-                  style={{ color: billingCycle === 'monthly' ? '#FFFFFF' : colors.text }}
-                >
-                  Monthly (₱149)
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setBillingCycle('annually')}
-                className="flex-1 py-3 rounded-xl items-center justify-center border"
-                style={{
-                  backgroundColor: billingCycle === 'annually' ? '#DC2626' : (isDark ? colors.background : '#F8FAFC'),
-                  borderColor: billingCycle === 'annually' ? '#DC2626' : colors.border,
-                }}
-              >
-                <Text 
-                  className="text-xs font-bold"
-                  style={{ color: billingCycle === 'annually' ? '#FFFFFF' : colors.text }}
-                >
-                  Annually (₱1,490) 
-                </Text>
-              </TouchableOpacity>
+              {(['monthly', 'annually'] as const).map(option => <TouchableOpacity key={option} onPress={() => setSelectedCycle(option)} disabled={busy || !!pending} activeOpacity={0.75} accessibilityRole="radio" accessibilityState={{ checked: cycle === option, disabled: busy || !!pending }} className="flex-1 min-h-12 rounded-xl border px-3 py-3 items-center justify-center" style={{ backgroundColor: cycle === option ? colors.primary : colors.surface, borderColor: cycle === option ? colors.primary : colors.border, opacity: busy ? 0.5 : 1 }}>
+                <Text className="text-sm font-semibold" style={{ color: cycle === option ? '#FFFFFF' : colors.text }}>{option === 'monthly' ? 'Monthly' : 'Annually'}</Text>
+                <Text className="text-xs mt-1" style={{ color: cycle === option ? '#FFFFFF' : colors.textSecondary }}>{data ? pesos(data.subscription.prices[option]) : '…'}</Text>
+              </TouchableOpacity>)}
             </View>
-            {billingCycle === 'annually' && (
-              <Text className="text-[11px] text-emerald-500 font-semibold text-center mt-2">🎉 You save ₱298 with annual billing!</Text>
-            )}
+            <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>One-time payment. Choose from the available payment methods on the PayMongo checkout page.</Text>
           </View>
-        )}
+        </View>}
 
-        {/* Payment Channels */}
-        {selectedPlan === 'pro' && (
-          <>
-            <Text className="text-base font-bold mb-3 mt-2" style={{ color: colors.text }}>Select Payment Channel</Text>
-            {paymentChannels.map((channel) => (
-              <TouchableOpacity
-                key={channel.id}
-                onPress={() => setSelectedChannel(channel.id)}
-                className="flex-row items-center rounded-xl p-4 mb-2.5 border"
-                style={{
-                  backgroundColor: selectedChannel === channel.id 
-                    ? (isDark ? 'rgba(220, 38, 38, 0.12)' : 'rgba(254, 242, 242, 0.6)') 
-                    : colors.surface,
-                  borderColor: selectedChannel === channel.id ? '#DC2626' : colors.border,
-                }}
-              >
-                <MaterialIcons name={channel.icon as any} size={22} color={selectedChannel === channel.id ? '#DC2626' : colors.textSecondary} />
-                <Text 
-                  className="text-sm font-semibold ml-3 flex-1"
-                  style={{ color: selectedChannel === channel.id ? '#DC2626' : colors.text }}
-                >
-                  {channel.name}
-                </Text>
-                {selectedChannel === channel.id && (
-                  <MaterialIcons name="check-circle" size={20} color={colors.accent} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </>
-        )}
-
-        {/* Confirm Button */}
-        <TouchableOpacity
-          onPress={handleSubscribe}
-          className="bg-red-600 py-4 rounded-2xl items-center justify-center mt-6 shadow-sm"
-        >
-          <Text className="text-sm font-bold text-white">Confirm & Subscribe</Text>
-        </TouchableOpacity>
+        {selectedPlan === 'basic' && active && <Text className="text-xs leading-5 mt-2 px-1" style={{ color: colors.textSecondary }}>Your Premium plan remains active until it expires. Selecting Basic does not cancel the time you already paid for.</Text>}
       </ScrollView>
+
+      <View className="border-t" style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }}>
+        <View className="w-full max-w-2xl self-center px-6 pt-4">
+          <TouchableOpacity onPress={() => selectedPlan === 'basic' ? router.back() : void checkout(cycle)} disabled={buttonDisabled} accessibilityRole="button" accessibilityState={{ disabled: buttonDisabled, busy }} activeOpacity={0.75} className="min-h-12 rounded-2xl py-4 px-4 items-center justify-center" style={{ backgroundColor: colors.primary, opacity: buttonDisabled ? 0.5 : 1 }}>
+            {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text className="text-sm font-semibold text-white text-center">{selectedPlan === 'basic' ? 'Back to profile' : pending ? 'Resume checkout' : active ? 'Renew Premium' : 'Continue to checkout'}</Text>}
+          </TouchableOpacity>
+          <Text className="text-xs text-center leading-5 mt-2" style={{ color: colors.textSecondary }}>Premium activates after payment is confirmed.</Text>
+        </View>
+      </View>
+
+      <NotificationModal visible={!!notice} title={notice?.title ?? ''} message={notice?.message ?? ''} iconName={notice?.title === 'Payment confirmed' ? 'check-circle-outline' : 'info-outline'} onPrimaryPress={dismissNotice} />
     </View>
   );
 }
