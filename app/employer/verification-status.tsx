@@ -10,6 +10,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, 
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
+import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
 
 type DocumentType = 'valid_id_path' | 'certificate_path';
 type VerificationProfile = {
@@ -143,7 +144,7 @@ export default function VerificationStatusScreen() {
       await cacheProfile(latest);
     } catch (error: any) {
       const firstValidation = Object.values(error.response?.data?.errors || {}).flat().find((message) => typeof message === 'string');
-      if (focused.current) setNotification({ visible: true, title: 'Upload failed', message: String(firstValidation || error.response?.data?.message || error.message || 'Please check your connection and try again.'), iconName: 'error-outline', iconColor: '#DC2626' });
+      if (focused.current) setNotification({ visible: true, title: 'Upload failed', message: String(firstValidation || error.response?.data?.message || error.message || 'Please check your connection and try again.'), iconName: 'error-outline', iconColor: '#DC2626', ...(getUploadRateLimitNotice(error) ?? {}) });
     } finally {
       uploadBusy.current = false;
       setIsUploading(false);

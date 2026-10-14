@@ -10,6 +10,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, 
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
+import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
 
 type DocumentType = 'school_id' | 'coe' | 'student_resume';
 type AiResults = { school_id: boolean | null; coe: boolean | null };
@@ -101,11 +102,10 @@ export default function StudentVerificationStatusScreen() {
       }
       setNotification({ visible: true, title: 'Document uploaded', message: 'Your document has been uploaded successfully.', iconName: 'check-circle-outline', iconColor: '#15803D' });
     } catch (error: any) {
-      console.error('Student document upload failed:', error);
       const validationErrors = error.response?.data?.errors;
       const firstValidation = validationErrors ? Object.values(validationErrors).flat().find((message) => typeof message === 'string') : null;
       const message = firstValidation || error.response?.data?.message || error.message || 'Please check your connection and try again.';
-      setNotification({ visible: true, title: 'Upload failed', message: String(message), iconName: 'error-outline', iconColor: '#DC2626' });
+      setNotification({ visible: true, title: 'Upload failed', message: String(message), iconName: 'error-outline', iconColor: '#DC2626', ...(getUploadRateLimitNotice(error) ?? {}) });
     } finally {
       uploadBusy.current = false;
       setIsUploading(false);

@@ -10,6 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import api from '@/api/axios';
 import { resolveMediaUrl, mediaFilename } from '@/utils/media';
 import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
+import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
 import { useFocusEffect } from '@react-navigation/native';
 import { clearPushToken } from '@/utils/notifications';
 import LoadingModal from '@/components/ui/modals/LoadingModal';
@@ -343,13 +344,14 @@ export default function EmployerProfileScreen() {
       }
     } catch (error: any) {
       setUploadingProfilePicture(false);
-      console.error('Error uploading avatar:', error);
       showAlertModal({
         title: 'Upload Failed',
         message: error.response?.data?.message || 'Something went wrong.',
         iconName: 'error-outline',
         iconColor: '#DC2626',
         iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        ...(getUploadRateLimitNotice(error) ?? {}),
       });
     } finally {
       avatarUploadBusy.current = false;
@@ -447,7 +449,6 @@ export default function EmployerProfileScreen() {
         fetchEmployerProfile();
       }
     } catch (error: any) {
-      console.error('Upload Error:', error.response?.data || error);
       const validationErrors = error.response?.data?.errors;
       let detailedMsg = '';
       if (validationErrors && typeof validationErrors === 'object') {
@@ -459,6 +460,8 @@ export default function EmployerProfileScreen() {
         iconName: 'error-outline',
         iconColor: '#DC2626',
         iconBgColor: 'bg-red-50',
+        primaryButtonText: 'OK',
+        ...(getUploadRateLimitNotice(error) ?? {}),
       });
     } finally {
       setUploadingDoc(false);

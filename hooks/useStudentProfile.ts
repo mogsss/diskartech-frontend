@@ -8,6 +8,7 @@ import { clearPushToken } from '@/utils/notifications';
 import api, { BACKEND_URL } from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
 import { normalizeAiResult } from '@/utils/documentAnalysis';
+import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
 
 type StudentDocumentType = 'student_resume' | 'school_id' | 'coe';
 
@@ -402,6 +403,7 @@ export function useStudentProfile() {
         iconBgColor: 'bg-slate-100',
         primaryButtonText: 'OK',
         onPrimaryPress: () => setAlertModalVisible(false),
+        ...(getUploadRateLimitNotice(error) ?? {}),
       });
     } finally {
       documentUploadBusy.current = false;
@@ -513,6 +515,7 @@ export function useStudentProfile() {
       showAlertModal({
         title: 'Upload Failed', message: String(firstValidation || error.response?.data?.message || 'Unable to upload your profile picture. Please try again.'), iconName: 'error-outline',
         iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
+        ...(getUploadRateLimitNotice(error) ?? {}),
       });
     } finally {
       documentUploadBusy.current = false;

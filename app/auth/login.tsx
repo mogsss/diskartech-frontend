@@ -66,6 +66,26 @@ export default function LoginScreen() {
 
   const dismissKeyboard = () => Keyboard.dismiss();
 
+  const showLoginRateLimit = useCallback((error: any): boolean => {
+    if (error.response?.status !== 429) return false;
+    const retryAfter = Number(error.response?.data?.retry_after ?? error.response?.headers?.['retry-after']);
+    const seconds = Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 3600
+      ? Math.ceil(retryAfter) : 60;
+    setModalConfig({
+      title: 'Please wait before signing in',
+      message: `Too many sign-in attempts. Try again in ${seconds} seconds.`,
+      iconName: 'schedule',
+      iconColor: Colors.primary,
+      iconBgColor: '#FEF2F2',
+      primaryButtonText: 'OK',
+      onPrimaryPress: () => setModalVisible(false),
+      secondaryButtonText: undefined,
+      onSecondaryPress: undefined,
+    });
+    setModalVisible(true);
+    return true;
+  }, []);
+
   const handleLogin = async () => {
     dismissKeyboard();
     setLoading(true);
@@ -96,11 +116,12 @@ export default function LoginScreen() {
         }, 100);
       }
     } catch (error: any) {
-      console.error(error);
       const responseData = error.response?.data;
       const status = error.response?.status;
       setEmailError('');
       setPasswordError('');
+
+      if (showLoginRateLimit(error)) return;
 
       if (responseData) {
         // Kapag ang email ay hindi pa beripikado (Status 403)
@@ -216,9 +237,10 @@ export default function LoginScreen() {
         }, 100);
       }
     } catch (error: any) {
-      console.error('Google login error:', error);
       const responseData = error.response?.data;
       const status = error.response?.status;
+
+      if (showLoginRateLimit(error)) return;
 
       if (status === 403) {
         const token = responseData?.token;
@@ -278,7 +300,7 @@ export default function LoginScreen() {
     } finally {
       setGoogleLoading(false);
     }
-  }, []);
+  }, [showLoginRateLimit]);
 
   React.useEffect(() => {
     if (google !== '1' || automaticGoogleLoginStarted.current) return;
