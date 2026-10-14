@@ -1,3 +1,5 @@
+import { JobQuota, normalizeJobQuota } from './jobQuota';
+
 export type BillingCycle = 'monthly' | 'annually';
 export type SubscriptionPayment = {
   id: string;
@@ -7,7 +9,7 @@ export type SubscriptionPayment = {
   checkout_url: string | null;
 };
 export type EmployerSubscription = {
-  subscription: { plan: 'basic' | 'premium'; expires_at: string | null; test_mode: true; prices: Record<BillingCycle, number> };
+  subscription: { plan: 'basic' | 'premium'; expires_at: string | null; test_mode: true; prices: Record<BillingCycle, number>; job_quota?: JobQuota };
   payment: SubscriptionPayment | null;
 };
 
@@ -27,11 +29,13 @@ export function readEmployerSubscription(value: unknown): EmployerSubscription {
     || !Number.isSafeInteger(subscription.prices?.monthly) || subscription.prices.monthly <= 0
     || !Number.isSafeInteger(subscription.prices?.annually) || subscription.prices.annually <= 0) throw new Error('Subscription details are unavailable. Please try again.');
   const payment = data?.payment;
+  const quota = normalizeJobQuota(subscription.job_quota);
+  if (subscription.job_quota !== undefined && !quota) throw new Error('Job posting limits are unavailable. Please try again.');
   if (payment !== null && (!payment || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(payment.id)
     || !['monthly', 'annually'].includes(payment.billing_cycle) || !['creating', 'pending', 'paid', 'expired'].includes(payment.status)
     || !Number.isSafeInteger(payment.amount) || payment.amount <= 0
     || (payment.checkout_url !== null && !isPayMongoCheckoutUrl(payment.checkout_url)))) throw new Error('Checkout details are unavailable. Please try again.');
-  return { subscription, payment: payment ?? null };
+  return { subscription: quota ? { ...subscription, job_quota: quota } : subscription, payment: payment ?? null };
 }
 
 export function subscriptionError(error: unknown): string {

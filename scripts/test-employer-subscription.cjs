@@ -12,7 +12,7 @@ function load(relative, dependencies = {}) {
   loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, filename);
   return loaded.exports;
 }
-const helpers = load('utils/employerSubscription.ts');
+const helpers = load('utils/employerSubscription.ts', { './jobQuota': load('utils/jobQuota.ts') });
 const id = '11111111-1111-4111-8111-111111111111';
 const basic = { subscription: { plan: 'basic', expires_at: null, test_mode: true, prices: { monthly: 14900, annually: 149000 } }, payment: null };
 const pending = { ...basic, payment: { id, billing_cycle: 'monthly', amount: 14900, status: 'pending', checkout_url: 'https://checkout.paymongo.com/cs_Test' } };

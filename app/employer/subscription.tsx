@@ -3,6 +3,7 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useEmployerSubscription } from '@/hooks/useEmployerSubscription';
 import { BillingCycle } from '@/utils/employerSubscription';
+import { JOB_LIMITS, jobQuotaAvailability, jobQuotaUsage } from '@/utils/jobQuota';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -52,6 +53,10 @@ export default function SubscriptionScreen() {
               </View>
             </View>
             {active && <Text className="text-xs leading-5 mt-3" style={{ color: colors.textSecondary }}>No automatic renewal. Renewing adds time to your current plan.</Text>}
+            {data.subscription.job_quota && <View className="mt-4 pt-3 border-t" style={{ borderColor: colors.border }}>
+              <Text className="text-sm font-semibold" style={{ color: colors.text }}>{jobQuotaUsage(data.subscription.job_quota)}</Text>
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{jobQuotaAvailability(data.subscription.job_quota)}</Text>
+            </View>}
           </> : <View className="flex-row items-center justify-between gap-3">
             <Text className="flex-1 text-sm" style={{ color: colors.textSecondary }}>{busy ? 'Loading subscription…' : 'Subscription details are unavailable.'}</Text>
             {busy ? <ActivityIndicator color={colors.primary} /> : <TouchableOpacity onPress={() => void refresh()} accessibilityRole="button" className="min-h-12 justify-center px-3"><Text className="text-sm font-semibold" style={{ color: accentText }}>Try again</Text></TouchableOpacity>}
@@ -75,7 +80,8 @@ export default function SubscriptionScreen() {
               <Text className="text-base font-semibold" style={{ color: colors.text }}>{plan === 'basic' ? 'Basic' : 'Premium'}</Text>
               <Text className="text-sm font-semibold" style={{ color: accentText }}>{plan === 'basic' ? 'Free' : amount ? `${pesos(amount)} / ${cycle === 'monthly' ? 'month' : 'year'}` : 'Loading price…'}</Text>
             </View>
-            <Text className="text-xs leading-5 mt-2" style={{ color: colors.textSecondary }}>{plan === 'basic' ? 'Use your standard employer account without a paid plan.' : 'Upgrade your account for one month or one year. Renew when you need to.'}</Text>
+            <Text className="text-sm font-medium mt-2" style={{ color: colors.text }}>{plan === 'premium' ? 'Unlimited active job posts' : `Up to ${JOB_LIMITS.basic} active job posts`}</Text>
+            <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{plan === 'basic' ? 'Post up to 3 openings at a time. Closing a post frees a slot.' : 'Post as many openings as you need while your Premium plan is active.'}</Text>
           </TouchableOpacity>;
         })}
 

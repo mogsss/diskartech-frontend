@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import api from '@/api/axios';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { jobQuotaError } from '@/utils/jobQuota';
 
 interface JobActionsBarProps {
   job: any;
@@ -97,7 +98,8 @@ export function JobActionsBar({ job, isActive, onClose, onJobUpdated }: JobActio
         showError('Notice', res.data?.message || 'Unable to update job status at this time.');
       }
     } catch (e: any) {
-      showError('Error', e.response?.data?.message || 'Unable to update job status.');
+      const quotaError = e.response?.status === 422 ? jobQuotaError(e.response?.data) : null;
+      showError(quotaError ? 'Active job limit reached' : 'Error', quotaError || e.response?.data?.message || 'Unable to update job status.');
     } finally {
       setUpdatingStatus(false);
     }

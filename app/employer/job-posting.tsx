@@ -9,10 +9,11 @@ import { AVAILABLE_DAYS, TIME_SLOTS, parseTimeSlots, serializeTimeSlots, toggleT
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { sendAppNotification } from '@/utils/notifications';
 import { getSalaryType, getSalaryUnit, SalaryType } from '@/utils/jobRate';
+import { JobQuota, jobQuotaAvailability, jobQuotaError, jobQuotaMessage, jobQuotaUsage, normalizeJobQuota } from '@/utils/jobQuota';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
   PanResponder,
@@ -58,6 +59,22 @@ export default function JobPostingScreen() {
   });
 
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
+  const [jobQuota, setJobQuota] = useState<JobQuota | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    if (isEditing || isHousehold) return;
+    const controller = new AbortController();
+    api.get('/employer/job-quota', { signal: controller.signal }).then(response => {
+      if (!controller.signal.aborted) setJobQuota(normalizeJobQuota(response.data.job_quota));
+    }).catch(() => { /* The backend still checks every create request. */ });
+    return () => controller.abort();
+  }, [isEditing, isHousehold]));
+
+  const showQuotaNotice = (message: string) => setNotificationConfig({
+    visible: true, title: 'Active job limit reached', message, iconName: 'work-outline',
+    primaryButtonText: 'OK', onPrimaryPress: () => setNotificationConfig(prev => ({ ...prev, visible: false })),
+    secondaryButtonText: 'View plans', onSecondaryPress: () => { setNotificationConfig(prev => ({ ...prev, visible: false })); router.push('/employer/subscription'); },
+  });
 
   const [jobTitle, setJobTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -85,6 +102,7 @@ export default function JobPostingScreen() {
   const skillInputRef = useRef<TextInput>(null);
 
   const [loading, setLoading] = useState(false);
+  const submissionBusy = useRef(false);
 
   // States at PanResponder para sa textarea corner resize grip (katulad ng browser textarea)
   const [descriptionHeight, setDescriptionHeight] = useState(120);
@@ -154,21 +172,21 @@ export default function JobPostingScreen() {
             try {
               const days = typeof j.available_days === 'string' ? JSON.parse(j.available_days) : j.available_days;
               if (Array.isArray(days)) setSelectedDays(days);
-            } catch (e) { }
+            } catch { }
           }
 
           if (j.requirements) {
             try {
               const reqs = typeof j.requirements === 'string' ? JSON.parse(j.requirements) : j.requirements;
               if (Array.isArray(reqs)) setRequirements(reqs);
-            } catch (e) { }
+            } catch { }
           }
 
           if (j.skills) {
             try {
               const sks = typeof j.skills === 'string' ? JSON.parse(j.skills) : j.skills;
               if (Array.isArray(sks)) setSkills(sks);
-            } catch (e) { }
+            } catch { }
           }
         }
       } catch (error) {
@@ -310,6 +328,7 @@ export default function JobPostingScreen() {
   };
 
   const handleSubmit = async () => {
+    if (submissionBusy.current) return;
     if (isVerified === false) {
       setNotificationConfig({
         visible: true,
@@ -330,6 +349,10 @@ export default function JobPostingScreen() {
     }
 
     // Include typed entries even when Add has not been pressed yet.
+    if (!isEditing && !isHousehold && jobQuota && !jobQuota.can_post_job) {
+      showQuotaNotice(jobQuotaMessage(jobQuota));
+      return;
+    }
     const pendingReqs = requirementInput.split(',').map((item) => item.trim()).filter(Boolean);
     const finalRequirements = [...new Set([
       ...requirements, ...pendingReqs,
@@ -379,6 +402,7 @@ export default function JobPostingScreen() {
       return;
     }
 
+    submissionBusy.current = true;
     setLoading(true);
 
     const finalCategory =
@@ -498,6 +522,8 @@ export default function JobPostingScreen() {
             },
           });
         } else {
+          const quotaError = jobQuotaError(data);
+          if (response.status === 422 && quotaError) { showQuotaNotice(quotaError); return; }
           if (
             response.status === 403 ||
             data.needs_verification ||
@@ -546,6 +572,7 @@ export default function JobPostingScreen() {
         onPrimaryPress: () => setNotificationConfig((prev) => ({ ...prev, visible: false })),
       });
     } finally {
+      submissionBusy.current = false;
       setLoading(false);
     }
   };
@@ -590,6 +617,11 @@ export default function JobPostingScreen() {
             <MaterialIcons name="info-outline" size={14} color={colors.textSecondary} />
             <Text className="text-xs" style={{ color: colors.textSecondary }}>Fields marked * are required</Text>
           </View>
+
+          {!isEditing && !isHousehold && jobQuota && <View className="rounded-2xl border p-4 mb-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <Text className="text-sm font-semibold" style={{ color: colors.text }}>{jobQuotaUsage(jobQuota)}</Text>
+            <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{jobQuotaAvailability(jobQuota)}</Text>
+          </View>}
 
           <JobFormSection number="01" title="Job details" subtitle="Tell applicants about the role." icon="work-outline">
             <InputField

@@ -10,6 +10,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryUnit } from '@/utils/jobRate';
+import { JobQuota, jobQuotaAvailability, jobQuotaMessage, jobQuotaUsage, normalizeJobQuota } from '@/utils/jobQuota';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -71,6 +72,7 @@ export default function EmployerJobsScreen() {
   const [selectedJob, setSelectedJob] = useState<any | null>(null);
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
+  const [jobQuota, setJobQuota] = useState<JobQuota | null>(null);
   const [isDrawerVisible, setDrawerVisible] = useState(false);
   const [userProfile, setUserProfile] = useState<{
     name: string;
@@ -133,6 +135,7 @@ export default function EmployerJobsScreen() {
       if (response.data && response.data.status === 'success') {
         const fetched = response.data.jobs || [];
         setJobs(fetched);
+        setJobQuota(normalizeJobQuota(response.data.job_quota));
       }
     } catch (error) {
       console.error('Error fetching employer jobs:', error);
@@ -196,6 +199,16 @@ export default function EmployerJobsScreen() {
       });
       return;
     }
+    if (!isHousehold && jobQuota && !jobQuota.can_post_job) {
+      setNotificationConfig({
+        visible: true, title: 'Active job limit reached', message: jobQuotaMessage(jobQuota), iconName: 'work-outline',
+        primaryButtonText: jobQuota.plan === 'basic' ? 'View Premium' : 'OK',
+        onPrimaryPress: () => { setNotificationConfig(prev => ({ ...prev, visible: false })); if (jobQuota.plan === 'basic') router.push('/employer/subscription'); },
+        secondaryButtonText: jobQuota.plan === 'basic' ? 'Cancel' : undefined,
+        onSecondaryPress: jobQuota.plan === 'basic' ? () => setNotificationConfig(prev => ({ ...prev, visible: false })) : undefined,
+      });
+      return;
+    }
     router.push(isHousehold
       ? { pathname: '/employer/job-posting', params: { type: 'household' } }
       : '/employer/job-posting'
@@ -237,6 +250,14 @@ export default function EmployerJobsScreen() {
         <Text className="text-sm leading-5 mb-5" style={{ color: colors.textSecondary }}>
           Keep track of your openings and applicants.
         </Text>
+
+        {!isHousehold && jobQuota && <View className="rounded-2xl border p-4 mb-4 flex-row items-center gap-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold" style={{ color: colors.text }}>{jobQuotaUsage(jobQuota)}</Text>
+            <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{jobQuota.plan === 'premium' ? 'Premium plan' : 'Basic plan'} · {jobQuotaAvailability(jobQuota)}</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/employer/subscription')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View subscription plans" className="min-h-12 px-3 rounded-xl justify-center" style={{ backgroundColor: accentBackground }}><Text className="text-xs font-semibold" style={{ color: accentColor }}>View plans</Text></TouchableOpacity>
+        </View>}
 
         <View className="flex-row gap-1 p-1 rounded-2xl border" style={{ backgroundColor: mutedBackground, borderColor: colors.border }}>
           {filterOptions.map((option) => {
