@@ -644,16 +644,39 @@ export default function EditProfileScreen() {
             </>
           )}
         </ScrollView>
-        {role !== 'student' && <View className="border-t" style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }}>
-          <View className="w-full max-w-2xl self-center px-5 pt-3 flex-row items-center gap-3">
-            <TouchableOpacity onPress={() => router.back()} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Cancel profile changes" accessibilityState={{ disabled: saving }} className="min-h-14 rounded-2xl border px-4 items-center justify-center" style={{ borderColor: colors.border, opacity: saving ? 0.5 : 1 }}>
-              <Text className="text-sm font-semibold" style={{ color: colors.text }}>Cancel</Text>
-            </TouchableOpacity>
-            <View className="flex-1 min-w-0">
-              <PrimaryButton title={saving ? 'Saving...' : 'Save changes'} onPress={handleSave} disabled={saving} loading={saving} size="medium" style={{ paddingHorizontal: 12 }} icon={<MaterialIcons name="check" size={18} color="#FFFFFF" />} />
+        {role !== 'student' && (
+          <View className="border-t" style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }}>
+            <View className="w-full max-w-2xl self-center px-5 pt-3 flex-row items-stretch gap-3">
+              <TouchableOpacity
+                onPress={() => router.back()}
+                disabled={saving}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel profile changes"
+                accessibilityState={{ disabled: saving }}
+                className="rounded-xl px-4 items-center justify-center"
+                style={{ minHeight: 52, minWidth: 84, opacity: saving ? 0.5 : 1 }}
+              >
+                <Text className="text-sm font-semibold leading-5" style={{ color: colors.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSave}
+                disabled={saving}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={saving ? 'Saving profile changes' : 'Save profile changes'}
+                accessibilityState={{ disabled: saving, busy: saving }}
+                className="flex-1 min-w-0 rounded-xl px-4 py-3 flex-row items-center justify-center gap-2"
+                style={{ minHeight: 52, backgroundColor: colors.primary, opacity: saving ? 0.65 : 1 }}
+              >
+                {saving && <ActivityIndicator size="small" color="#FFFFFF" />}
+                <Text className="text-sm font-semibold leading-5 text-center" style={{ color: '#FFFFFF', flexShrink: 1 }}>
+                  {saving ? 'Saving…' : 'Save changes'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </View>}
+        )}
       </KeyboardAvoidingView>
 
       {/* Location Picker Modal */}

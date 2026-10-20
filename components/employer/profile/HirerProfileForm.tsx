@@ -16,7 +16,7 @@ interface HirerProfileFormProps {
 
 function ProfileField({ label, required, ...input }: TextInputProps & { label: string; required?: boolean }) {
   const { colors, isDark } = useDarkMode();
-  const accentText = isDark ? '#F87171' : colors.primary;
+  const accentText = isDark ? colors.accent : colors.primary;
   const [focused, setFocused] = useState(false);
   return (
     <View className="gap-2">
@@ -50,11 +50,11 @@ function FormSection({ title, description, icon, children }: {
   children: React.ReactNode;
 }) {
   const { colors, isDark } = useDarkMode();
-  const accentText = isDark ? '#F87171' : colors.primary;
+  const accentText = isDark ? colors.accent : colors.primary;
   return (
     <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
       <View className="flex-row items-start gap-3 px-5 py-4 border-b" style={{ borderColor: colors.border }}>
-        <View className="h-9 w-9 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2' }}>
+        <View className="h-9 w-9 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FFF1F2' }}>
           <MaterialIcons name={icon} size={19} color={accentText} />
         </View>
         <View className="flex-1 min-w-0">
@@ -69,9 +69,9 @@ function FormSection({ title, description, icon, children }: {
 
 export default function HirerProfileForm({ role, values, saving, onChange, onChooseBusinessType, onChooseLocation }: HirerProfileFormProps) {
   const { colors, isDark } = useDarkMode();
-  const accentText = isDark ? '#F87171' : colors.primary;
+  const accentText = isDark ? colors.accent : colors.primary;
   const isBusiness = role === 'employer';
-  const accentSurface = isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2';
+  const accentSurface = isDark ? 'rgba(220,38,38,0.12)' : '#FFF1F2';
   const representativeName = [values.firstName, values.middleName, values.lastName].map(part => part.trim()).filter(Boolean).join(' ');
   const displayName = (isBusiness ? values.companyName.trim() : representativeName) || (isBusiness ? 'Your business' : 'Your household');
 
@@ -97,7 +97,7 @@ export default function HirerProfileForm({ role, values, saving, onChange, onCho
             <Text className="text-xs font-semibold leading-5" style={{ color: colors.text }}>Business type</Text>
             <TouchableOpacity onPress={onChooseBusinessType} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Select business type" accessibilityState={{ disabled: saving }} className="min-h-14 flex-row items-center gap-3 rounded-xl border px-4 py-3" style={{ backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, opacity: saving ? 0.65 : 1 }}>
               <Text className="flex-1 text-sm leading-6" style={{ color: values.businessType ? colors.text : colors.textSecondary }}>{values.businessType || 'Select business type'}</Text>
-              <MaterialIcons name="expand-more" size={22} color={colors.textSecondary} />
+              <MaterialIcons name="expand-more" size={22} color={accentText} />
             </TouchableOpacity>
           </View>
         </FormSection>
@@ -120,7 +120,7 @@ export default function HirerProfileForm({ role, values, saving, onChange, onCho
             </View>
           </View>
           <View className="min-h-14 flex-row items-center gap-3 rounded-xl border px-4 py-3" style={{ backgroundColor: isDark ? colors.background : '#F1F5F9', borderColor: colors.border }}>
-            <MaterialIcons name="mail-outline" size={18} color={colors.textSecondary} />
+            <MaterialIcons name="mail-outline" size={18} color={accentText} />
             <Text selectable className="flex-1 text-sm leading-6" style={{ color: colors.textSecondary }}>{values.email || 'No email registered'}</Text>
           </View>
         </View>
