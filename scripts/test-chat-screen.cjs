@@ -106,6 +106,22 @@ test('failed message sends preserve caption and attachment; retry keeps the same
   assert.equal(app.input().value, ''); assert.equal(app.files.draft, null);
 });
 
+test('file validation messages reach the user without being replaced by the generic send error', async () => {
+  const app = harness(); await ready(app);
+  app.button('Add attachment').onPress(); app.button('Choose photo').onPress(); await tick();
+  for (const message of [
+    'Choose a JPG, PNG, WEBP, GIF, PDF, or DOCX file no larger than 10 MB.',
+    'Choose a valid image no larger than 12000 pixels on either side.',
+    'The file failed to upload.',
+  ]) {
+    app.files.prepare = async () => { throw new helpers.ChatAttachmentUploadError(message); };
+    app.button('Send message').onPress(); await tick();
+    assert.equal(app.notice().message, message);
+    assert.ok(app.files.draft);
+    assert.equal(app.sends.length, 0);
+  }
+});
+
 test('rapid send taps submit once and keep attachment removal disabled while sending', async () => {
   const app = harness(); await ready(app);
   app.button('Add attachment').onPress(); app.button('Choose photo').onPress(); await tick();

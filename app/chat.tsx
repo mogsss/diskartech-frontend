@@ -45,7 +45,7 @@ import { setActiveChatScreen } from '@/utils/notifications';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import ChatAttachmentBubble from '@/components/chat/ChatAttachmentBubble';
 import { useChatAttachments } from '@/hooks/useChatAttachments';
-import { formatAttachmentSize, normalizeChatAttachment, sanitizeChatText } from '@/utils/chatAttachments';
+import { ChatAttachmentUploadError, formatAttachmentSize, normalizeChatAttachment, sanitizeChatText } from '@/utils/chatAttachments';
 import type { ChatAttachment } from '@/types/chat';
 import { randomUUID } from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -365,7 +365,7 @@ export default function ChatScreen() {
       setNotification({
         visible: true,
         title: 'Error',
-        message: error instanceof Error && /attachment|uploads|conversation/i.test(error.message) ? error.message : 'Failed to send message. Your draft is saved here. Please try again.',
+        message: error instanceof ChatAttachmentUploadError || (error instanceof Error && /attachment|uploads|conversation/i.test(error.message)) ? error.message : 'Failed to send message. Your draft is saved here. Please try again.',
         iconName: 'error-outline',
         iconColor: '#DC2626',
         iconBgColor: 'bg-red-50',

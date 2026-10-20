@@ -88,7 +88,7 @@ test('upload tracks progress, prevents simultaneous selections/uploads, and reus
 test('failed uploads preserve the selected attachment and allow a later retry', async () => {
   const app = hookHarness(); await app.render().pick('photo');
   app.api.post = async () => { throw { response: { status: 422, data: { errors: { file: ['The file is too large.'] } } } }; };
-  await assert.rejects(app.render().prepare(), /too large/);
+  await assert.rejects(app.render().prepare(), error => error instanceof helpers.ChatAttachmentUploadError && /too large/.test(error.message));
   assert.equal(app.render().draft.filename, 'photo.png'); assert.equal(app.render().uploading, false);
   app.api.post = async () => ({ data: { attachment } });
   assert.deepEqual(await app.render().prepare(), attachment); assert.equal(app.uploads(), 2);

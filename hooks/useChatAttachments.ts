@@ -1,6 +1,6 @@
 import api from '@/api/axios';
 import type { ChatAttachment } from '@/types/chat';
-import { CHAT_FILE_TYPES, ChatAttachmentDraft, createAttachmentDraft, normalizeChatAttachment } from '@/utils/chatAttachments';
+import { CHAT_FILE_TYPES, ChatAttachmentDraft, ChatAttachmentUploadError, createAttachmentDraft, normalizeChatAttachment } from '@/utils/chatAttachments';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
@@ -60,7 +60,7 @@ export function useChatAttachments(chatId: string, onError: (message: string) =>
       return attachment;
     } catch (error: any) {
       const fieldError = error.response?.data?.errors?.file?.[0];
-      throw new Error(typeof fieldError === 'string' ? fieldError : error.response?.status === 429
+      throw new ChatAttachmentUploadError(error.response?.status === 422 && typeof fieldError === 'string' ? fieldError : error.response?.status === 429
         ? 'Too many uploads. Please wait before trying again.'
         : error.response?.status === 403 ? 'You cannot attach a file to this conversation.'
         : error.response?.status === 404 ? 'File attachments are unavailable right now. Please try again later.'

@@ -2,6 +2,11 @@ import type { ChatAttachment } from '@/types/chat';
 
 export const MAX_CHAT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const CHAT_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+/** Only attachment errors with user-facing, sanitized messages reach the chat modal. */
+export class ChatAttachmentUploadError extends Error {
+  name = 'ChatAttachmentUploadError';
+}
+
 const extensions: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf', docx: CHAT_FILE_TYPES[5] };
 
 export type ChatAttachmentDraft = {
