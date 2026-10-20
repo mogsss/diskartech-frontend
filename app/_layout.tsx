@@ -9,6 +9,7 @@ configureReanimatedLogger({
 });
 
 import { Colors } from '@/constants/colors';
+import StartupConsentGate, { useStartupConsent } from '@/components/common/StartupConsentGate';
 import { getLoggedInUserId } from '@/utils/chat';
 import {
   registerAndSyncPushToken,
@@ -88,8 +89,23 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
+  return (
+    <DarkModeProvider>
+      <RootLayoutNav />
+    </DarkModeProvider>
+  );
+}
+
+function AppNotificationListeners() {
+  const accepted = useStartupConsent();
+
   useEffect(() => {
-    // 1. Humingi ng permiso sa phone at i-configure ang Android notification channel
+    if (!accepted) return;
+    // Ask for OS notification permission only after the startup agreement.
     registerForPushNotificationsAsync();
 
     // 2. Kapag pinindot ng user ang pop-up notification banner, didiretso sa kaukulang screen
@@ -152,17 +168,9 @@ export default function RootLayout() {
         unsubscribeApps();
       }
     };
-  }, []);
+  }, [accepted]);
 
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
-  return (
-    <DarkModeProvider>
-      <RootLayoutNav />
-    </DarkModeProvider>
-  );
+  return null;
 }
 
 function RootLayoutNav() {
@@ -170,6 +178,8 @@ function RootLayoutNav() {
 
   return (
     <SafeAreaProvider>
+      <StartupConsentGate>
+      <AppNotificationListeners />
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={stackScreenOptions}>
         {/* Splash & onboarding */}
@@ -211,6 +221,7 @@ function RootLayoutNav() {
         <Stack.Screen name="help-center" />
         <Stack.Screen name="about-diskartech" />
       </Stack>
+      </StartupConsentGate>
     </SafeAreaProvider>
   );
 }
