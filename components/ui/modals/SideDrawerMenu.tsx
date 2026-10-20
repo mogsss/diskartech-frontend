@@ -21,7 +21,7 @@ import Avatar from '@/components/ui/Avatar';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { Colors } from '@/constants/colors';
-import { STARTUP_CONSENT_KEY } from '@/utils/startupConsent';
+import { clearStorageForLogout } from '@/utils/logoutStorage';
 
 const normalizeRoute = (route: string) =>
   route.split(/[?#]/)[0].replace(/\/\([^/]+\)/g, '').replace(/\/+$/, '') || '/';
@@ -136,8 +136,7 @@ export default function SideDrawerMenu({
         onLogout();
       } else {
         try {
-          const keys = await AsyncStorage.getAllKeys();
-          await AsyncStorage.multiRemove(keys.filter((key) => key !== STARTUP_CONSENT_KEY));
+          await clearStorageForLogout(AsyncStorage);
         } catch (error) {
           console.error('Error clearing storage on logout:', error);
         }

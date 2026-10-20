@@ -54,12 +54,42 @@ test('a change to either policy version requires a new agreement', async () => {
   assert.equal(await hasStartupConsent(device, { ...versions, privacy: 'new privacy' }), false);
 });
 
-test('read failures keep the gate closed; failed saves never count as agreement', async () => {
+test('read failures are reported instead of pretending the user has not agreed', async () => {
   const unavailable = {
     async getItem() { throw new Error('Storage unavailable'); },
     async setItem() { throw new Error('Storage unavailable'); },
   };
-  assert.equal(await hasStartupConsent(unavailable, versions), false);
+  await assert.rejects(hasStartupConsent(unavailable, versions), /Storage unavailable/);
   await assert.rejects(saveStartupConsent(unavailable, versions, true));
-  assert.equal(await hasStartupConsent(unavailable, versions), false);
+  await assert.rejects(hasStartupConsent(unavailable, versions), /Storage unavailable/);
+});
+
+test('a save is not accepted unless the agreement can be read back', async () => {
+  await assert.rejects(saveStartupConsent({
+    async getItem() { return null; },
+    async setItem() {},
+  }, versions, true), /could not be verified/);
+});
+
+test('logging out clears account data and preserves agreement for the next launch', async () => {
+  const helperFile = path.join(__dirname, '../utils/logoutStorage.ts');
+  const helper = new Module(helperFile, module);
+  helper.require = name => {
+    assert.equal(name, '@/utils/startupConsent');
+    return loaded.exports;
+  };
+  helper._compile(ts.transpileModule(fs.readFileSync(helperFile, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText, helperFile);
+  const values = new Map([['userToken', 'session'], ['userData', '{}'], ['userProfile', '{}']]);
+  const device = {
+    async getItem(key) { return values.get(key) ?? null; },
+    async setItem(key, value) { values.set(key, value); },
+    async getAllKeys() { return [...values.keys()]; },
+    async multiRemove(keys) { keys.forEach(key => values.delete(key)); },
+  };
+  await saveStartupConsent(device, versions, true);
+  await helper.exports.clearStorageForLogout(device);
+  assert.deepEqual([...values.keys()], [STARTUP_CONSENT_KEY]);
+  assert.equal(await hasStartupConsent(device, versions), true);
 });

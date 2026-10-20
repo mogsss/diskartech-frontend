@@ -20,7 +20,8 @@ export default function StartupConsentGate({ children }: { children: React.React
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const [status, setStatus] = useState<'loading' | 'required' | 'accepted'>('loading');
+  const [status, setStatus] = useState<'loading' | 'load-error' | 'required' | 'accepted'>('loading');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [checked, setChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +35,11 @@ export default function StartupConsentGate({ children }: { children: React.React
     let cancelled = false;
     void hasStartupConsent(AsyncStorage, POLICY_VERSIONS).then((saved) => {
       if (!cancelled) setStatus(saved ? 'accepted' : 'required');
+    }).catch(() => {
+      if (!cancelled) setStatus('load-error');
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [loadAttempt]);
 
   const agree = useCallback(async () => {
     if (!checked || saveLock.current || status !== 'required') return;
@@ -77,6 +80,14 @@ export default function StartupConsentGate({ children }: { children: React.React
               <View className="items-center p-8 gap-3">
                 <ActivityIndicator color={accent} />
                 <Text style={{ color: colors.textSecondary }}>Loading your preferences...</Text>
+              </View>
+            ) : status === 'load-error' ? (
+              <View className="p-6 gap-4">
+                <Text accessibilityRole="header" className="text-xl font-bold" style={{ color: colors.text }}>Could not load your agreement</Text>
+                <Text accessibilityRole="alert" className="text-sm leading-6" style={{ color: colors.textSecondary }}>We could not read the saved agreement on this device. Try again to continue.</Text>
+                <TouchableOpacity onPress={() => { setStatus('loading'); setLoadAttempt((value) => value + 1); }} accessibilityRole="button" className="min-h-12 items-center justify-center rounded-xl px-4 py-3.5" style={{ backgroundColor: colors.primary }}>
+                  <Text className="text-base font-bold text-white">Try again</Text>
+                </TouchableOpacity>
               </View>
             ) : policy ? (
               <>

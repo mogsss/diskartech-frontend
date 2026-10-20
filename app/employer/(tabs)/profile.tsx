@@ -19,6 +19,7 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import DrawerMenuButton from '@/components/ui/DrawerMenuButton';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { clearStorageForLogout } from '@/utils/logoutStorage';
 
 const getFilename = (path?: string | null) => {
   if (!path || typeof path !== 'string') return null;
@@ -511,7 +512,7 @@ export default function EmployerProfileScreen() {
         const user = JSON.parse(storedUser);
         if (user?.id) await clearPushToken(user.id);
       }
-      await AsyncStorage.clear();
+      await clearStorageForLogout(AsyncStorage);
     } catch (error) {
       console.error('Error clearing storage on logout:', error);
     }

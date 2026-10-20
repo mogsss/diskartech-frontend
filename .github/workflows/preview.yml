@@ -1,0 +1,104 @@
+name: Preview App
+
+on:
+  push:
+    branches:
+      - preview
+  workflow_dispatch:
+    inputs:
+      force_native_build:
+        description: "Create a new Android APK (required after native package/config changes)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Serialize preview releases so two publishes do not race for the same channel.
+# A queued EAS build continues independently after this GitHub job finishes.
+concurrency:
+  group: diskartech-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: Android preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: bash
+        # The frontend repository already has package.json at its root.
+        working-directory: .
+
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Check Expo authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [[ -z "$EXPO_TOKEN" ]]; then
+            echo "::error::Add EXPO_TOKEN to this repository's Actions secrets. See docs/preview-workflow.md."
+            exit 1
+          fi
+
+      - name: Check preview configuration
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const app = JSON.parse(fs.readFileSync('app.json', 'utf8')).expo;
+          const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+          const missing = [];
+          if (!pkg.dependencies?.['expo-updates']) missing.push('expo-updates dependency');
+          const projectId = app.extra?.eas?.projectId;
+          if (!projectId || app.updates?.url !== `https://u.expo.dev/${projectId}`) missing.push('updates.url for this EAS project');
+          if (!app.runtimeVersion && !app.android?.runtimeVersion) missing.push('runtimeVersion');
+          if (app.updates?.enabled === false) missing.push('updates.enabled must not be false');
+          if (eas.build?.preview?.channel !== 'preview') missing.push('preview build channel');
+          if (eas.build?.preview?.environment !== 'preview') missing.push('preview build environment');
+          if (missing.length) {
+            console.error(`::error::EAS Update setup is incomplete: ${missing.join(', ')}. Follow docs/preview-workflow.md, then create and install an update-enabled preview APK.`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Manual option: queue a new installable APK using existing EAS credentials.
+      - name: Build Android APK
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.force_native_build == true }}
+        run: |
+          eas build --platform android --profile preview --non-interactive --freeze-credentials --no-wait --message "Group testing preview ($GITHUB_SHA)"
+          echo "### Android preview build queued" >> "$GITHUB_STEP_SUMMARY"
+          echo "Open the Expo build link in this step's logs for status and the APK download when it finishes." >> "$GITHUB_STEP_SUMMARY"
+
+      # Push / default manual option: publish JS and assets to compatible builds.
+      - name: Publish preview update
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.force_native_build == false) }}
+        run: |
+          eas update --channel preview --environment preview --platform android --message "Preview update ($GITHUB_SHA)" --non-interactive
+          echo "### Android preview update published" >> "$GITHUB_STEP_SUMMARY"
+          echo "Compatible update-enabled preview builds can download this update on their next launch." >> "$GITHUB_STEP_SUMMARY"
