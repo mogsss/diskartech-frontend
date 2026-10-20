@@ -214,8 +214,8 @@ export default function SharedDashboardScreen() {
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center px-6 pt-2 pb-3 flex-row items-center gap-3">
         <DrawerMenuButton onPress={() => setDrawerVisible(true)} />
-        <Text className="flex-1 text-xl font-bold tracking-tight" style={{ color: colors.text }}>DiskarTech<Text style={{ color: colors.primary }}>.</Text></Text>
-        <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <Text className="flex-1 text-xl font-bold tracking-tight" style={{ color: colors.text }}>DiskarTechs5f5tf5t<Text style={{ color: colors.primary }}>.</Text></Text>
+        <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 items-center justify-center">
           <MaterialIcons name="notifications-none" size={23} color={colors.text} />
           {hasUnreadNotifs && <View className="absolute top-2 right-2 w-2 h-2 rounded-full border" style={{ backgroundColor: colors.primary, borderColor: colors.surface }} />}
         </TouchableOpacity>
