@@ -59,4 +59,10 @@ For group testing, install the compatible APK first. With the default update beh
 
 GitHub Actions publishes the checked-out Git commit. Local edits and untracked files on your laptop are not included unless committed and pushed.
 
+## Published updates do not appear
+
+Check that the installed APK has EAS Update enabled, uses channel `preview`, and has the same runtime version as the published update. A successful publish alone does not establish native compatibility.
+
+The repository pins `.gitignore` checkout line endings to CRLF in `.gitattributes`. Expo's fingerprint includes that file's bytes: Windows CRLF and Linux LF previously produced different runtimes despite identical native dependencies. This narrow checkout rule matches the existing update-enabled preview APK without overriding its runtime or excluding native files from compatibility checks. Keep the rule when building or publishing from another checkout. Changing the ignore patterns can still change the fingerprint and require a new APK.
+
 References: [Expo GitHub Actions](https://docs.expo.dev/eas-update/github-actions/), [EAS Update setup](https://docs.expo.dev/eas-update/getting-started/), [runtime compatibility](https://docs.expo.dev/eas-update/runtime-versions/).
