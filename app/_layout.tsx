@@ -10,6 +10,7 @@ configureReanimatedLogger({
 
 import { Colors } from '@/constants/colors';
 import StartupConsentGate, { useStartupConsent } from '@/components/common/StartupConsentGate';
+import OfflineBanner from '@/components/common/OfflineBanner';
 import { getLoggedInUserId } from '@/utils/chat';
 import {
   registerAndSyncPushToken,
@@ -181,6 +182,7 @@ function RootLayoutNav() {
       <StartupConsentGate>
       <AppNotificationListeners />
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <OfflineBanner>
       <Stack screenOptions={stackScreenOptions}>
         {/* Splash & onboarding */}
         <Stack.Screen name="index" />
@@ -223,6 +225,7 @@ function RootLayoutNav() {
         <Stack.Screen name="help-center" />
         <Stack.Screen name="about-diskartech" />
       </Stack>
+      </OfflineBanner>
       </StartupConsentGate>
     </SafeAreaProvider>
   );

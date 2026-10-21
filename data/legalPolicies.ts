@@ -14,7 +14,7 @@ export interface PolicyDocument {
 export const TERMS_AND_CONDITIONS: PolicyDocument = {
   title: 'Terms and Conditions',
   introduction: 'Please read these terms when using DiskarTech to find work, post jobs, and manage employment activities.',
-  updated: 'October 10, 2026',
+  updated: 'October 21, 2026',
   sections: [
     {
       title: 'About DiskarTech',
@@ -34,7 +34,23 @@ export const TERMS_AND_CONDITIONS: PolicyDocument = {
     },
     {
       title: 'Contracts, schedules, and compensation',
-      paragraphs: ['Review the employment contract, including the final rate, work days, time slots, dates, and other conditions, before accepting it. Contract details may differ from the original job post when the hirer changes an offer.', 'Confirm payment arrangements with the hirer before starting work. Hirers are responsible for the agreed compensation and appropriate working conditions. An advertised rate or an earnings summary is not proof that payment has been received.', 'Report concerns about unpaid or underpaid work, unsafe conditions, or misleading offers through the Help Center.'],
+      paragraphs: ['Review the employment contract, including the final rate, work days, time slots, dates, and other conditions, before accepting it. Contract details may differ from the original job post when the hirer changes an offer.', 'Confirm the amount, payment dates, payment method, and any lawful deductions with the hirer before starting work. Hirers are responsible for the agreed compensation and appropriate working conditions.', 'Report concerns about unpaid or underpaid work, unsafe conditions, or misleading offers through the Help Center.'],
+    },
+    {
+      title: 'Salary payments outside DiskarTech',
+      paragraphs: [
+        'Salary and other work compensation are paid directly by the hirer to the student outside DiskarTech, using the lawful payment method agreed by the parties. DiskarTech does not collect, hold, transfer, or release salary payments and does not provide payroll or salary escrow services.',
+        'Job rates, contract amounts, and earnings summaries shown in the app are records or estimates, not confirmation that payment was made or received. Keep your own payment records and receipts.',
+        'Payments for a DiskarTech Pro subscription are separate from salary payments. Buying a subscription does not pay a student\'s wages.',
+      ],
+    },
+    {
+      title: 'Mandatory benefits and legal obligations',
+      paragraphs: [
+        'Employers and household hirers must comply with applicable Philippine labor and social protection requirements. Where required by law, they are responsible for registration, reporting, and remittance of SSS, PhilHealth, and Pag-IBIG contributions and for providing other mandatory employment benefits, including any required employer share.',
+        'DiskarTech does not calculate, deduct, or remit these contributions or administer statutory benefits. These limits on the app\'s features do not remove or waive rights and obligations under applicable law. Coverage depends on the actual work arrangement and applicable legal requirements; describing work as student, part-time, temporary, or a quick errand does not by itself establish an exemption.',
+        'For questions about coverage or employment rights, contact the relevant agency, such as DOLE, SSS, PhilHealth, or Pag-IBIG. Reporting a concern in DiskarTech does not replace the appropriate government complaint or assistance process.',
+      ],
     },
     {
       title: 'Safe and respectful use',
