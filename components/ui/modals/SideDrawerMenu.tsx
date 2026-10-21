@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Avatar from '@/components/ui/Avatar';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { Colors } from '@/constants/colors';
 import { clearStorageForLogout } from '@/utils/logoutStorage';
 
@@ -53,6 +54,7 @@ export default function SideDrawerMenu({
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleDarkMode } = useDarkMode();
+  const { showToast } = useToast();
 
   const [modalVisible, setModalVisible] = useState(visible);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
@@ -137,6 +139,7 @@ export default function SideDrawerMenu({
       } else {
         try {
           await clearStorageForLogout(AsyncStorage);
+          showToast({ type: 'success', title: 'Logged out', message: 'You have been logged out successfully.' });
         } catch (error) {
           console.error('Error clearing storage on logout:', error);
         }

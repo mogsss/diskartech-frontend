@@ -242,15 +242,15 @@ function toastViewFixture({ isDark = false, type = 'success', reducedMotion = fa
   };
 }
 
-test('light and dark toasts expose readable announcements and a separate dismiss button', () => {
+test('light and dark toasts expose readable announcements and an accessible dismiss action', () => {
   for (const isDark of [false, true]) for (const type of ['success', 'error', 'warning', 'info']) {
     const app = toastViewFixture({ isDark, type });
     const { tree } = app;
     assert.equal(tree.props.pointerEvents, 'box-none');
     const announcement = find(tree, node => node.props?.accessibilityRole === 'alert');
     assert.match(announcement.props.accessibilityLabel, /Your changes were saved/);
-    const button = find(tree, node => node.props?.accessibilityLabel === 'Dismiss notification');
-    button.props.onPress();
+    assert.equal(announcement.props.accessibilityActions[0].name, 'dismiss');
+    announcement.props.onAccessibilityAction({ nativeEvent: { actionName: 'dismiss' } });
     assert.equal(app.dismissals.length, 0, 'the close animation finishes before dismissal');
     app.complete();
     assert.deepEqual(app.dismissals, [7]);
@@ -262,7 +262,7 @@ test('swiping left, right or up slides the toast away and dismisses it exactly o
     const app = toastViewFixture();
     assert.equal(app.swipe(gesture), true);
     assert.equal(app.dismissals.length, 0);
-    find(app.tree, node => node.props?.accessibilityLabel === 'Dismiss notification').props.onPress();
+    find(app.tree, node => node.props?.accessibilityRole === 'alert').props.onAccessibilityEscape();
     app.complete();
     assert.deepEqual(app.dismissals, [7]);
     assert.ok(app.animations.some(animation => Math.abs(animation.toValue) >= 100));

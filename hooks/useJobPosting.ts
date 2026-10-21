@@ -1,5 +1,6 @@
 import api from '@/api/axios';
 import type NotificationModal from '@/components/ui/modals/NotificationModal';
+import { useToast } from '@/hooks/useToast';
 import { CATEGORY_OPTIONS } from '@/data/jobCategories';
 import { parseTimeSlots, serializeTimeSlots } from '@/data/jobSchedule';
 import { ScheduleDraft, ScheduleSlot, scheduleDraft, scheduleError } from '@/utils/weeklySchedule';
@@ -17,6 +18,7 @@ interface JobPostingOptions {
 }
 
 export function useJobPosting({ jobId, type }: JobPostingOptions) {
+  const { showToast } = useToast();
   const isEditing = Boolean(jobId);
   const isHousehold = type === 'household';
 
@@ -51,7 +53,7 @@ export function useJobPosting({ jobId, type }: JobPostingOptions) {
   const [salaryType, setSalaryType] = useState<SalaryType>('day');
 
   // Saved category values are shared by the details fields and submission.
-  const [selectedCategory, setSelectedCategory] = useState('General');
+  const [selectedCategory, setSelectedCategory] = useState(isHousehold && !isEditing ? 'Other' : 'General');
   const [customCategory, setCustomCategory] = useState('');
 
   // New postings start without a schedule; edit mode loads the saved selections.
@@ -360,19 +362,8 @@ export function useJobPosting({ jobId, type }: JobPostingOptions) {
         });
 
         if (response.data && response.data.status === 'success') {
-          setNotificationConfig({
-            visible: true,
-            title: 'Job Updated',
-            message: 'Job opening details have been updated successfully!',
-            iconName: 'check-circle',
-            iconColor: '#16A34A',
-            iconBgColor: 'bg-emerald-50',
-            primaryButtonText: 'Done',
-            onPrimaryPress: () => {
-              setNotificationConfig((prev) => ({ ...prev, visible: false }));
-              router.back();
-            },
-          });
+          showToast({ type: 'success', title: 'Job updated', message: 'Your job details have been saved successfully.' });
+          router.back();
         } else {
           setNotificationConfig({
             visible: true,
@@ -438,24 +429,8 @@ export function useJobPosting({ jobId, type }: JobPostingOptions) {
             console.warn('Error broadcasting new job notifications:', notifErr);
           }
 
-          const matchedCount = data.matched_students_count || 0;
-          const matchMsg = matchedCount > 0
-            ? `Your job has been successfully posted`
-            : 'Your job has been successfully posted!';
-
-          setNotificationConfig({
-            visible: true,
-            title: 'Job Posted!',
-            message: matchMsg,
-            iconName: 'check-circle',
-            iconColor: '#16A34A',
-            iconBgColor: 'bg-emerald-50',
-            primaryButtonText: 'Ok',
-            onPrimaryPress: () => {
-              setNotificationConfig((prev) => ({ ...prev, visible: false }));
-              router.back();
-            },
-          });
+          showToast({ type: 'success', title: 'Job posted', message: 'Your job has been posted successfully.' });
+          router.back();
         } else {
           const quotaError = jobQuotaError(data);
           if (response.status === 422 && quotaError) { showQuotaNotice(quotaError); return; }

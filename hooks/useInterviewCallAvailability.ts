@@ -1,14 +1,15 @@
 import api from '@/api/axios';
-import { canEditInterview, canJoinInterview, interviewAvailabilityFailure, interviewCallMessage, type InterviewCallAvailability } from '@/utils/interviewCall';
+import { canEditInterview, canHireAfterInterview, canJoinInterview, interviewAvailabilityFailure, interviewCallMessage, interviewHiringMessage, type InterviewCallAvailability } from '@/utils/interviewCall';
 import { isAxiosError } from 'axios';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { AppState } from 'react-native';
 
-export function useInterviewCallAvailability(applicationId: string | number | undefined, enabled: boolean) {
+export function useInterviewCallAvailability(applicationId: string | number | undefined, enabled: boolean, scheduleKey?: string) {
   const [call, setCall] = useState<InterviewCallAvailability | null>(null);
   const [now, setNow] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
+  const [checkedScheduleKey, setCheckedScheduleKey] = useState<string | undefined>(undefined);
   useFocusEffect(useCallback(() => {
     setCall(null);
     setFailure(null);
@@ -27,6 +28,7 @@ export function useInterviewCallAvailability(applicationId: string | number | un
         serverOffset = Date.parse(availability.server_now) - Date.now();
         setNow(Date.now() + serverOffset);
         setCall(availability);
+        setCheckedScheduleKey(scheduleKey);
         setFailure(null);
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -46,11 +48,15 @@ export function useInterviewCallAvailability(applicationId: string | number | un
     void refresh();
     const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void refresh(); });
     return () => { controller.abort(); clearInterval(polling); clearInterval(clock); subscription.remove(); };
-  }, [applicationId, enabled]));
+  }, [applicationId, enabled, scheduleKey]));
+  // Rescheduling immediately invalidates an old unlocked result, even before the next poll.
+  const currentCall = checkedScheduleKey === scheduleKey ? call : null;
   return {
-    canEdit: !failure && canEditInterview(call, now),
-    canAddToCalendar: !failure && !!call?.starts_at && canEditInterview(call, now),
-    canJoin: !failure && canJoinInterview(call, now),
-    message: failure || interviewCallMessage(call, now),
+    canEdit: !failure && canEditInterview(currentCall, now),
+    canAddToCalendar: !failure && !!currentCall?.starts_at && canEditInterview(currentCall, now),
+    canJoin: !failure && canJoinInterview(currentCall, now),
+    message: failure || interviewCallMessage(currentCall, now),
+    canHire: !failure && canHireAfterInterview(currentCall, now),
+    hireMessage: failure || interviewHiringMessage(currentCall, now),
   };
 }

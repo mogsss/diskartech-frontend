@@ -5,7 +5,7 @@ import Avatar from '@/components/ui/Avatar';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryUnit } from '@/utils/jobRate';
 import { formatDate } from '@/utils/helpers';
-import { useInterviewCallAvailability } from '@/hooks/useInterviewCallAvailability';
+import type { useInterviewCallAvailability } from '@/hooks/useInterviewCallAvailability';
 import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
@@ -70,6 +70,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 interface ApplicantDetailsContentProps {
+  interviewAvailability: ReturnType<typeof useInterviewCallAvailability>;
   application: any;
   contractReview: any;
   avatarUri?: string;
@@ -92,7 +93,7 @@ interface ApplicantDetailsContentProps {
   onOpenResume: () => void;
 }
 
-export default function ApplicantDetailsContent({ application, contractReview, avatarUri, studentAddress, availableDaysText, loadingCert, approvingCert, disabled, completing, messaging, onMessage, onComplete, onTerminate, onReview, onPreviewCertificate, onApproveCertificate, onDownloadCertificate, onEditInterview, onJoinInterview, onOpenResume }: ApplicantDetailsContentProps) {
+export default function ApplicantDetailsContent({ application, interviewAvailability: availability, contractReview, avatarUri, studentAddress, availableDaysText, loadingCert, approvingCert, disabled, completing, messaging, onMessage, onComplete, onTerminate, onReview, onPreviewCertificate, onApproveCertificate, onDownloadCertificate, onEditInterview, onJoinInterview, onOpenResume }: ApplicantDetailsContentProps) {
   const { colors, isDark } = useDarkMode();
   const student = application.student || {};
   const job = application.job || {};
@@ -100,7 +101,6 @@ export default function ApplicantDetailsContent({ application, contractReview, a
   const householdLocation = [job.household?.detailed_address, job.household?.location].filter(Boolean).join(', ');
   const workplace = job.location || employerLocation || householdLocation;
   const status = String(application.status || 'pending').toLowerCase();
-  const availability = useInterviewCallAvailability(application.id, status === 'interview');
   const isAccepted = status === 'accepted';
   const isConcluded = status === 'terminated' || status === 'completed';
   const successColor = isDark ? '#6EE7B7' : '#047857';

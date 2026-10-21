@@ -19,7 +19,7 @@ function load(relative, dependencies) {
 }
 
 function harness() {
-  const slots = []; let cursor = 0; const calls = []; const redirects = [];
+  const slots = []; let cursor = 0; const calls = []; const redirects = []; const toasts = [];
   const react = {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; },
     useRef(initial) { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
@@ -27,30 +27,31 @@ function harness() {
   };
   const api = { post: async (url, body) => {
     calls.push({ url, body });
-    return { data: { status: 'success', ...(url.endsWith('verify-code') ? { reset_token: 'a'.repeat(64) } : {}) } };
+    return { data: { status: 'success', ...(url.endsWith('/forgot') ? { code_sent: true } : {}), ...(url.endsWith('verify-code') ? { reset_token: 'a'.repeat(64) } : {}) } };
   } };
   const jsx = (type, props) => ({ type, props });
   const screen = load('app/auth/forgot-password.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' }, '@/api/axios': api,
     '@/components/ui/InputField': 'Input', '@/components/ui/SafeStatusBar': 'Status', '@/components/ui/modals/NotificationModal': 'Notice',
     '@/hooks/useDarkMode': { useDarkMode: () => ({ colors: {}, isDark: false }) },
+    '@/hooks/useToast': { useToast: () => ({ showToast: toast => toasts.push(toast) }) },
     '@/utils/passwordChange': load('utils/passwordChange.ts', {}),
     '@expo/vector-icons': { MaterialIcons: 'Icon' },
     'expo-router': { router: { back() {}, replace: route => redirects.push(route) }, Stack: { Screen: 'Screen' } },
-    'react-native': { ActivityIndicator: 'Spinner', Image: 'Image', Keyboard: { dismiss() {} }, Text: 'Text', TouchableOpacity: 'Button', View: 'View' },
-    '../../assets/images/google-g.png': 1,
+    'react-native': { ActivityIndicator: 'Spinner', Keyboard: { dismiss() {} }, Text: 'Text', TouchableOpacity: 'Button', View: 'View' },
     'react-native-keyboard-aware-scroll-view': { KeyboardAwareScrollView: 'Scroll' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
   }).default;
   const nodes = [];
   function walk(node) { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) { node.forEach(walk); return; } nodes.push(node); walk(node.props?.children); }
   function text(node) { if (typeof node === 'string' || typeof node === 'number') return String(node); if (Array.isArray(node)) return node.map(text).join(''); return text(node?.props?.children || ''); }
-  const app = { api, calls, redirects,
+  const app = { api, calls, redirects, toasts,
     render() { cursor = 0; nodes.length = 0; walk(screen()); return app; },
     input(label, value) { app.render(); const input = nodes.find(node => node.type === 'Input' && node.props.label === label); assert.ok(input, `Missing input ${label}`); input.props.onChangeText(value); },
     button(label) { app.render(); const button = nodes.find(node => node.type === 'Button' && text(node) === label); assert.ok(button, `Missing button ${label}`); return button; },
     field(label) { app.render(); return nodes.find(node => node.type === 'Input' && node.props.label === label); },
     notice() { app.render(); return nodes.find(node => node.type === 'Notice').props; },
+    text() { app.render(); return nodes.filter(node => node.type === 'Text').map(text).join(' '); },
   };
   return app;
 }
@@ -94,7 +95,7 @@ test('weak or mismatched passwords disable reset and duplicate email submissions
   const send = app.button('Send reset code').props.onPress;
   send(); send();
   assert.equal(app.calls.length, 1);
-  resolve({ data: { status: 'success' } }); await tick();
+  resolve({ data: { status: 'success', code_sent: true } }); await tick();
   app.api.post = async () => ({ data: { reset_token: 'a'.repeat(64) } });
   app.input('6-digit code', '123456'); app.button('Verify code').props.onPress(); await tick();
   app.input('New password', 'weak'); app.input('Confirm password', 'weak');
@@ -116,5 +117,56 @@ test('an expired reset grant clears the password fields and restarts recovery', 
   assert.equal(app.field('New password'), undefined);
   assert.equal(app.notice().success, undefined);
   assert.match(app.notice().message, /expired/);
+  assert.deepEqual(app.redirects, []);
+});
+
+test('malformed email stays on the email step without making a request', async () => {
+  const app = harness();
+  app.input('Email', 'not-an-email');
+  app.button('Send reset code').props.onPress(); await tick();
+  assert.equal(app.calls.length, 0);
+  assert.equal(app.field('Email').props.error, 'Enter a valid email address.');
+  assert.equal(app.field('6-digit code'), undefined);
+});
+
+test('unregistered email stays on email step with a toast, then permits correcting the address', async () => {
+  const app = harness();
+  const send = app.api.post;
+  app.api.post = async () => { throw { response: { status: 422, data: { errors: { email: ['No account is registered with this email address.'] } } } }; };
+  app.input('Email', 'missing@example.com');
+  app.button('Send reset code').props.onPress(); await tick();
+  assert.equal(app.field('Email').props.value, 'missing@example.com');
+  assert.equal(app.field('Email').props.error, 'No account is registered with this email address.');
+  assert.equal(app.field('6-digit code'), undefined);
+  assert.equal(app.field('New password'), undefined);
+  assert.equal(app.toasts.length, 1);
+  assert.equal(app.toasts[0].type, 'error');
+  assert.equal(app.toasts[0].message, 'No account is registered with this email address.');
+  assert.equal(app.button('Send reset code').props.disabled, false);
+  app.api.post = send;
+  app.input('Email', 'student@example.com');
+  app.button('Send reset code').props.onPress(); await tick();
+  assert.ok(app.field('6-digit code'));
+});
+
+test('unconfirmed legacy send responses cannot advance to code entry', async () => {
+  const app = harness();
+  app.api.post = async () => ({ data: { status: 'success', message: 'If this email belongs to an eligible account, a reset code will be sent.' } });
+  app.input('Email', 'missing@example.com');
+  app.button('Send reset code').props.onPress(); await tick();
+  assert.ok(app.field('Email'));
+  assert.equal(app.field('6-digit code'), undefined);
+  assert.equal(app.toasts.at(-1).type, 'error');
+  assert.match(app.toasts.at(-1).message, /could not confirm/);
+});
+
+test('Google registration errors keep recovery on email without a separate Google sign-in section', async () => {
+  const app = harness();
+  app.api.post = async () => { throw { response: { status: 422, data: { errors: { email: ['This account uses Google sign-in. Please use Continue with Google.'] } } } }; };
+  app.input('Email', 'google@example.com');
+  app.button('Send reset code').props.onPress(); await tick();
+  assert.equal(app.field('6-digit code'), undefined);
+  assert.match(app.toasts.at(-1).message, /Continue with Google/);
+  assert.doesNotMatch(app.text(), /Signed up with Google\?|Continue with Google/);
   assert.deepEqual(app.redirects, []);
 });

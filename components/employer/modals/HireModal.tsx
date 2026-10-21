@@ -46,6 +46,7 @@ interface HireModalProps {
   defaultWorkDays?: string | string[] | null;
   defaultWorkHours?: string | null;
   defaultScheduleSlots?: ScheduleSlot[];
+  allowOneTimeTask?: boolean;
 }
 
 function parsePostedWorkDays(value: string | string[] | null): string[] {
@@ -86,6 +87,7 @@ export default function HireModal({
   defaultWorkDays = [],
   defaultWorkHours = '',
   defaultScheduleSlots,
+  allowOneTimeTask = false,
 }: HireModalProps) {
   const { colors, isDark } = useDarkMode();
   const insets = useSafeAreaInsets();
@@ -94,6 +96,7 @@ export default function HireModal({
   const rateUnit = getSalaryUnit(defaultSalaryType);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [oneTimeTask, setOneTimeTask] = useState(false);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
   const [agreedRate, setAgreedRate] = useState('');
@@ -198,6 +201,23 @@ export default function HireModal({
   const dayOptions = [...new Set([...AVAILABLE_DAYS, ...parsePostedWorkDays(defaultWorkDays)])];
   const timeOptions = [...new Set([...TIME_SLOTS, ...parseTimeSlots(postedWorkHours)])];
   const workSchedule = defaultScheduleSlots?.length ? 'Weekly hours from job post' : [selectedDays.join(', '), serializeTimeSlots(selectedTimeSlots)].filter(Boolean).join(' \u2022 ');
+  const contractDays = defaultScheduleSlots?.length
+    ? [...new Set(defaultScheduleSlots.map(slot => slot.day_of_week))]
+    : selectedDays;
+  const canUseOneTimeTask = contractDays.length === 1 && AVAILABLE_DAYS.includes(contractDays[0]);
+  const endsNextDay = defaultScheduleSlots?.length
+    ? defaultScheduleSlots.some(slot => slot.ends_next_day)
+    : selectedTimeSlots.some(slot => /night|whole day/i.test(slot));
+  const useOneTimeDates = allowOneTimeTask && oneTimeTask;
+
+  useEffect(() => {
+    if (!useOneTimeDates || !startDate) return;
+    const end = startOfDay(tempStartDate);
+    if (endsNextDay) end.setDate(end.getDate() + 1);
+    setTempEndDate(end);
+    setEndDate(end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+    setShowEndDatePicker(false);
+  }, [useOneTimeDates, startDate, tempStartDate, endsNextDay]);
 
   useEffect(() => {
     if (visible) {
@@ -254,6 +274,10 @@ export default function HireModal({
     if (isSubmitting) return;
     if (!startDate.trim()) {
       showNotice('Start Date Required', 'Please select the contract start date.', 'calendar-today');
+      return;
+    }
+    if (useOneTimeDates && (!canUseOneTimeTask || AVAILABLE_DAYS[(tempStartDate.getDay() + 6) % 7] !== contractDays[0])) {
+      showNotice('Check Task Date', 'For a one-time task, use one work day in the job post and choose a start date that falls on that day.', 'event');
       return;
     }
     if (endDate && endDate !== 'Until Project Completion' && tempEndDate < tempStartDate) {
@@ -381,6 +405,27 @@ export default function HireModal({
             </View>
 
             <HireSection title="Contract schedule" icon="calendar-today">
+              {allowOneTimeTask && <View className="mb-4">
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!oneTimeTask && !canUseOneTimeTask) {
+                      showNotice('One Work Day Required', 'Set one work day in the job post before using a one-time task. All required hours must fit that day, including any overnight hours.', 'event');
+                      return;
+                    }
+                    setOneTimeTask(previous => !previous);
+                    setShowEndDatePicker(false);
+                  }}
+                  disabled={isSubmitting}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="One-time task"
+                  accessibilityState={{ checked: useOneTimeDates, disabled: isSubmitting }}
+                  className="flex-row items-start gap-2 rounded-xl border p-3"
+                  style={{ borderColor: useOneTimeDates ? accentColor : colors.border, backgroundColor: useOneTimeDates ? (isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2') : inputBackground }}
+                >
+                  <MaterialIcons name={useOneTimeDates ? 'check-box' : 'check-box-outline-blank'} size={23} color={useOneTimeDates ? accentColor : colors.textSecondary} />
+                  <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: colors.text }}>One-time task</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>End on the start date, or the next day for overnight hours.</Text></View>
+                </TouchableOpacity>
+              </View>}
               <View className="mb-4">
                 <Text className="text-xs font-medium mb-2" style={{ color: colors.text }}>Start date <Text style={{ color: accentColor }}>*</Text></Text>
                 <TouchableOpacity
@@ -413,7 +458,7 @@ export default function HireModal({
               <View className="mb-4">
                 <View className="flex-row items-center gap-2 mb-2">
                   <Text className="text-xs font-medium" style={{ color: colors.text }}>End date</Text>
-                  <Text className="text-[10px]" style={{ color: colors.textSecondary }}>Optional</Text>
+                  <Text className="text-[10px]" style={{ color: colors.textSecondary }}>{useOneTimeDates ? 'Automatic' : 'Optional'}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => {
@@ -421,15 +466,16 @@ export default function HireModal({
                     setShowStartDatePicker(false);
                     setShowEndDatePicker(true);
                   }}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || useOneTimeDates}
                   accessibilityRole="button"
                   accessibilityLabel="Select contract end date"
+                  accessibilityState={{ disabled: isSubmitting || useOneTimeDates }}
                   activeOpacity={0.7}
                   className="flex-row items-center gap-2 rounded-xl border px-3 py-3"
                   style={fieldStyle}
                 >
-                  <Text className="flex-1 text-sm" style={{ color: endDate ? colors.text : colors.textSecondary }}>{endDate || 'Select an end date'}</Text>
-                  <MaterialIcons name="event" size={17} color={colors.textSecondary} />
+                  <Text className="flex-1 text-sm" style={{ color: endDate ? colors.text : colors.textSecondary }}>{endDate || (useOneTimeDates ? 'Choose the start date first' : 'Select an end date')}</Text>
+                  <MaterialIcons name={useOneTimeDates ? 'lock-outline' : 'event'} size={17} color={colors.textSecondary} />
                 </TouchableOpacity>
                 {showEndDatePicker && (
                   <View className="mt-2">
@@ -441,7 +487,7 @@ export default function HireModal({
                     )}
                   </View>
                 )}
-                <TouchableOpacity
+                {!useOneTimeDates && <TouchableOpacity
                   onPress={() => { setEndDate('Until Project Completion'); setShowEndDatePicker(false); }}
                   accessibilityRole="button"
                   accessibilityLabel="Set contract until project completion"
@@ -452,7 +498,8 @@ export default function HireModal({
                 >
                   <MaterialIcons name={endDate === 'Until Project Completion' ? 'check' : 'all-inclusive'} size={14} color={accentColor} />
                   <Text className="text-[11px] font-medium" style={{ color: accentColor }}>Until project completion</Text>
-                </TouchableOpacity>
+                </TouchableOpacity>}
+                {useOneTimeDates && <Text className="text-xs leading-5 mt-2" style={{ color: colors.textSecondary }}>{endsNextDay ? 'Ends the following day because the work hours cross midnight.' : 'Starts and ends on the same date. These contract dates limit the posted work hours to this task.'}</Text>}
               </View>
               {defaultScheduleSlots?.length ? <View style={{ gap: 12 }}><WeeklyScheduleSummary slots={defaultScheduleSlots} /><Text style={{ color: colors.textSecondary, fontSize: 11, lineHeight: 20 }}>These hours come from the job post. Confirm them with the student before hiring. Overlapping active contracts will block hiring.</Text></View> : <>
               <Text className="text-[11px] leading-5 mb-3" style={{ color: colors.textSecondary }}>Pre-selected from your job post. Adjust as agreed with the student.</Text>

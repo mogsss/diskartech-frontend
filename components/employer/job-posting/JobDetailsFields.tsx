@@ -10,12 +10,13 @@ import JobFormSection from './JobFormSection';
 
 interface JobDetailsFieldsProps {
   form: JobPostingForm['details'];
+  isHousehold?: boolean;
   isCategoryOpen: boolean;
   setIsCategoryOpen: (open: boolean) => void;
   onScrollEnabledChange: (enabled: boolean) => void;
 }
 
-export default function JobDetailsFields({ form, isCategoryOpen, setIsCategoryOpen, onScrollEnabledChange }: JobDetailsFieldsProps) {
+export default function JobDetailsFields({ form, isHousehold = false, isCategoryOpen, setIsCategoryOpen, onScrollEnabledChange }: JobDetailsFieldsProps) {
   const { colors, isDark } = useDarkMode();
   const fieldBackground = isDark ? colors.background : '#F8FAFC';
   const accentBackground = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FEF2F2';
@@ -191,7 +192,7 @@ export default function JobDetailsFields({ form, isCategoryOpen, setIsCategoryOp
           <View className="mt-3">
             <InputField
               label="Category name *"
-              placeholder="e.g. Photography, Warehouse"
+              placeholder={isHousehold ? 'e.g. Laundry, Gardening, Quick errands' : 'e.g. Photography, Warehouse'}
               value={customCategory}
               onChangeText={setCustomCategory}
               icon="edit"

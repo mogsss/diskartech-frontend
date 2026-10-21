@@ -3,7 +3,7 @@ import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState, useCallback, useRef } from 'react';
-import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -19,7 +19,9 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import DrawerMenuButton from '@/components/ui/DrawerMenuButton';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { clearStorageForLogout } from '@/utils/logoutStorage';
+import { parseAccountRecord, resolveHirerAccountType, type HirerAccountType } from '@/utils/hirerAccount';
 
 const getFilename = (path?: string | null) => {
   if (!path || typeof path !== 'string') return null;
@@ -39,8 +41,10 @@ const getEmployerPlan = (isSubscribed: unknown, expiresAt: unknown): 'Basic' | '
 
 export default function EmployerProfileScreen() {
   const { colors, isDark } = useDarkMode();
+  const { showToast } = useToast();
   const { type } = useLocalSearchParams<{ type?: string }>();
-  const isHousehold = type === 'household';
+  const [accountType, setAccountType] = useState<HirerAccountType | null>(null);
+  const isHousehold = accountType === 'household';
   const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
   const accentText = isDark ? colors.accent : colors.primary;
   const verifiedColor = isDark ? '#6EE7B7' : '#15803D';
@@ -127,13 +131,16 @@ export default function EmployerProfileScreen() {
       const storedUser = await AsyncStorage.getItem('userData');
       const storedProfile = await AsyncStorage.getItem('userProfile');
 
-      const user = storedUser ? JSON.parse(storedUser) : {};
+      const user = parseAccountRecord(storedUser);
+      const cachedProfile = parseAccountRecord(storedProfile);
+      const cachedType = resolveHirerAccountType(user, cachedProfile, type);
+      if (cachedType) setAccountType(cachedType);
       if (user.email) {
         setProfileData(prev => ({ ...prev, email: user.email }));
       }
 
       if (storedProfile) {
-        const profile = JSON.parse(storedProfile);
+        const profile = cachedProfile;
         setSubscriptionPlan(getEmployerPlan(profile.isSubscribed, profile.subscription_expires_at));
         if (profile.rating !== undefined) setRating(Number(profile.rating));
         if (profile.review_count !== undefined) setReviewCount(Number(profile.review_count));
@@ -142,7 +149,8 @@ export default function EmployerProfileScreen() {
         setIsVerified(verifiedStatus);
         setRejectionReason(reason);
 
-        const actualName = isHousehold
+        const cachedHousehold = cachedType === 'household';
+        const actualName = cachedHousehold
           ? (profile.household_name || profile.name || 'Household')
           : (profile.employer_name || profile.business_name || profile.name || "Business Name");
 
@@ -153,7 +161,7 @@ export default function EmployerProfileScreen() {
         } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
           initials = nameParts[0].substring(0, 2).toUpperCase();
         } else {
-          initials = isHousehold ? 'HH' : 'BU';
+          initials = cachedHousehold ? 'HH' : 'BU';
         }
 
         setAvatarUri(resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture));
@@ -188,6 +196,9 @@ export default function EmployerProfileScreen() {
         setReviewCount(apiReviewCount);
 
         if (profile) {
+          const freshType = resolveHirerAccountType(response.data.user, profile) ?? cachedType;
+          if (freshType) setAccountType(freshType);
+          const freshHousehold = freshType === 'household';
           setSubscriptionPlan(getEmployerPlan(profile.isSubscribed, profile.subscription_expires_at));
           profile.rating = apiRating;
           profile.review_count = apiReviewCount;
@@ -196,7 +207,7 @@ export default function EmployerProfileScreen() {
           setIsVerified(verifiedStatus);
           setRejectionReason(reason);
 
-          const actualName = isHousehold
+          const actualName = freshHousehold
             ? (profile.household_name || profile.name || 'Household')
             : (profile.employer_name || profile.business_name || profile.name || "Business Name");
 
@@ -207,7 +218,7 @@ export default function EmployerProfileScreen() {
           } else if (nameParts.length === 1 && nameParts[0].length >= 2) {
             initials = nameParts[0].substring(0, 2).toUpperCase();
           } else {
-            initials = isHousehold ? 'HH' : 'BU';
+            initials = freshHousehold ? 'HH' : 'BU';
           }
 
           setAvatarUri(resolveMediaUrl(profile.avatar_url ?? profile.avatar ?? profile.profile_picture));
@@ -233,6 +244,10 @@ export default function EmployerProfileScreen() {
 
           // I-update din ang AsyncStorage cache
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+          if (freshType && storedUser) {
+            const role = freshType === 'household' ? 'household' : 'employer';
+            if (user.role !== role) await AsyncStorage.setItem('userData', JSON.stringify({ ...user, role }));
+          }
         }
       } catch (apiErr) {
         console.log('API profile sync failed, using cached storage:', apiErr);
@@ -241,7 +256,7 @@ export default function EmployerProfileScreen() {
     } catch (error) {
       console.error('Error loading profile:', error);
     }
-  }, [isHousehold]);
+  }, [type]);
 
   useFocusEffect(
     useCallback(() => {
@@ -513,6 +528,7 @@ export default function EmployerProfileScreen() {
         if (user?.id) await clearPushToken(user.id);
       }
       await clearStorageForLogout(AsyncStorage);
+      showToast({ type: 'success', title: 'Logged out', message: 'You have been logged out successfully.' });
     } catch (error) {
       console.error('Error clearing storage on logout:', error);
     }
@@ -571,6 +587,14 @@ export default function EmployerProfileScreen() {
       </View>
     );
   };
+
+  if (!accountType) return (
+    <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.background }}>
+      <SafeStatusBar />
+      <ActivityIndicator color={colors.primary} />
+      <Text className="text-sm mt-3" style={{ color: colors.textSecondary }}>Loading your profile…</Text>
+    </View>
+  );
 
   return (
     <View style={{ backgroundColor: colors.background }} className="flex-1">

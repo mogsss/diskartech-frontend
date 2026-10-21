@@ -3,8 +3,11 @@ import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { router, Tabs, useGlobalSearchParams } from 'expo-router';
-import React from 'react';
-import { Platform, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { resolveHirerAccountType, type HirerAccountType } from '@/utils/hirerAccount';
+import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 
@@ -48,10 +51,24 @@ function PostTabButton(props: BottomTabBarButtonProps) {
 
 export default function EmployerTabLayout() {
   const { type } = useGlobalSearchParams<{ type?: string }>();
-  const queryParam = type ? `?type=${type}` : '';
-  const role = type === 'household' ? 'household' : 'business';
+  const [accountType, setAccountType] = useState<HirerAccountType | null>(null);
+  const [roleReady, setRoleReady] = useState(false);
+  const role = accountType ?? resolveHirerAccountType(null, null, type) ?? 'business';
+  const queryParam = `?type=${role}`;
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    AsyncStorage.multiGet(['userData', 'userProfile']).then((entries) => {
+      if (active) setAccountType(resolveHirerAccountType(entries[0]?.[1], entries[1]?.[1], type));
+    }).catch(() => { /* Profile can still resolve the account from the API. */ }).finally(() => {
+      if (active) setRoleReady(true);
+    });
+    return () => { active = false; };
+  }, [type]));
   const { colors, isDark } = useDarkMode();
   const { unreadMessagesCount } = useUnreadNotifications();
+
+  // initialParams are captured when each tab first mounts, so resolve the role first.
+  if (!roleReady) return <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.background }}><ActivityIndicator color={colors.primary} /></View>;
 
   return (
     <Tabs
@@ -82,7 +99,7 @@ export default function EmployerTabLayout() {
             <MaterialIcons name="home" size={size} color={color} />
           ),
         }}
-        initialParams={{ type }}
+        initialParams={{ type: role }}
       />
       <Tabs.Screen
         name="jobs"
@@ -92,7 +109,7 @@ export default function EmployerTabLayout() {
             <MaterialIcons name="work" size={size} color={color} />
           ),
         }}
-        initialParams={{ type }}
+        initialParams={{ type: role }}
       />
       <Tabs.Screen
         name="post"
@@ -120,7 +137,7 @@ export default function EmployerTabLayout() {
             <MaterialIcons name="chat" size={size} color={color} />
           ),
         }}
-        initialParams={{ type }}
+        initialParams={{ type: role }}
       />
       <Tabs.Screen
         name="profile"
@@ -130,7 +147,7 @@ export default function EmployerTabLayout() {
             <MaterialIcons name="person" size={size} color={color} />
           ),
         }}
-        initialParams={{ type }}
+        initialParams={{ type: role }}
         listeners={{
           tabPress: (e) => {
             e.preventDefault();

@@ -124,3 +124,18 @@ test('editing closes exactly at the scheduled start for online and walk-in inter
   assert.equal(utils.canEditInterview({ starts_at: null, ended_at: null }, start), true, 'Allow fixing an incomplete schedule');
   assert.equal(utils.canEditInterview({ starts_at: 'invalid', ended_at: null }, start), false);
 });
+
+test('hiring unlocks exactly at interview start for online and walk-in, even after a call ends', () => {
+  const start = Date.parse('2026-10-11T09:30:00Z');
+  for (const active of [true, false]) {
+    const call = { active, starts_at: '2026-10-11T17:30:00+08:00', ended_at: null };
+    assert.equal(utils.canHireAfterInterview(call, start - 1), false);
+    assert.equal(utils.canHireAfterInterview(call, start), true);
+    assert.equal(utils.canHireAfterInterview({ ...call, ended_at: '2026-10-11T10:00:00Z' }, start + 3600000), true);
+    assert.equal(utils.canHireAfterInterview({ ...call, ended_at: '2026-10-11T08:00:00Z' }, start - 1), false, 'An ended flag cannot bypass the start time');
+  }
+  assert.equal(utils.canHireAfterInterview(null, start), false);
+  assert.equal(utils.canHireAfterInterview({ starts_at: null }, start), false);
+  assert.equal(utils.canHireAfterInterview({ starts_at: 'invalid' }, start), false);
+  assert.equal(utils.canHireAfterInterview({ starts_at: '2026-10-11T17:30:00+08:00' }, NaN), false);
+});

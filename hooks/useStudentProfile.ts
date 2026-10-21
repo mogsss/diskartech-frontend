@@ -432,6 +432,7 @@ export function useStudentProfile() {
       await AsyncStorage.removeItem('userData');
 
       setLogoutModalVisible(false);
+      showToast({ type: 'success', title: 'Logged out', message: 'You have been logged out successfully.' });
       router.replace('/auth/welcome' as any);
     }
   };

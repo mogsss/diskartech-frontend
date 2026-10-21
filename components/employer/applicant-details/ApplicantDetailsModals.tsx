@@ -23,6 +23,7 @@ export default function ApplicantDetailsModals({ details, actions, documents }: 
   return <>
     <HireModal visible={actions.hireVisible} onClose={actions.closeHire} onSubmit={actions.hire}
       studentName={student.student_name} jobTitle={job.title} defaultRate={job.salary?.toString()}
+      allowOneTimeTask={resolveOwnerFromJob(job).owner_role === 'household'}
       defaultSalaryType={job.salary_type} defaultWorkDays={job.available_days} defaultWorkHours={job.time_slot} defaultScheduleSlots={job.schedule_slots} />
     <TerminateContractModal visible={actions.terminateVisible} onClose={actions.closeTerminate} onSubmit={actions.terminate}
       notification={actions.terminateVisible ? notice : null} studentName={student.student_name} jobTitle={job.title} />

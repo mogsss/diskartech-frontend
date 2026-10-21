@@ -22,6 +22,17 @@ export function canEditInterview(call: InterviewCallAvailability | null, now: nu
   return now < Date.parse(call.starts_at);
 }
 
+/** Both online and walk-in interviews unlock hiring at their scheduled start. */
+export function canHireAfterInterview(call: InterviewCallAvailability | null, now: number): boolean {
+  return !!call?.starts_at && Number.isFinite(now) && now >= Date.parse(call.starts_at);
+}
+
+export function interviewHiringMessage(call: InterviewCallAvailability | null, now: number): string {
+  if (!call) return 'Checking interview schedule…';
+  if (!call.starts_at || !Number.isFinite(Date.parse(call.starts_at))) return 'Set a valid interview date and time before hiring.';
+  return canHireAfterInterview(call, now) ? 'Ready to review the hire.' : 'Hiring becomes available at the scheduled interview date and time (Philippine time).';
+}
+
 export function interviewCallMessage(call: InterviewCallAvailability | null, now: number): string {
   if (!call) return 'Checking interview availability…';
   if (call.ended_at) return 'This interview has ended.';

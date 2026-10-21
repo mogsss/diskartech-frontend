@@ -32,6 +32,7 @@ function deferred() {
 function harness() {
   const slots = [];
   const toasts = [];
+  const navigation = [];
   let cursor = 0;
   let focusEffect, focusCleanup;
   const timers = { poll: null };
@@ -50,14 +51,14 @@ function harness() {
   };
   const initial = { coe: 'old.pdf', coe_ai_is_valid: false, school_id: 'school.jpg', school_id_ai_is_valid: true, isVerified: false, rejection_reason: 'Old document needs replacement' };
   const cache = new Map([['userProfile', JSON.stringify(initial)], ['userToken', 'test-session']]);
-  const storage = { getItem: async key => cache.get(key) ?? null, setItem: async (key, value) => cache.set(key, value) };
+  const storage = { getItem: async key => cache.get(key) ?? null, setItem: async (key, value) => cache.set(key, value), removeItem: async key => { cache.delete(key); } };
   const api = { get: async () => ({ data: { profile: JSON.parse(cache.get('userProfile')) } }), post: async () => { throw new Error('Upload mock not configured'); } };
   const network = { async fetch() { throw new Error('Availability response not configured'); } };
   const picker = { getDocumentAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///test/coe.pdf', name: 'coe.pdf', mimeType: 'application/pdf', size: 50 }] }) };
   const imagePicker = { launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///test/avatar.jpg', fileName: 'avatar.jpg', mimeType: 'image/jpeg' }] }) };
   const hook = load('hooks/useStudentProfile.ts', {
     react, '@react-native-async-storage/async-storage': storage,
-    'expo-router': { router: {}, useFocusEffect(effect) { focusEffect = effect; } },
+    'expo-router': { router: { replace: route => navigation.push(route) }, useFocusEffect(effect) { focusEffect = effect; } },
     axios: require('axios'), testTimers: timers,
     'expo-document-picker': picker, 'expo-image-picker': imagePicker,
     '@/utils/notifications': {}, '@/api/axios': api,
@@ -68,7 +69,7 @@ function harness() {
     '@/utils/weeklyScheduleApi': { supportsWeeklySchedules: async () => true },
     testFetch: network,
   }, 'const fetch = (...args) => require("testFetch").fetch(...args);\nconst FormData = class { fields = new Map(); append(key, value) { this.fields.set(key, value); } };\nconst setInterval = callback => { require("testTimers").poll = callback; return 1; };\nconst clearInterval = () => { require("testTimers").poll = null; };\n');
-  return { api, picker, imagePicker, cache, storage, timers, network, toasts,
+  return { api, picker, imagePicker, cache, storage, timers, network, toasts, navigation,
     focus() { focusCleanup = focusEffect(); }, blur() { focusCleanup(); },
     render() { cursor = 0; return hook.useStudentProfile(); } };
 }
@@ -81,6 +82,30 @@ test('logged-out profile refreshes do not request the backend or restore cached 
   await app.render().fetchStudentProfile();
   assert.equal(requests, 0);
   assert.equal(app.render().uploadedDocs.coe_raw, null);
+});
+
+test('student logout shows success only after removing the local session and returns to welcome', async () => {
+  const app = harness();
+  app.cache.set('userData', JSON.stringify({ id: 1, role: 'student' }));
+  app.network.fetch = async () => ({ ok: true });
+  await app.render().handleLogout();
+  assert.equal(app.cache.has('userToken'), false);
+  assert.equal(app.cache.has('userData'), false);
+  assert.equal(app.cache.has('userProfile'), false);
+  assert.equal(app.toasts.length, 1);
+  assert.equal(app.toasts[0].type, 'success');
+  assert.equal(app.toasts[0].message, 'You have been logged out successfully.');
+  assert.deepEqual(app.navigation, ['/auth/welcome']);
+});
+
+test('a local logout cleanup failure does not show a success toast', async () => {
+  const app = harness();
+  app.network.fetch = async () => ({ ok: true });
+  app.storage.removeItem = async () => { throw Error('Storage unavailable'); };
+  await assert.rejects(app.render().handleLogout(), /Storage unavailable/);
+  assert.equal(app.toasts.length, 0);
+  assert.deepEqual(app.navigation, []);
+  assert.equal(app.cache.has('userToken'), true);
 });
 
 test('leaving the profile stops polling and discards an in-flight response', async () => {

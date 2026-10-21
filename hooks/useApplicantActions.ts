@@ -1,5 +1,7 @@
 import api from '@/api/axios';
 import type NotificationModal from '@/components/ui/modals/NotificationModal';
+import { useToast } from '@/hooks/useToast';
+import { useInterviewCallAvailability } from '@/hooks/useInterviewCallAvailability';
 import { applicantErrorMessage, messageApplicant, notifyApplicant, openApplicantChat, type ApplicantContext, type HireContractData } from '@/utils/applicantDetails';
 import { resolveStudentFromRecord } from '@/utils/chat';
 import { normalizeInterviewTime } from '@/utils/interviewTime';
@@ -9,6 +11,9 @@ import { useRef, useState, type ComponentProps } from 'react';
 import { Keyboard } from 'react-native';
 
 export function useApplicantActions({ applicationId, application, setApplication }: ApplicantContext) {
+  const { showToast } = useToast();
+  const interviewAvailability = useInterviewCallAvailability(applicationId, application?.status === 'interview',
+    [application?.interview_date, application?.interview_time, application?.interview_type].join('|'));
   const job = application?.job || {};
   const student = application?.student || {};
   const jobTitle = job.title || 'Job';
@@ -62,6 +67,7 @@ export function useApplicantActions({ applicationId, application, setApplication
 
   // HireModal owns submission errors so failed requests leave its form open.
   const hire = async (data: HireContractData) => {
+    if (application?.status === 'interview' && !interviewAvailability.canHire) throw new Error(interviewAvailability.hireMessage);
     const saved = await updateStatus('accepted', { ...data });
     data = { ...data, work_schedule: saved?.work_schedule || data.work_schedule };
     setApplication((previous: any) => ({ ...previous, hired_at: new Date().toISOString() }));
@@ -115,11 +121,16 @@ export function useApplicantActions({ applicationId, application, setApplication
 
   const sendInterview = (type: string, date: string, time: string, location: string) => withBusyAction('interview', async () => {
     if (!date || !time || (type === 'walk-in' && !location.trim())) {
-      showNotice('Incomplete Details', 'Please fill in all the required fields.'); return;
+      Keyboard.dismiss();
+      showToast({ type: 'warning', title: 'Incomplete details', message: 'Please fill in all the required fields.' }); return;
     }
     const normalizedTime = normalizeInterviewTime(time);
-    if (!normalizedTime) { showNotice('Invalid Interview Time', 'Please select the interview time again.'); return; }
+    if (!normalizedTime) {
+      Keyboard.dismiss();
+      showToast({ type: 'warning', title: 'Invalid interview time', message: 'Please select the interview time again.' }); return;
+    }
     const venue = type === 'online' ? 'DiskarTech video call' : location.trim();
+    Keyboard.dismiss();
     try {
       await updateStatus('interview', { interview_date: date, interview_time: normalizedTime, interview_location: venue, interview_type: type });
       setInterviewVisible(false);
@@ -127,8 +138,11 @@ export function useApplicantActions({ applicationId, application, setApplication
       const text = `Hello ${recipient.student_name}! You are invited for a ${type.toUpperCase()} interview for "${job.title || 'Job Position'}".\n\nDate: ${date}\nTime: ${normalizedTime}\n${type === 'walk-in' ? 'Address: ' + venue : 'Open application details and tap Join video call to attend your interview in DiskarTech. And be prepared. Join 5minutes before the set interview time. Dont be late'}`;
       const delivered = await messageApplicant(application, text);
       await notifyApplicant(application, applicationId, 'Interview Invitation', `You are invited for an interview for "${job.title || 'Job Position'}".`);
-      showNotice('Interview Scheduled', delivered ? 'Interview invitation sent successfully and message was delivered to chat!' : 'The interview schedule was saved, but the chat message could not be delivered. Please message the student with the interview details.', true);
-    } catch (error) { showNotice('Error', applicantErrorMessage(error, 'Failed to send interview invitation.')); }
+      showToast({ type: delivered ? 'success' : 'warning', title: 'Interview scheduled',
+        message: delivered ? 'Interview invitation sent successfully.' : 'Schedule saved, but the chat invitation could not be delivered. Please message the student.' });
+    } catch (error) {
+      showToast({ type: 'error', title: 'Unable to schedule interview', message: applicantErrorMessage(error, 'Failed to send interview invitation.') });
+    }
   });
 
   const deleteApplication = () => confirmAction('Delete Application', 'Are you sure you want to delete this application? This action cannot be undone.', 'Delete', async () => {
@@ -152,9 +166,16 @@ export function useApplicantActions({ applicationId, application, setApplication
   };
 
   return {
+    interviewAvailability,
     busyAction, disabled: busyAction !== null, notification, showNotice, withBusyAction, closeWhenIdle,
     reject, hire, terminate, complete, prepareInterview, sendInterview, deleteApplication, message, review,
-    hireVisible, openHire: () => setHireVisible(true), closeHire: () => setHireVisible(false),
+    hireVisible, openHire: () => {
+      if (application?.status === 'interview' && !interviewAvailability.canHire) {
+        showToast({ type: 'warning', title: 'Interview not ready for hiring', message: interviewAvailability.hireMessage });
+        return;
+      }
+      setHireVisible(true);
+    }, closeHire: () => setHireVisible(false),
     hireSuccessVisible, closeHireSuccess: () => setHireSuccessVisible(false),
     terminateVisible, openTerminate: () => setTerminateVisible(true), closeTerminate: () => closeWhenIdle(() => setTerminateVisible(false)),
     interviewVisible, closeInterview: () => closeWhenIdle(() => setInterviewVisible(false)),

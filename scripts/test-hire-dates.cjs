@@ -21,7 +21,7 @@ function load(file, dependencies = {}) {
   return exports;
 }
 
-function fixture() {
+function fixture(options = {}) {
   const hooks = [];
   const submissions = [];
   const listeners = new Map();
@@ -102,7 +102,7 @@ function fixture() {
     for (let pass = 0; pass < 10; pass++) {
       cursor = 0; dirty = false; effects = [];
       // A fresh array simulates the application's background API polling.
-      tree = HireModal({ visible: true, defaultRate: '200', defaultWorkDays: ['Mon'], defaultWorkHours: 'Whole Day', onSubmit: data => submissions.push(data), onClose() {} });
+      tree = HireModal({ visible: true, defaultRate: '200', defaultWorkDays: ['Mon'], defaultWorkHours: 'Whole Day', onSubmit: data => submissions.push(data), onClose() {}, ...options });
       effects.forEach(effect => effect());
       if (!dirty) return;
     }
@@ -229,4 +229,65 @@ test('cleaned instructions and terms reach the hiring API', async () => {
   await screen.field('Accept and hire student').props.onPress();
   assert.equal(screen.submissions[0].special_instructions, "Bring Juan's ID.\nRésumé");
   assert.equal(screen.submissions[0].contract_terms, '• Give notice.');
+});
+
+function nextMonday() {
+  const date = future(7);
+  while (date.getDay() !== 1) date.setDate(date.getDate() + 1);
+  return date;
+}
+
+test('household one-time task uses existing contract dates and follows a changed start date', async () => {
+  const screen = fixture({ allowOneTimeTask: true, defaultWorkHours: 'Morning (6AM - 12PM)' });
+  screen.field('One-time task').props.onPress(); screen.render();
+  assert.equal(screen.field('Select contract end date').props.disabled, true);
+  assert.equal(screen.field('Set contract until project completion'), undefined);
+  let date = nextMonday();
+  for (let count = 0; count < 2; count++) {
+    screen.field('Select contract start date').props.onPress(); screen.render();
+    screen.picker().props.onChange(event('set'), date); screen.render();
+    await screen.field('Accept and hire student').props.onPress(); screen.render();
+    assert.equal(screen.submissions.at(-1).start_date, label(date));
+    assert.equal(screen.submissions.at(-1).end_date, label(date));
+    assert.equal('one_time_task' in screen.submissions.at(-1), false);
+    date = new Date(date); date.setDate(date.getDate() + 7);
+  }
+});
+
+test('overnight one-time hours end the following day', async () => {
+  const screen = fixture({ allowOneTimeTask: true, defaultScheduleSlots: [{ day_of_week: 'Mon', start_time: '22:00', end_time: '06:00', ends_next_day: true }] });
+  screen.field('One-time task').props.onPress(); screen.render();
+  const date = nextMonday();
+  screen.field('Select contract start date').props.onPress(); screen.render();
+  screen.picker().props.onChange(event('set'), date); screen.render();
+  await screen.field('Accept and hire student').props.onPress();
+  const end = new Date(date); end.setDate(end.getDate() + 1);
+  assert.equal(screen.submissions[0].end_date, label(end));
+});
+
+test('one-time date must match the single workday from the job post', async () => {
+  const screen = fixture({ allowOneTimeTask: true, defaultWorkHours: 'Morning (6AM - 12PM)' });
+  screen.field('One-time task').props.onPress(); screen.render();
+  const tuesday = nextMonday(); tuesday.setDate(tuesday.getDate() + 1);
+  screen.field('Select contract start date').props.onPress(); screen.render();
+  screen.picker().props.onChange(event('set'), tuesday); screen.render();
+  await screen.field('Accept and hire student').props.onPress(); screen.render();
+  assert.equal(screen.submissions.length, 0);
+  assert.equal(screen.notice().props.title, 'Check Task Date');
+});
+
+test('multiple required days cannot be silently truncated to a one-time task', () => {
+  const screen = fixture({ allowOneTimeTask: true, defaultWorkDays: ['Mon', 'Wed'] });
+  screen.field('One-time task').props.onPress(); screen.render();
+  assert.equal(screen.field('One-time task').props.accessibilityState.checked, false);
+  assert.equal(screen.notice().props.title, 'One Work Day Required');
+});
+
+test('unchecking one-time restores manual end date selection; business flow stays unchanged', () => {
+  assert.equal(fixture().field('One-time task'), undefined);
+  const screen = fixture({ allowOneTimeTask: true });
+  screen.field('One-time task').props.onPress(); screen.render();
+  screen.field('One-time task').props.onPress(); screen.render();
+  assert.equal(screen.field('Select contract end date').props.disabled, false);
+  assert.ok(screen.field('Set contract until project completion'));
 });

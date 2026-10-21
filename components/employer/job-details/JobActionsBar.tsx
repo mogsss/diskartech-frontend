@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import api from '@/api/axios';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { jobQuotaError } from '@/utils/jobQuota';
 
 interface JobActionsBarProps {
@@ -16,6 +17,7 @@ interface JobActionsBarProps {
 
 export function JobActionsBar({ job, isActive, onClose, onJobUpdated }: JobActionsBarProps) {
   const { colors, isDark } = useDarkMode();
+  const { showToast } = useToast();
   const { type } = useLocalSearchParams<{ type?: string }>();
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -124,10 +126,9 @@ export function JobActionsBar({ job, isActive, onClose, onJobUpdated }: JobActio
     try {
       const res = await api.delete(`/jobs/${job.id}`);
       if (res.data?.status === 'success') {
-        showSuccess('Listing Deleted', 'This job opening has been permanently deleted from your account.', () => {
-          onJobUpdated?.();
-          onClose();
-        });
+        showToast({ type: 'success', title: 'Listing deleted', message: 'Your job listing has been deleted successfully.' });
+        onJobUpdated?.();
+        onClose();
       } else {
         showError('Notice', res.data?.message || 'Unable to delete job listing.');
       }

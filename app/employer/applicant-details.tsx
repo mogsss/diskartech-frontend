@@ -58,6 +58,7 @@ export default function ApplicantDetailsScreen() {
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: isReviewable ? 12 : Math.max(insets.bottom, 20) }}>
         <ApplicantDetailsContent
           application={application}
+          interviewAvailability={actions.interviewAvailability}
           contractReview={contractReview}
           avatarUri={resolveMediaUrl(student.avatar) ?? undefined}
           studentAddress={studentAddress}
@@ -80,14 +81,14 @@ export default function ApplicantDetailsScreen() {
         />
       </ScrollView>
       {isReviewable && <View className="border-t px-5 pt-3" style={{ backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }}>
-        <Text className="text-[11px] leading-4 mb-2" style={{ color: colors.textSecondary }}>{String(application.status).toLowerCase() === 'interview' ? 'Ready to move forward with this applicant?' : 'Review this profile, then choose your next step.'}</Text>
+        <Text className="text-[11px] leading-4 mb-2" style={{ color: colors.textSecondary }}>{details.status === 'interview' ? actions.interviewAvailability.hireMessage : 'Review this profile, then choose your next step.'}</Text>
         <View className="flex-row gap-3">
           <ApplicantActionButton label="Reject" variant="danger" size="large" onPress={actions.reject} disabled={disabled} loading={busyAction === 'Reject'} />
           <ApplicantActionButton
             label={details.status === 'interview' ? 'Hire applicant' : 'Invite for interview'}
             variant="primary"
             size="large"
-            disabled={disabled}
+            disabled={disabled || (details.status === 'interview' && !actions.interviewAvailability.canHire)}
             loading={busyAction === 'prepareInterview'}
             onPress={details.status === 'interview' ? actions.openHire : actions.prepareInterview}
           />

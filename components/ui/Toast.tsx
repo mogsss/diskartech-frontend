@@ -2,7 +2,7 @@ import { useDarkMode } from '@/hooks/useDarkMode';
 import type { ToastMessage } from '@/hooks/useToast';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { AccessibilityInfo, Animated, Dimensions, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AccessibilityInfo, Animated, Dimensions, PanResponder, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const variants = {
@@ -113,13 +113,13 @@ export default function Toast({ toast, onDismiss }: { toast: ToastMessage; onDis
       <View style={[styles.icon, { backgroundColor: isDark ? variant.darkBg : variant.lightBg }]}>
         <MaterialIcons name={variant.icon} size={23} color={accent} accessible={false} />
       </View>
-      <View style={styles.copy} accessible accessibilityRole="alert" accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${toast.message}`}>
+      <View style={styles.copy} accessible accessibilityRole="alert" accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${toast.message}`}
+        accessibilityActions={[{ name: 'dismiss', label: 'Dismiss notification' }]}
+        onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'dismiss') dismiss(); }}
+        onAccessibilityEscape={() => dismiss()}>
         <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
         <Text style={[styles.message, { color: colors.textSecondary }]}>{toast.message}</Text>
       </View>
-      <TouchableOpacity onPress={() => dismiss()} accessibilityRole="button" accessibilityLabel="Dismiss notification" activeOpacity={0.65} style={styles.close}>
-        <MaterialIcons name="close" size={20} color={colors.textSecondary} accessible={false} />
-      </TouchableOpacity>
     </Animated.View>
   </View>;
 }
@@ -135,5 +135,4 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 2 },
   title: { fontFamily: 'Poppins-SemiBold', fontSize: 13, lineHeight: 20 },
   message: { fontFamily: 'Poppins', fontSize: 12, lineHeight: 18 },
-  close: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginRight: -6 },
 });

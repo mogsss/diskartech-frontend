@@ -29,7 +29,7 @@ const quota = load('utils/jobQuota.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 
 async function fixture(options = {}) {
-  const hooks = [], effects = [], requests = [], notifications = [], navigation = [];
+  const hooks = [], effects = [], requests = [], notifications = [], navigation = [], toasts = [];
   let cursor = 0, form;
   const state = { verified: true, response: { job: { id: 42 } }, ...options };
   const storage = new Map([
@@ -75,6 +75,7 @@ async function fixture(options = {}) {
   };
   const { useJobPosting: runHook } = load('hooks/useJobPosting.ts', {
     '@/api/axios': api,
+    '@/hooks/useToast': { useToast: () => ({ showToast: toast => toasts.push(plain(toast)) }) },
     '@/data/jobCategories': categories,
     '@/data/jobSchedule': schedule,
     '@/utils/weeklySchedule': weekly,
@@ -116,7 +117,7 @@ async function fixture(options = {}) {
     form.schedule.setSelectedTimeSlots(['Morning (6AM - 12PM)']);
     return render();
   }
-  return { get form() { return form; }, state, render, fill, requests, notifications, navigation };
+  return { get form() { return form; }, state, render, fill, requests, notifications, navigation, toasts };
 }
 
 test('new postings start with an empty schedule and validate required details before sending', async () => {
@@ -203,9 +204,9 @@ test('create preserves the API payload, unsaved entries, deduplication and match
   assert.equal(f.notifications[0].type, 'new_job');
   f.render();
   assert.equal(f.form.loading, false);
-  assert.equal(f.form.notificationConfig.title, 'Job Posted!');
-  f.form.notificationConfig.onPrimaryPress();
-  assert.equal(f.navigation.at(-1), 'back');
+  assert.equal(f.form.notificationConfig.visible, false);
+  assert.deepEqual(f.toasts, [{ type: 'success', title: 'Job posted', message: 'Your job has been posted successfully.' }]);
+  assert.deepEqual(f.navigation, ['back']);
 });
 
 test('edit loads saved JSON lists, a custom category and legacy schedules before updating', async () => {
@@ -227,7 +228,9 @@ test('edit loads saved JSON lists, a custom category and legacy schedules before
   });
   assert.equal(f.notifications.length, 0);
   f.render();
-  assert.equal(f.form.notificationConfig.title, 'Job Updated');
+  assert.equal(f.form.notificationConfig.visible, false);
+  assert.deepEqual(f.toasts, [{ type: 'success', title: 'Job updated', message: 'Your job details have been saved successfully.' }]);
+  assert.deepEqual(f.navigation, ['back']);
 });
 
 test('double taps cannot create two postings while the first submission is pending', async () => {
@@ -249,11 +252,14 @@ test('a network failure clears the submission guard so the user can retry', asyn
   f.render();
   assert.equal(f.form.loading, false);
   assert.equal(f.form.notificationConfig.title, 'Network Error');
+  assert.equal(f.toasts.length, 0);
+  assert.equal(f.navigation.length, 0);
   f.state.networkError = false;
   await f.form.handleSubmit();
   f.render();
   assert.equal(f.requests.length, 2);
-  assert.equal(f.form.notificationConfig.title, 'Job Posted!');
+  assert.deepEqual(f.toasts, [{ type: 'success', title: 'Job posted', message: 'Your job has been posted successfully.' }]);
+  assert.deepEqual(f.navigation, ['back']);
 });
 
 test('per-day custom and night hours survive create without applying a global time slot', async () => {

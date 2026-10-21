@@ -27,7 +27,7 @@ async function fixture(options = {}) {
   const application = { id: 42, status: 'viewed', student: { user_id: 21, student_name: 'Alex Reyes', available_days: '["Sat","Sun"]', student_resume: 'resume.pdf' },
     job: { id: 7, title: 'Weekend assistant', salary: 450, salary_type: 'day', employer: { location: 'Pinamalayan' } } };
   const state = { application, response: { status: 'success' }, failChat: false, failNotification: false, ...options };
-  const requests = [], messages = [], notifications = [], navigation = [], rooms = [], browser = [], links = [], timers = new Map();
+  const requests = [], messages = [], notifications = [], navigation = [], rooms = [], browser = [], links = [], toasts = [], timers = new Map();
   const slots = [], effects = [];
   let cursor = 0, current, focusCallback, cleanup, nextTimer = 0, storedOwnerReads = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -69,6 +69,8 @@ async function fixture(options = {}) {
     if (callback !== focusCallback) { focusCallback = callback; effects.push(() => { cleanup?.(); cleanup = callback(); }); }
   } } }, { setInterval: (callback, delay) => { const id = ++nextTimer; timers.set(id, { callback, delay }); return id; }, clearInterval: id => timers.delete(id) }).useApplicantDetails;
   const useActions = load('hooks/useApplicantActions.ts', { react, '@/api/axios': api, '@/utils/applicantDetails': helpers,
+    '@/hooks/useToast': { useToast: () => ({ showToast: toast => toasts.push(plain(toast)) }) },
+    '@/hooks/useInterviewCallAvailability': { useInterviewCallAvailability: () => state.interviewAvailability || { canHire: true, hireMessage: 'Ready to review the hire.' } },
     '@/utils/chat': chat, '@/utils/interviewTime': time, '@/utils/jobRate': rate,
     'expo-router': { router }, 'react-native': { Keyboard: { dismiss() {} } },
   }).useApplicantActions;
@@ -77,7 +79,7 @@ async function fixture(options = {}) {
     'expo-web-browser': { openBrowserAsync: async url => { browser.push(url); if (state.failBrowser) throw new Error('Browser unavailable'); } },
     'react-native': { Linking: { openURL: async url => { links.push(url); if (state.failLink) throw new Error('Link unavailable'); } } },
   }).useApplicantDocuments;
-  const app = { state, requests, messages, notifications, navigation, rooms, browser, links, timers, helpers,
+  const app = { state, requests, messages, notifications, navigation, rooms, browser, links, toasts, timers, helpers,
     render: function useApplicantModel() {
       cursor = 0;
       const details = useDetails(state.missingId ? undefined : '42');
@@ -204,7 +206,9 @@ test('interview form uses the hirer address and failed chat delivery does not un
   assert.equal(app.current.details.application.status, 'interview');
   assert.equal(app.current.actions.interviewVisible, false);
   assert.equal(app.notifications[0].title, 'Interview Invitation');
-  assert.match(app.current.actions.notification.message, /chat message could not be delivered/);
+  assert.equal(app.toasts.at(-1).type, 'warning');
+  assert.match(app.toasts.at(-1).message, /chat invitation could not be delivered/);
+  assert.equal(app.current.actions.notification.visible, false);
 });
 
 test('certificate signing is locked during submission and only approves after a successful response', async () => {
@@ -278,7 +282,7 @@ test('signing errors render inside the active signature modal instead of behind 
   assert.equal(signature.props.onSubmit, model.documents.confirmSignature);
 });
 
-test('interview validation errors stay in the interview modal and controls use the current schedule', async () => {
+test('interview validation uses a warning toast, keeping the editor and current schedule', async () => {
   const app = await fixture();
   await app.current.actions.prepareInterview();
   app.current.actions.setInterviewDate('2026-10-20');
@@ -289,6 +293,78 @@ test('interview validation errors stay in the interview modal and controls use t
   assert.equal(interview.props.visible, true);
   assert.equal(interview.props.date, '2026-10-20');
   assert.equal(interview.props.time, '10:00 AM');
-  assert.equal(interview.props.notification.props.title, 'Incomplete Details');
+  assert.equal(interview.props.notification.props.visible, false);
+  assert.equal(app.toasts.at(-1).type, 'warning');
+  assert.equal(app.toasts.at(-1).title, 'Incomplete details');
   assert.equal(children.filter(node => node.type === 'Notice' && node.props.visible).length, 0);
+});
+
+test('successful interview scheduling closes the editor and shows one success toast', async () => {
+  const app = await fixture();
+  await app.current.actions.prepareInterview();
+  await app.current.actions.sendInterview('walk-in', '2026-10-28', '10:00 AM', '  Zone 1  ');
+  assert.equal(app.current.actions.interviewVisible, false);
+  assert.equal(app.current.details.application.status, 'interview');
+  assert.deepEqual(app.toasts, [{ type: 'success', title: 'Interview scheduled', message: 'Interview invitation sent successfully.' }]);
+  assert.equal(app.current.actions.notification.visible, false);
+  assert.equal(app.requests.find(request => request[0] === 'PUT')[2].interview_location, 'Zone 1');
+});
+
+test('failed interview saves keep the editor and draft open, with an error toast and retry', async () => {
+  const app = await fixture({ response: { status: 'error', message: 'Interview date is unavailable.' } });
+  await app.current.actions.prepareInterview();
+  app.current.actions.setInterviewDate('2026-10-28');
+  app.current.actions.setInterviewTime('10:00 AM');
+  await app.current.actions.sendInterview('online', '2026-10-28', '10:00 AM', '');
+  assert.equal(app.current.actions.interviewVisible, true);
+  assert.equal(app.current.actions.interviewDate, '2026-10-28');
+  assert.equal(app.current.actions.interviewTime, '10:00 AM');
+  assert.equal(app.current.actions.disabled, false);
+  assert.equal(app.current.details.application.status, 'viewed');
+  assert.deepEqual(app.toasts, [{ type: 'error', title: 'Unable to schedule interview', message: 'Interview date is unavailable.' }]);
+  assert.equal(app.messages.length, 0);
+  assert.equal(app.notifications.length, 0);
+  app.state.response = { status: 'success' };
+  await app.current.actions.sendInterview('online', '2026-10-28', '10:00 AM', '');
+  assert.equal(app.toasts.at(-1).type, 'success');
+  assert.equal(app.current.actions.interviewVisible, false);
+});
+
+test('invalid interview times warn without submitting or closing the editor', async () => {
+  const app = await fixture();
+  await app.current.actions.prepareInterview();
+  await app.current.actions.sendInterview('online', '2026-10-28', 'bad time', '');
+  assert.equal(app.toasts.at(-1).type, 'warning');
+  assert.equal(app.toasts.at(-1).title, 'Invalid interview time');
+  assert.equal(app.requests.filter(request => request[0] === 'PUT').length, 0);
+  assert.equal(app.current.actions.interviewVisible, true);
+});
+
+test('repeated interview submit taps make one request and one success toast', async () => {
+  const app = await fixture();
+  await app.current.actions.prepareInterview();
+  const pending = deferred(); app.state.put = () => pending.promise;
+  const first = app.current.actions.sendInterview('online', '2026-10-28', '10:00 AM', '');
+  const second = app.current.actions.sendInterview('online', '2026-10-28', '10:00 AM', '');
+  assert.equal(app.requests.filter(request => request[0] === 'PUT').length, 1);
+  pending.resolve({ data: { status: 'success' } });
+  await Promise.all([first, second]);
+  assert.equal(app.toasts.length, 1);
+  assert.equal(app.toasts[0].type, 'success');
+});
+
+test('future interviews block opening and submitting Hire until availability unlocks', async () => {
+  const app = await fixture({ interviewAvailability: { canHire: false, hireMessage: 'Hiring becomes available at the scheduled interview date and time (Philippine time).' } });
+  await app.current.actions.sendInterview('online', '2026-12-28', '10:00 AM', '');
+  app.current.actions.openHire();
+  assert.equal(app.current.actions.hireVisible, false);
+  assert.equal(app.toasts.at(-1).type, 'warning');
+  const requestsBeforeHire = app.requests.length;
+  await assert.rejects(app.current.actions.hire({ start_date: '2026-12-28' }), /Hiring becomes available/);
+  assert.equal(app.requests.length, requestsBeforeHire);
+  app.state.interviewAvailability = { canHire: true, hireMessage: 'Ready to review the hire.' };
+  app.current.actions.openHire();
+  assert.equal(app.current.actions.hireVisible, true);
+  await app.current.actions.hire({ start_date: '2026-12-28', work_schedule: 'Mon', agreed_rate: '200' });
+  assert.equal(app.current.details.application.status, 'accepted');
 });

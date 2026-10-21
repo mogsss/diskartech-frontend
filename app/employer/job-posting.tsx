@@ -72,6 +72,7 @@ export default function JobPostingScreen() {
 
           <JobDetailsFields
             form={form.details}
+            isHousehold={form.isHousehold}
             isCategoryOpen={isCategoryOpen}
             setIsCategoryOpen={setIsCategoryOpen}
             onScrollEnabledChange={setIsScrollEnabled}

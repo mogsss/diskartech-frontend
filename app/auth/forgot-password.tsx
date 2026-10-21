@@ -3,11 +3,12 @@ import InputField from '@/components/ui/InputField';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { passwordChecks, validateNewPassword } from '@/utils/passwordChange';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Keyboard, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Text, TouchableOpacity, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,6 +17,7 @@ type Errors = Partial<Record<'email' | 'code' | 'password' | 'password_confirmat
 
 export default function ForgotPasswordScreen() {
   const { colors, isDark } = useDarkMode();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
@@ -54,6 +56,10 @@ export default function ForgotPasswordScreen() {
     try {
       if (action === 'send') {
         const response = await api.post('/password/forgot', { email: normalizedEmail }, { timeout: 30000 });
+        if (response.data?.code_sent !== true) {
+          showToast({ type: 'error', title: 'Could not send reset code', message: 'We could not confirm that a reset code was sent. Please try again later.' });
+          return;
+        }
         const delay = Number(response.data?.retry_after);
         setEmail(normalizedEmail); setCode(''); setResetToken(''); setPassword(''); setConfirmation('');
         setResendAt(Date.now() + (Number.isFinite(delay) && delay > 0 ? delay : 90) * 1000); setNow(Date.now()); setStep('code');
@@ -77,15 +83,23 @@ export default function ForgotPasswordScreen() {
         if (fields?.reset_token) {
           setResetToken(''); setPassword(''); setConfirmation(''); setStep('email');
           setNotice({ message: 'Your reset session has expired. Request a new code to continue.', success: false });
-        } else if (Object.keys(validation).length) setErrors(validation);
+        } else if (Object.keys(validation).length) {
+          setErrors(validation);
+          if (action === 'send' && validation.email) {
+            setStep('email'); setResendAt(0); setCode(''); setResetToken('');
+            showToast({ type: 'error', title: 'Could not send reset code', message: validation.email });
+          }
+        }
         else setNotice({ message: 'Please check your details and try again.', success: false });
       } else {
         const delay = Number(error.response?.data?.retry_after || error.response?.headers?.['retry-after']);
         if (status === 429 && Number.isFinite(delay) && delay > 0) { setResendAt(Date.now() + delay * 1000); setNow(Date.now()); }
-        setNotice({ message: status === 429 ? 'Too many attempts. Please wait before trying again.'
+        const message = status === 429 ? 'Too many attempts. Please wait before trying again.'
           : status === 404 ? 'Password recovery is currently unavailable. Please try again later.'
           : status && status >= 500 ? 'The reset service is unavailable right now. Please try again later.'
-          : 'Could not connect. Please check your connection and try again.', success: false });
+          : 'Could not connect. Please check your connection and try again.';
+        if (action === 'send') showToast({ type: 'error', title: 'Could not send reset code', message });
+        else setNotice({ message, success: false });
       }
     } finally { pending.current = false; setBusy(false); }
   };
@@ -119,14 +133,14 @@ export default function ForgotPasswordScreen() {
           <View className="w-14 h-14 rounded-2xl items-center justify-center mb-5" style={{ backgroundColor: isDark ? '#DC262622' : '#FEF2F2' }}>
             <MaterialIcons name={step === 'email' ? 'lock-outline' : step === 'code' ? 'mark-email-read' : 'lock-reset'} size={28} color={colors.accent} accessible={false} />
           </View>
-          <Text accessibilityRole="header" className="text-2xl font-bold tracking-tight mb-2" style={{ color: colors.text }}>{step === 'email' ? 'Forgot your password?' : step === 'code' ? 'Verify your email' : 'Create a new password'}</Text>
-          <Text className="text-sm leading-6 mb-6" style={{ color: colors.textSecondary }}>{step === 'email' ? 'Enter the email you used to register with DiskarTech to request a reset code.' : step === 'code' ? 'Enter the 6-digit code from your email to continue.' : 'Enter your new password below, then confirm it.'}</Text>
+          <Text accessibilityRole="header" className="text-2xl font-bold tracking-tight mb-2" style={{ color: colors.text }}>{step === 'email' ? 'Forgot your password?' : step === 'code' ? 'Check your email' : 'Create a new password'}</Text>
+          <Text className="text-sm leading-6 mb-6" style={{ color: colors.textSecondary }}>{step === 'email' ? 'Enter the email you used to register with DiskarTech to request a reset code.' : step === 'code' ? 'Enter the 6-digit reset code sent to your registered email to continue.' : 'Enter your new password below, then confirm it.'}</Text>
           <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>{step === 'email' ? 'Account email' : step === 'code' ? 'Verification code' : 'Password details'}</Text>
           <View className="rounded-2xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
             {step !== 'email' && (
               <View className="flex-row items-center gap-3 border-b pb-4 mb-5" style={{ borderColor: colors.border }}>
                 <View className="flex-1 gap-1">
-                  <Text className="text-xs" style={{ color: colors.textSecondary }}>{step === 'code' ? 'Reset code recipient' : 'Verified email'}</Text>
+                  <Text className="text-xs" style={{ color: colors.textSecondary }}>{step === 'code' ? 'Reset requested for' : 'Verified email'}</Text>
                   <Text className="text-sm font-semibold" numberOfLines={2} style={{ color: colors.text }}>{email}</Text>
                 </View>
                 {step === 'code' ? (
@@ -155,7 +169,7 @@ export default function ForgotPasswordScreen() {
               </>}
           </View>
 
-          {step === 'code' && <Text className="text-xs leading-5 mt-3 px-1" style={{ color: colors.textSecondary }}>The code expires in 5 minutes. Check your spam folder if you don’t see it.</Text>}
+          {step === 'code' && <Text className="text-xs leading-5 mt-3 px-1" style={{ color: colors.textSecondary }}>Codes expire in 5 minutes. Check your spam folder and the email spelling.</Text>}
           <TouchableOpacity onPress={() => void request(action)} disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled, busy }} activeOpacity={0.8} className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl px-4 py-3.5 mt-5" style={{ backgroundColor: colors.primary, opacity: disabled ? 0.5 : 1 }}>
             {busy && <ActivityIndicator size="small" color="#FFFFFF" />}
             <Text className="text-base font-semibold text-white">{busy ? 'Please wait...' : step === 'email' ? (remaining ? `Send code in ${remainingLabel}` : 'Send reset code') : step === 'code' ? 'Verify code' : 'Reset password'}</Text>
@@ -167,17 +181,6 @@ export default function ForgotPasswordScreen() {
               <Text className="text-sm font-semibold" style={{ color: remaining ? colors.textSecondary : colors.accent }}>{remaining ? `Resend code in ${remainingLabel}` : 'Resend code'}</Text>
             </TouchableOpacity>
           </View>}
-          {step === 'email' && <>
-            <View className="flex-row items-center gap-4 my-6">
-              <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
-              <Text className="text-xs" style={{ color: colors.textSecondary }}>Signed up with Google?</Text>
-              <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
-            </View>
-            <TouchableOpacity disabled={busy} onPress={() => router.replace({ pathname: '/auth/login', params: { google: '1' } })} accessibilityRole="button" accessibilityLabel="Continue with Google" activeOpacity={0.8} className="min-h-[52px] flex-row items-center justify-center gap-2.5 rounded-xl border px-4 py-3.5" style={{ backgroundColor: colors.surface, borderColor: colors.border, opacity: busy ? 0.5 : 1 }}>
-              <Image source={require('../../assets/images/google-g.png')} style={{ width: 20, height: 20 }} resizeMode="contain" accessible={false} />
-              <Text className="text-sm font-semibold" style={{ color: colors.text }}>Continue with Google</Text>
-            </TouchableOpacity>
-          </>}
           {step === 'password' && <Text className="text-xs leading-5 text-center mt-4 px-2" style={{ color: colors.textSecondary }}>After resetting, sign in with your new password.</Text>}
         </View>
       </KeyboardAwareScrollView>

@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View, Keyb
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { ToastViewport } from '@/hooks/useToast';
 import { formatInterviewTime } from '@/utils/interviewTime';
 
 interface InterviewModalProps {
@@ -321,6 +322,7 @@ export default function InterviewModal({
         </View>
       </KeyboardAvoidingView>
       {notification}
+      <ToastViewport active={visible} />
     </Modal>
   );
 }

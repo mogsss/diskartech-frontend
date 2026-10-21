@@ -2,6 +2,7 @@ import api from '@/api/axios';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { canChangePasswordForAccount } from '@/utils/passwordChange';
 import { clearPushToken, getPushNotificationSettings, setPushNotificationsEnabled } from '@/utils/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ type VerificationProfile = {
 
 export default function SettingsScreen() {
   const { isDark, setDarkMode, colors } = useDarkMode();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [role, setRole] = useState<Role | null>(null);
   const [canChangePassword, setCanChangePassword] = useState(false);
@@ -117,6 +119,7 @@ export default function SettingsScreen() {
       const user = userString ? JSON.parse(userString) : null;
       if (user?.id) await clearPushToken(user.id);
       await AsyncStorage.multiRemove(['userToken', 'userProfile', 'userData']);
+      showToast({ type: 'success', title: 'Logged out', message: 'You have been logged out successfully.' });
       router.replace('/auth/welcome');
     } catch {
       setNotice({ title: 'Could not log out', message: 'Please try again to finish logging out.' });
