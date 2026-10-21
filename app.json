@@ -8,6 +8,12 @@
     "scheme": "diskartech",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b686c1c8-e796-4d0c-9bb4-87fa94802a3e"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.diskartech.app"

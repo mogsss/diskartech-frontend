@@ -14,21 +14,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
-import InputField from '@/components/ui/InputField';
-import PrimaryButton from '@/components/ui/PrimaryButton';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
 import CourseModal from '@/components/student/modals/CourseModal';
 import YearLevelModal from '@/components/student/modals/YearLevelModal';
 import BusinessTypeModal from '@/components/employer/modals/BusinessTypeModal';
+import HirerProfileForm from '@/components/employer/profile/HirerProfileForm';
+import StudentProfileForm from '@/components/student/StudentProfileForm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditProfileScreen() {
   const { colors, isDark } = useDarkMode();
   const insets = useSafeAreaInsets();
-  const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
-  const accentText = isDark ? colors.accent : colors.primary;
-  const fieldBackground = isDark ? colors.background : '#F8FAFC';
 
   const [role, setRole] = useState<'student' | 'employer' | 'household'>('student');
   const [loading, setLoading] = useState(true);
@@ -315,42 +312,14 @@ export default function EditProfileScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <SafeStatusBar backgroundColor={role === 'student' ? colors.surface : colors.background} />
+      <SafeStatusBar backgroundColor={colors.surface} />
 
-      {role !== 'student' ? (
-        <View className="w-full max-w-2xl self-center px-6 pt-2 pb-3 flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => router.back()} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Go back to profile" accessibilityState={{ disabled: saving }} className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border, opacity: saving ? 0.5 : 1 }}><MaterialIcons name="arrow-back" size={23} color={isDark ? colors.text : '#000000'} /></TouchableOpacity>
-          <View className="flex-1"><Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Edit profile</Text><Text className="text-xs mt-1" style={{ color: colors.textSecondary }}>{role === 'employer' ? 'Business account' : 'Household account'}</Text></View>
-        </View>
-      ) : (
-        <>
-      {/* Top Header */}
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderBottomColor: colors.border,
-        }}
-        className="flex-row items-center px-6 pt-3 pb-4 border-b"
-      >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={{ backgroundColor: isDark ? '#334155' : '#F1F5F9' }}
-          className="w-10 h-10 rounded-full items-center justify-center mr-3"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={isDark ? colors.text : '#000000'} />
-        </TouchableOpacity>
-        <View className="flex-1">
-          <Text style={{ color: colors.text }} className="text-xl font-bold">
-            Edit Profile
-          </Text>
-          <Text style={{ color: colors.textSecondary }} className="text-xs mt-0.5">
-            {role === 'student' ? 'Student Account' : role === 'employer' ? 'Business Account' : 'Household Account'}
-          </Text>
+      <View className="border-b" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <View className="w-full max-w-2xl self-center px-5 pt-1 pb-3 flex-row items-center gap-3">
+          <TouchableOpacity onPress={() => router.back()} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Go back to profile" accessibilityState={{ disabled: saving }} className="w-11 h-11 items-center justify-center" style={{ opacity: saving ? 0.5 : 1 }}><MaterialIcons name="arrow-back" size={23} color={isDark ? colors.text : '#000000'} /></TouchableOpacity>
+          <View className="flex-1"><Text className="text-lg font-bold leading-7" style={{ color: colors.text }}>Edit profile</Text><Text className="text-xs leading-5" style={{ color: colors.textSecondary }}>{role === 'student' ? 'Student account' : role === 'employer' ? 'Business account' : 'Household account'}</Text></View>
         </View>
       </View>
-
-        </>
-      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -358,326 +327,74 @@ export default function EditProfileScreen() {
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={role === 'student' ? { padding: 20, paddingBottom: 60 } : undefined}
-          contentContainerClassName={role !== 'student' ? 'w-full max-w-2xl self-center px-6 pt-2 pb-6' : undefined}
+          contentContainerClassName="w-full max-w-2xl self-center px-5 pt-5 pb-6"
           keyboardShouldPersistTaps="handled"
         >
-          {role !== 'student' ? (
-            <>
-              <Text className="text-sm leading-6 mb-5" style={{ color: colors.textSecondary }}>Keep your {role === 'employer' ? 'business' : 'household'} name, contact details and location up to date.</Text>
-
-              <View className="rounded-3xl border p-5 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                <View className="flex-row items-center gap-3 mb-5">
-                  <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={role === 'employer' ? 'business' : 'home-work'} size={21} color={accentText} /></View>
-                  <View className="flex-1"><Text className="text-base font-bold" style={{ color: colors.text }}>{role === 'employer' ? 'Business information' : 'Household information'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>How your account appears to students.</Text></View>
-                </View>
-                {role === 'employer' && <InputField iconColor={accentText} label="Business / company name *" placeholder="Enter your business name" value={companyName} onChangeText={setCompanyName} editable={!saving} icon="store" autoCapitalize="words" containerStyle={{ marginBottom: 18 }} />}
-                <Text className="text-sm font-semibold mb-3" style={{ color: colors.text }}>{role === 'employer' ? 'Hirer name' : 'Household representative name'}</Text>
-                <InputField iconColor={accentText} label="First name *" placeholder="Enter your first name" value={firstName} onChangeText={setFirstName} editable={!saving} icon="person-outline" autoCapitalize="words" maxLength={255} />
-                <InputField iconColor={accentText} label="Middle name (optional)" placeholder="Enter your middle name" value={middleName} onChangeText={setMiddleName} editable={!saving} icon="person-outline" autoCapitalize="words" maxLength={255} />
-                <InputField iconColor={accentText} label="Last name *" placeholder="Enter your last name" value={lastName} onChangeText={setLastName} editable={!saving} icon="person-outline" autoCapitalize="words" maxLength={255} containerStyle={{ marginBottom: role === 'employer' ? 16 : 0 }} />
-                {role === 'employer' && <View>
-                  <Text className="text-sm font-semibold mb-2" style={{ color: colors.text }}>Business type</Text>
-                  <TouchableOpacity onPress={() => setBusinessTypeModalVisible(true)} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Select business type" accessibilityState={{ disabled: saving, expanded: businessTypeModalVisible }} className="min-h-14 flex-row items-center gap-3 rounded-xl border px-4 py-3" style={{ backgroundColor: fieldBackground, borderColor: colors.border }}>
-                    <MaterialIcons name="category" size={20} color={accentText} /><Text className="flex-1 text-sm leading-5" style={{ color: businessType ? colors.text : colors.textSecondary }}>{businessType || 'Select business type'}</Text><MaterialIcons name="expand-more" size={23} color={accentText} />
-                  </TouchableOpacity>
-                </View>}
-              </View>
-
-              <View className="rounded-3xl border p-5 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                <View className="flex-row items-center gap-3 mb-5">
-                  <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="contact-phone" size={21} color={accentText} /></View>
-                  <View className="flex-1"><Text className="text-base font-bold" style={{ color: colors.text }}>Contact details</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Your contact number and registered email.</Text></View>
-                </View>
-                <InputField iconColor={accentText} label="Contact number" placeholder="+63 9XX XXX XXXX" value={phone} onChangeText={setPhone} editable={!saving} keyboardType="phone-pad" icon="phone" />
-                <Text className="text-sm font-semibold mb-2" style={{ color: colors.text }}>Registered emails</Text>
-                <View className="min-h-14 flex-row items-center gap-3 rounded-xl border px-4 py-3" style={{ backgroundColor: fieldBackground, borderColor: colors.border }}>
-                  <MaterialIcons name="mail-outline" size={20} color={accentText} /><Text className="flex-1 text-sm leading-5" style={{ color: colors.textSecondary }}>{email || 'No email registered'}</Text><MaterialIcons name="lock-outline" size={17} color={accentText} accessibilityLabel="Email is read only" />
-                </View>
-              </View>
-
-              <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                <View className="flex-row items-center gap-3 mb-5">
-                  <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="location-on" size={21} color={accentText} /></View>
-                  <View className="flex-1"><Text className="text-base font-bold" style={{ color: colors.text }}>{role === 'employer' ? 'Business location' : 'Home address'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Help nearby students find your job posts.</Text></View>
-                </View>
-                <Text className="text-sm font-semibold mb-2" style={{ color: colors.text }}>Pinned location</Text>
-                <TouchableOpacity onPress={() => setLocationPickerVisible(true)} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Choose location on map" accessibilityState={{ disabled: saving }} className="flex-row items-center gap-3 rounded-2xl border p-4 mb-5" style={{ backgroundColor: fieldBackground, borderColor: colors.border }}>
-                  <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="map" size={21} color={accentText} /></View>
-                  <View className="flex-1"><Text className="text-sm font-medium leading-5" style={{ color: location ? colors.text : colors.textSecondary }}>{location || 'Choose your location'}</Text><Text className="text-[11px] leading-4 mt-1" style={{ color: accentText }}>{location ? 'Change map pin' : 'Tap to open the map'}</Text></View>
-                  <MaterialIcons name="chevron-right" size={22} color={accentText} />
-                </TouchableOpacity>
-                <InputField iconColor={accentText} label="Street address / landmark" placeholder="House number, street or nearby landmark" value={detailedAddress} onChangeText={setDetailedAddress} editable={!saving} icon="home" containerStyle={{ marginBottom: 0 }} />
-              </View>
-            </>
+          {role === 'student' ? (
+            <StudentProfileForm
+              values={{ firstName, middleName, lastName, school, course, yearLevel, phone, email, location, detailedAddress }}
+              saving={saving}
+              onChange={(field, value) => ({
+                firstName: setFirstName,
+                middleName: setMiddleName,
+                lastName: setLastName,
+                school: setSchool,
+                phone: setPhone,
+                detailedAddress: setDetailedAddress,
+              })[field](value)}
+              onChooseCourse={() => setCourseModalVisible(true)}
+              onChooseYearLevel={() => setYearModalVisible(true)}
+              onChooseLocation={() => setLocationPickerVisible(true)}
+            />
           ) : (
-            <>
-          {/* Section: Personal / Business Information */}
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 20,
-              padding: 18,
-              marginBottom: 16,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 }}>
-              <MaterialIcons name="person" size={20} color={accentText} />
-              <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>
-                {role === 'student' ? 'Personal Information' : role === 'employer' ? 'Business Information' : 'Household Information'}
-              </Text>
-            </View>
-
-            {/* If Student: Separate First, Middle, and Last Name */}
-            {role === 'student' ? (
-              <View>
-                <InputField iconColor={accentText}
-                  label="First Name"
-                  placeholder="Enter your first name"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  icon="person"
-                />
-                <InputField iconColor={accentText}
-                  label="Middle Name (Optional)"
-                  placeholder="Enter your middle name"
-                  value={middleName}
-                  onChangeText={setMiddleName}
-                  icon="person-outline"
-                />
-                <InputField iconColor={accentText}
-                  label="Last Name"
-                  placeholder="Enter your last name"
-                  value={lastName}
-                  onChangeText={setLastName}
-                  icon="person"
-                />
-              </View>
-            ) : (
-              <InputField iconColor={accentText}
-                label={role === 'employer' ? 'Business / Company Name' : 'Household Representative Name'}
-                placeholder="Enter name"
-                value={companyName}
-                onChangeText={setCompanyName}
-                icon="badge"
-              />
-            )}
-
-            {/* Read-only Email with Lock indicator */}
-            <View style={{ marginBottom: 14 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>
-                  Registered Email
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <MaterialIcons name="lock" size={12} color={accentText} />
-                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>Linked</Text>
-                </View>
-              </View>
-              <View
-                style={{
-                  backgroundColor: isDark ? colors.background : '#F8FAFC',
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}
-              >
-                <MaterialIcons name="email" size={18} color={accentText} style={{ marginRight: 10 }} />
-                <Text style={{ color: colors.textSecondary, fontSize: 14 }}>{email || 'No email registered'}</Text>
-              </View>
-            </View>
-
-            <InputField iconColor={accentText}
-              label="Contact Number"
-              placeholder="+63 9XX XXX XXXX"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              icon="phone"
+            <HirerProfileForm
+              role={role}
+              values={{ companyName, firstName, middleName, lastName, phone, email, businessType, location, detailedAddress }}
+              saving={saving}
+              onChange={(field, value) => ({
+                companyName: setCompanyName,
+                firstName: setFirstName,
+                middleName: setMiddleName,
+                lastName: setLastName,
+                phone: setPhone,
+                detailedAddress: setDetailedAddress,
+              })[field](value)}
+              onChooseBusinessType={() => setBusinessTypeModalVisible(true)}
+              onChooseLocation={() => setLocationPickerVisible(true)}
             />
-          </View>
-
-          {/* Section: Academic Information (Student Only) */}
-          {role === 'student' && (
-            <View
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderWidth: 1,
-                borderRadius: 20,
-                padding: 18,
-                marginBottom: 16,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 }}>
-                <MaterialIcons name="school" size={20} color={accentText} />
-                <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>
-                  Academic Information
-                </Text>
-              </View>
-
-              <InputField iconColor={accentText}
-                label="College / University"
-                placeholder="e.g. Pamantasan ng Lungsod..."
-                value={school}
-                onChangeText={setSchool}
-                icon="account-balance"
-              />
-
-              {/* Course Selector */}
-              <View style={{ marginBottom: 14 }}>
-                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
-                  Course / Program
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setCourseModalVisible(true)}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    borderRadius: 12,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                    <MaterialIcons name="menu-book" size={18} color={accentText} style={{ marginRight: 10 }} />
-                    <Text
-                      style={{
-                        color: course ? colors.text : colors.textSecondary,
-                        fontSize: 14,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {course || 'Select course'}
-                    </Text>
-                  </View>
-                  <MaterialIcons name="arrow-drop-down" size={22} color={accentText} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Year Level Selector */}
-              <View style={{ marginBottom: 6 }}>
-                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
-                  Year Level
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setYearModalVisible(true)}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    borderRadius: 12,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                    <MaterialIcons name="format-list-numbered" size={18} color={accentText} style={{ marginRight: 10 }} />
-                    <Text
-                      style={{
-                        color: yearLevel ? colors.text : colors.textSecondary,
-                        fontSize: 14,
-                      }}
-                    >
-                      {yearLevel || 'Select year level'}
-                    </Text>
-                  </View>
-                  <MaterialIcons name="arrow-drop-down" size={22} color={accentText} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {/* Section: Location & Address with LocationPickerModal */}
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: 20,
-              padding: 18,
-              marginBottom: 24,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 }}>
-              <MaterialIcons name="location-on" size={20} color={accentText} />
-              <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>
-                Address & Location
-              </Text>
-            </View>
-
-            {/* Interactive Location Picker Button */}
-            <View style={{ marginBottom: 14 }}>
-              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
-                Pinned Location (Map)
-              </Text>
-              <TouchableOpacity
-                onPress={() => setLocationPickerVisible(true)}
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  paddingHorizontal: 14,
-                  paddingVertical: 13,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                  <MaterialIcons name="map" size={20} color={accentText} style={{ marginRight: 10 }} />
-                  <Text
-                    style={{
-                      color: location ? colors.text : colors.textSecondary,
-                      fontSize: 14,
-                    }}
-                    numberOfLines={2}
-                  >
-                    {location || 'Tap to pin your location on the map'}
-                  </Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={22} color={accentText} />
-              </TouchableOpacity>
-            </View>
-
-            <InputField iconColor={accentText}
-              label="Detailed Street Address / Landmark"
-              placeholder="e.g. Zone 1, Brgy. Marfrancisco near Town Plaza"
-              value={detailedAddress}
-              onChangeText={setDetailedAddress}
-              icon="home"
-            />
-          </View>
-
-          {/* Save Button */}
-          <PrimaryButton
-            title={saving ? 'Saving Changes...' : 'Save Profile Changes'}
-            onPress={handleSave}
-            disabled={saving}
-            size="large"
-          />
-            </>
           )}
         </ScrollView>
-        {role !== 'student' && <View className="border-t" style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }}>
-          <View className="w-full max-w-2xl self-center px-6 pt-3">
-            <PrimaryButton title={saving ? 'Saving changes...' : 'Save changes'} onPress={handleSave} disabled={saving} loading={saving} size="medium" icon={<MaterialIcons name="check" size={18} color="#FFFFFF" />} />
+        <View className="border-t" style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }}>
+          <View className="w-full max-w-2xl self-center px-5 pt-3 flex-row items-stretch gap-3">
+            <TouchableOpacity
+              onPress={() => router.back()}
+              disabled={saving}
+              activeOpacity={0.65}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel profile changes"
+              accessibilityState={{ disabled: saving }}
+              className="rounded-xl px-4 items-center justify-center"
+              style={{ minHeight: 52, minWidth: 84, opacity: saving ? 0.5 : 1 }}
+            >
+              <Text className="text-sm font-semibold leading-5" style={{ color: colors.textSecondary }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSave}
+              disabled={saving}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={saving ? 'Saving profile changes' : 'Save profile changes'}
+              accessibilityState={{ disabled: saving, busy: saving }}
+              className="flex-1 min-w-0 rounded-xl px-4 py-3 flex-row items-center justify-center gap-2"
+              style={{ minHeight: 52, backgroundColor: colors.primary, opacity: saving ? 0.65 : 1 }}
+            >
+              {saving && <ActivityIndicator size="small" color="#FFFFFF" />}
+              <Text className="text-sm font-semibold leading-5 text-center" style={{ color: '#FFFFFF', flexShrink: 1 }}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </View>}
+        </View>
       </KeyboardAvoidingView>
 
       {/* Location Picker Modal */}

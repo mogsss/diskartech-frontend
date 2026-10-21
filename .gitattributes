@@ -1,0 +1,3 @@
+# Expo fingerprints include .gitignore bytes. Keep Windows and CI checkouts
+# consistent with the CRLF file used by the existing preview APK.
+/.gitignore text eol=crlf
