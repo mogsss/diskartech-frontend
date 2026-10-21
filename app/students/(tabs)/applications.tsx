@@ -19,6 +19,7 @@ import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryUnit } from '@/utils/jobRate';
+import { sortApplicationsNewestFirst } from '@/utils/jobApplications';
 
 const tabs = [
   'All',
@@ -210,7 +211,7 @@ export default function ApplicationsScreen() {
       if (!isBackground) { setLoading(true); setLoadError(false); }
       const response = await api.get('/student/applications');
       if (response.data && response.data.status === 'success') {
-        setApplications(response.data.applications || []);
+        setApplications(sortApplicationsNewestFirst(response.data.applications || []));
         setLoadError(false);
       } else {
         throw new Error('Unable to load applications.');

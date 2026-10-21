@@ -21,8 +21,9 @@ const helpers = load('utils/chatAttachments.ts', {});
 const jsx = (type, props) => ({ type, props });
 
 function harness() {
-  const slots = []; let cursor = 0; const effects = []; const sends = []; let identifiers = 0;
-  const session = { token: 'fixture-session', userId: '1' };
+  const slots = []; let cursor = 0; const effects = []; const sends = []; const toasts = []; const clears = []; let identifiers = 0;
+  const session = { token: 'fixture-session', userId: '1', role: 'student' };
+  const routes = [];
   const react = {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; },
     useRef(initial) { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
@@ -35,10 +36,15 @@ function harness() {
     clear: () => { files.draft = null; },
   };
   const sender = { send: async () => {} };
+  const clearer = { clear: async () => {} };
+  const stream = { messageDocs: [] };
   const helpersMock = {
     CHATS_COLLECTION: 'chats', getLoggedInUserId: async () => session.userId, normalizeChatFields: data => data,
+    getLoggedInRole: async () => session.role,
     getOtherParticipant: () => ({ id: '2', name: 'Employer', avatar: '' }), getTimestampMs: () => 0,
     markChatAsRead() {}, sendChatMessage: async params => { sends.push(params); return sender.send(params); },
+    clearChatConversation: async (...params) => { clears.push(params); return clearer.clear(...params); },
+    getMessageCreatedAt: () => null, getMessageSenderId: data => data.sender_id,
   };
   const screen = load('app/chat.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
@@ -50,23 +56,26 @@ function harness() {
     '@/utils/chat': helpersMock, '@/utils/notifications': { setActiveChatScreen() {} },
     '@react-native-async-storage/async-storage': { getItem: async () => session.token },
     '@/hooks/useDarkMode': { useDarkMode: () => ({ colors: {}, isDark: false }) },
+    '@/hooks/useToast': { useToast: () => ({ showToast: options => toasts.push(options) }) },
     '@/hooks/useChatAttachments': { useChatAttachments: () => files },
     '@expo/vector-icons': { MaterialIcons: 'Icon' },
     'expo-crypto': { randomUUID: () => `message-${++identifiers}` },
-    'expo-router': { router: { back() {} }, useLocalSearchParams: () => ({ id: 'chat_u1_u2' }) },
+    'expo-router': { router: { back() { routes.push('back'); }, dismissTo: route => routes.push(route) }, useLocalSearchParams: () => ({ id: 'chat_u1_u2' }) },
     'react-native': { ActivityIndicator: 'Spinner', Image: 'Image', Keyboard: { dismiss() {}, addListener: () => ({ remove() {} }) }, Platform: { OS: 'android' }, ScrollView: 'Scroll', Text: 'Text', TextInput: 'Input', TouchableOpacity: 'Button', View: 'View' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@/utils/firebase': { db: {} },
-    'firebase/firestore': { doc: () => ({ kind: 'chat' }), collection: () => ({}), query: () => ({ kind: 'messages' }), orderBy() {}, onSnapshot: (ref, receive) => { receive(ref.kind === 'chat' ? { exists: () => true, data: () => ({}) } : { docs: [] }); return () => {}; } },
+    'firebase/firestore': { doc: () => ({ kind: 'chat' }), collection: () => ({}), query: () => ({ kind: 'messages' }), orderBy() {}, onSnapshot: (ref, receive) => { receive(ref.kind === 'chat' ? { exists: () => true, data: () => ({}) } : { docs: stream.messageDocs }); return () => {}; } },
   }, 'const setTimeout = () => 0; const clearTimeout = () => {};\n').default;
   const nodes = [];
   function walk(node) { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk); nodes.push(node); walk(node.props?.children); }
-  const app = { sends, sender, files, session,
+  const app = { sends, sender, files, session, toasts, clears, clearer, stream, routes,
     render() { cursor = 0; nodes.length = 0; walk(screen()); return app; },
     commitEffects() { while (effects.length) effects.shift()(); },
     button(label) { app.render(); const node = nodes.find(item => item.props?.accessibilityLabel === label); assert.ok(node, `Missing ${label}`); return node.props; },
     input() { app.render(); return nodes.find(item => item.type === 'Input').props; },
     notice() { app.render(); return nodes.find(item => item.type === 'Notice').props; },
+    options() { app.render(); return nodes.find(item => item.type === 'Options').props; },
+    hasText(text) { app.render(); return nodes.some(item => item.type === 'Text' && item.props?.children === text); },
     icons() { app.render(); return nodes.filter(item => item.type === 'Icon').map(item => item.props.name); },
   };
   return app;
@@ -147,4 +156,61 @@ test('logout during attachment preparation cannot send a message as the previous
   assert.equal(app.sends.length, 0);
   assert.ok(app.files.draft);
   assert.match(app.notice().message, /session changed/);
+});
+
+test('clearing chat still requires confirmation and Cancel does not delete or show a toast', async () => {
+  const app = harness(); await ready(app);
+  app.options().onClearChat();
+  assert.equal(app.notice().title, 'Delete Conversation');
+  assert.equal(app.notice().visible, true);
+  assert.equal(app.clears.length, 0);
+  app.notice().onSecondaryPress();
+  assert.equal(app.notice().visible, false);
+  assert.equal(app.clears.length, 0);
+  assert.equal(app.toasts.length, 0);
+  assert.deepEqual(app.routes, []);
+});
+
+test('a successful clear shows a toast only after deletion succeeds and clears the visible messages', async () => {
+  const app = harness();
+  app.stream.messageDocs = [{ id: 'msg-1', data: () => ({ sender_id: '1', text: 'Existing message' }) }];
+  await ready(app);
+  assert.equal(app.hasText('Existing message'), true);
+  let finish;
+  app.clearer.clear = () => new Promise(resolve => { finish = resolve; });
+  app.options().onClearChat();
+  const pending = app.notice().onPrimaryPress();
+  assert.deepEqual(app.clears, [['chat_u1_u2', '1']]);
+  assert.equal(app.notice().visible, false);
+  assert.equal(app.toasts.length, 0);
+  assert.equal(app.hasText('Existing message'), true);
+  assert.deepEqual(app.routes, []);
+  finish(); await pending;
+  assert.equal(app.hasText('Existing message'), false);
+  assert.equal(app.toasts[0].type, 'success');
+  assert.equal(app.toasts[0].title, 'Chat cleared');
+  assert.equal(app.notice().visible, false);
+  assert.deepEqual(app.routes, ['/students/(tabs)/messages']);
+});
+
+test('a failed chat clear keeps the messages and shows an error toast', async () => {
+  const app = harness();
+  app.stream.messageDocs = [{ id: 'msg-1', data: () => ({ sender_id: '1', text: 'Keep this message' }) }];
+  await ready(app);
+  app.clearer.clear = async () => { throw Error('Offline'); };
+  app.options().onClearChat(); await app.notice().onPrimaryPress();
+  assert.equal(app.hasText('Keep this message'), true);
+  assert.equal(app.toasts.length, 1);
+  assert.equal(app.toasts[0].type, 'error');
+  assert.equal(app.notice().visible, false);
+  assert.deepEqual(app.routes, []);
+});
+
+test('employer and household users return to their Messages tab after clearing a chat', async () => {
+  for (const role of ['employer', 'household']) {
+    const app = harness(); app.session.role = role; await ready(app);
+    app.options().onClearChat(); await app.notice().onPrimaryPress();
+    assert.equal(app.toasts[0].type, 'success');
+    assert.deepEqual(app.routes, ['/employer/(tabs)/messages']);
+  }
 });

@@ -33,6 +33,7 @@ import {
   clearChatConversation,
   formatChatListTime,
   getLoggedInUserId,
+  getLoggedInRole,
   getMessageCreatedAt,
   getMessageSenderId,
   getOtherParticipant,
@@ -43,6 +44,7 @@ import {
 } from '@/utils/chat';
 import { setActiveChatScreen } from '@/utils/notifications';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import ChatAttachmentBubble from '@/components/chat/ChatAttachmentBubble';
 import { useChatAttachments } from '@/hooks/useChatAttachments';
 import { ChatAttachmentUploadError, formatAttachmentSize, normalizeChatAttachment, sanitizeChatText } from '@/utils/chatAttachments';
@@ -52,6 +54,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ChatScreen() {
   const { colors, isDark } = useDarkMode();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const conversationId = Array.isArray(id) ? id[0] : (id || '');
@@ -574,8 +577,8 @@ export default function ChatScreen() {
             setOptionsModalVisible(false);
             setNotification({
               visible: true,
-              title: 'Clear Chat',
-              message: 'Are you sure you want to delete the messages from your account? They will still be visible to the other person.',
+              title: 'Delete Conversation',
+              message: 'Are you sure you want to delete for you this Conversation?',
               iconName: 'delete-outline',
               iconColor: '#DC2626',
               iconBgColor: 'bg-red-50',
@@ -588,27 +591,21 @@ export default function ChatScreen() {
                 try {
                   await clearChatConversation(conversationId, currentUserId);
                   setMessagesList([]);
-                  setNotification({
-                    visible: true,
-                    title: 'Chat Cleared',
+                  showToast({
+                    type: 'success',
+                    title: 'Chat cleared',
                     message: 'The messages have been deleted from your account.',
-                    iconName: 'check-circle',
-                    iconColor: '#16A34A',
-                    iconBgColor: 'bg-emerald-50',
-                    primaryButtonText: 'OK',
-                    onPrimaryPress: closeNotification,
                   });
+                  const role = await getLoggedInRole();
+                  if (role === 'student') router.dismissTo('/students/(tabs)/messages');
+                  else if (role === 'employer' || role === 'household') router.dismissTo('/employer/(tabs)/messages');
+                  else router.back();
                 } catch (err) {
                   console.error('Error clearing chat:', err);
-                  setNotification({
-                    visible: true,
-                    title: 'Error',
+                  showToast({
+                    type: 'error',
+                    title: 'Could not clear chat',
                     message: 'Could not clear the chat. Please try again.',
-                    iconName: 'error-outline',
-                    iconColor: '#DC2626',
-                    iconBgColor: 'bg-red-50',
-                    primaryButtonText: 'OK',
-                    onPrimaryPress: closeNotification,
                   });
                 }
               },

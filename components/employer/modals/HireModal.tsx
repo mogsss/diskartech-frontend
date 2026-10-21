@@ -454,7 +454,7 @@ export default function HireModal({
                   <Text className="text-[11px] font-medium" style={{ color: accentColor }}>Until project completion</Text>
                 </TouchableOpacity>
               </View>
-              {defaultScheduleSlots?.length ? <View style={{ gap: 12 }}><WeeklyScheduleSummary slots={defaultScheduleSlots} /><Text style={{ color: colors.textSecondary, fontSize: 11, lineHeight: 20 }}>These hours come from the job post. Availability and active contract conflicts are checked again when hiring is confirmed.</Text></View> : <>
+              {defaultScheduleSlots?.length ? <View style={{ gap: 12 }}><WeeklyScheduleSummary slots={defaultScheduleSlots} /><Text style={{ color: colors.textSecondary, fontSize: 11, lineHeight: 20 }}>These hours come from the job post. Confirm them with the student before hiring. Overlapping active contracts will block hiring.</Text></View> : <>
               <Text className="text-[11px] leading-5 mb-3" style={{ color: colors.textSecondary }}>Pre-selected from your job post. Adjust as agreed with the student.</Text>
               <Text className="text-xs font-medium mb-2" style={{ color: colors.text }}>Work days <Text style={{ color: accentColor }}>*</Text></Text>
               <View className="flex-row flex-wrap gap-1 mb-5">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 
@@ -14,6 +14,8 @@ interface NotificationModalProps {
   onPrimaryPress: () => void;
   secondaryButtonText?: string;
   onSecondaryPress?: () => void;
+  onRequestClose?: () => void;
+  onBackdropPress?: () => void;
   buttonLayout?: 'stacked' | 'row';
   hideActions?: boolean;
 }
@@ -29,6 +31,8 @@ export default function NotificationModal({
   onPrimaryPress,
   secondaryButtonText,
   onSecondaryPress,
+  onRequestClose,
+  onBackdropPress,
   buttonLayout = 'stacked',
   hideActions = false,
 }: NotificationModalProps) {
@@ -58,8 +62,14 @@ export default function NotificationModal({
   ) : null;
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onSecondaryPress || onPrimaryPress}>
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onRequestClose || onSecondaryPress || onPrimaryPress}>
       <View className="flex-1 justify-center items-center bg-black/60 px-6">
+        {onBackdropPress && <Pressable
+          onPress={onBackdropPress}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss dialog"
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+        />}
         
         <View
           style={{ backgroundColor: colors.surface, borderColor: colors.border }}

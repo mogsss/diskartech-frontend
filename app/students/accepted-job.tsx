@@ -769,23 +769,6 @@ export default function AcceptedJobScreen() {
                 <Text className="text-xs text-slate-500">Working Student Verification</Text>
               </View>
             </View>
-            <Badge
-              text={
-                application?.certificate_status === 'approved'
-                  ? 'Issued & Ready'
-                  : application?.certificate_status === 'requested'
-                  ? 'Pending Approval'
-                  : 'Available'
-              }
-              variant={
-                application?.certificate_status === 'approved'
-                  ? 'success'
-                  : application?.certificate_status === 'requested'
-                  ? 'warning'
-                  : 'default'
-              }
-              size="small"
-            />
           </View>
 
           <Text className="text-xs text-slate-600 leading-relaxed mb-3.5">

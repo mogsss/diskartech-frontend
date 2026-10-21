@@ -14,3 +14,17 @@ export function getAppliedJobIds(applications: readonly ApplicationRecord[]): Se
   }
   return ids;
 }
+
+/** Use the application date, then the newer record ID when dates are equal. */
+export function sortApplicationsNewestFirst<T extends {
+  id: string | number;
+  created_at?: string | null;
+}>(applications: readonly T[]): T[] {
+  const createdAt = (application: T) => {
+    const timestamp = application.created_at ? Date.parse(application.created_at) : NaN;
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  };
+  return [...applications].sort((a, b) =>
+    createdAt(b) - createdAt(a) || Number(b.id) - Number(a.id)
+  );
+}

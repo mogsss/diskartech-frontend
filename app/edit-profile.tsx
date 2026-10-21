@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
@@ -25,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditProfileScreen() {
   const { colors, isDark } = useDarkMode();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
 
   const [role, setRole] = useState<'student' | 'employer' | 'household'>('student');
@@ -262,19 +264,12 @@ export default function EditProfileScreen() {
           await AsyncStorage.setItem('userData', JSON.stringify(userObj));
         }
 
-        setModalConfig({
-          title: 'Profile Updated!',
+        showToast({
+          type: 'success',
+          title: 'Profile updated',
           message: 'Your profile details have been successfully saved.',
-          iconName: 'check-circle',
-          iconColor: '#059669',
-          iconBgColor: 'bg-emerald-50',
-          primaryButtonText: 'Done',
-          onPrimaryPress: () => {
-            setModalVisible(false);
-            router.back();
-          },
         });
-        setModalVisible(true);
+        router.back();
       }
     } catch (err: any) {
       console.error('Error updating profile:', err);

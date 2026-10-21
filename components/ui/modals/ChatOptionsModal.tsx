@@ -87,7 +87,7 @@ export default function ChatOptionsModal({
               }}
             >
               <MaterialIcons name="delete-outline" size={20} color={colors.text} style={{ marginRight: 12 }} />
-              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Clear Chat</Text>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Delete</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

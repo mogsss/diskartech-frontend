@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ScrollView,
   Text,
@@ -27,14 +27,17 @@ import { sendAppNotification } from '@/utils/notifications';
 import { getCreatedApplicationId } from '@/utils/notificationFeed';
 import { getAppliedJobIds } from '@/utils/jobApplications';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ApplicationSection from '@/components/student/application-details/ApplicationSection';
 import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
 import ScheduleMatchNotice from '@/components/schedule/ScheduleMatchNotice';
+import { ScheduleSlot } from '@/utils/weeklySchedule';
 
 export default function JobDetailsScreen() {
   const { colors, isDark } = useDarkMode();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const [job, setJob] = useState<any>(null);
@@ -43,6 +46,14 @@ export default function JobDetailsScreen() {
   const [isApplied, setIsApplied] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [hasReported, setHasReported] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const applyingRef = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const scheduleY = useRef(0);
+  const [scheduleReview, setScheduleReview] = useState<{
+    required_slots: ScheduleSlot[];
+    availability_slots: ScheduleSlot[];
+  } | null>(null);
 
   const [notification, setNotification] = useState<{
     visible: boolean;
@@ -55,6 +66,7 @@ export default function JobDetailsScreen() {
     onPrimaryPress: () => void;
     secondaryButtonText?: string;
     onSecondaryPress?: () => void;
+    onBackdropPress?: () => void;
   }>({
     visible: false,
     title: '',
@@ -89,6 +101,7 @@ export default function JobDetailsScreen() {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      setScheduleReview(null);
 
       const fetchJobDetails = async (isBackground = false) => {
         if (!id) return;
@@ -154,30 +167,19 @@ export default function JobDetailsScreen() {
       if (response.data && response.data.status === 'success') {
         const nextState = !isBookmarked;
         setIsBookmarked(nextState);
-        setNotification({
-          visible: true,
-          title: nextState ? 'Job Saved' : 'Job Unsaved',
+        showToast({
+          type: 'success',
+          title: nextState ? 'Job saved' : 'Job removed',
           message:
             response.data.message ||
             (nextState ? 'Job added to your saved bookmarks.' : 'Job removed from your saved bookmarks.'),
-          iconName: nextState ? 'bookmark' : 'bookmark-border',
-          iconColor: '#DC2626',
-          iconBgColor: 'bg-red-50',
-          primaryButtonText: 'OK',
-          onPrimaryPress: closeNotification,
         });
       }
     } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      setNotification({
-        visible: true,
-        title: 'Notice',
+      showToast({
+        type: 'error',
         message: 'Unable to save job at this time.',
-        iconName: 'error-outline',
-        iconColor: '#DC2626',
-        iconBgColor: 'bg-red-50',
-        primaryButtonText: 'OK',
-        onPrimaryPress: closeNotification,
       });
     }
   };
@@ -263,7 +265,10 @@ export default function JobDetailsScreen() {
 
   const initials = getInitials(companyName);
 
-  const handleApplyJob = async () => {
+  const handleApplyJob = async (acknowledgeScheduleWarning = false) => {
+    if (applyingRef.current || isApplied) return;
+    applyingRef.current = true;
+    setApplying(true);
     try {
       let isStudentVerified = false;
       try {
@@ -307,6 +312,7 @@ export default function JobDetailsScreen() {
 
       const response = await api.post('/student/apply-job', {
         job_id: job.id,
+        acknowledge_schedule_warning: acknowledgeScheduleWarning,
       });
 
       if (response.data && response.data.status === 'success') {
@@ -350,6 +356,30 @@ export default function JobDetailsScreen() {
         }
       }
     } catch (error: any) {
+      if (error.response?.status === 409 && error.response?.data?.requires_schedule_confirmation === true) {
+        const data = error.response.data;
+        setScheduleReview(data.schedule_review);
+        setNotification({
+          visible: true,
+          title: 'Review your schedule',
+          message: data.message,
+          iconName: 'event-busy',
+          onBackdropPress: closeNotification,
+          iconColor: '#DC2626',
+          iconBgColor: 'bg-red-50',
+          primaryButtonText: 'Review schedule',
+          onPrimaryPress: () => {
+            closeNotification();
+            scrollRef.current?.scrollTo({ y: Math.max(0, scheduleY.current - 12), animated: true });
+          },
+          secondaryButtonText: 'Continue anyway',
+          onSecondaryPress: () => {
+            closeNotification();
+            void handleApplyJob(true);
+          },
+        });
+        return;
+      }
       if (
         error.response?.status === 403 ||
         error.response?.data?.needs_verification ||
@@ -360,8 +390,7 @@ export default function JobDetailsScreen() {
           visible: true,
           title: 'Verification Required',
           message:
-            error.response?.data?.message ||
-            'Please verify your account first before applying for jobs. Upload your required documents in your Verification Status.',
+            error.response?.data?.message,
           iconName: 'verified-user',
           iconColor: '#DC2626',
           iconBgColor: 'bg-red-50',
@@ -388,6 +417,9 @@ export default function JobDetailsScreen() {
         primaryButtonText: 'OK',
         onPrimaryPress: closeNotification,
       });
+    } finally {
+      applyingRef.current = false;
+      setApplying(false);
     }
   };
 
@@ -469,6 +501,7 @@ export default function JobDetailsScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 20, paddingBottom: 8 }}
@@ -511,9 +544,13 @@ export default function JobDetailsScreen() {
           </View>
         </View>
 
+        <View onLayout={(event) => { scheduleY.current = event.nativeEvent.layout.y; }}>
         <ApplicationSection title="Work schedule" icon="calendar-today">
-          <ScheduleMatchNotice match={job.schedule_match} />
-          {job.schedule_slots?.length ? <WeeklyScheduleSummary slots={job.schedule_slots} /> : <>
+          {job.schedule_match && <View className="items-end mb-4">
+            <ScheduleMatchNotice match={job.schedule_match} compact />
+          </View>}
+          {scheduleReview && <Text className="text-xs font-semibold mb-3" style={{ color: colors.textSecondary }}>Job hours</Text>}
+          {(scheduleReview?.required_slots ?? job.schedule_slots)?.length ? <WeeklyScheduleSummary slots={scheduleReview?.required_slots ?? job.schedule_slots} /> : <>
           <View className="mb-3">
             <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Work days</Text>
             <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{workDays}</Text>
@@ -523,7 +560,17 @@ export default function JobDetailsScreen() {
             <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{job.time_slot || 'Not specified'}</Text>
           </View>
           </>}
+          {scheduleReview && <View className="border-t pt-4 mt-4" style={{ borderColor: colors.border }}>
+            <Text className="text-xs font-semibold mb-3" style={{ color: colors.textSecondary }}>Your saved availability</Text>
+            {scheduleReview.availability_slots.length
+              ? <WeeklyScheduleSummary slots={scheduleReview.availability_slots} />
+              : <Text className="text-sm leading-5" style={{ color: colors.textSecondary }}>No availability saved yet.</Text>}
+            <TouchableOpacity onPress={() => router.push('/students/(tabs)/profile')} accessibilityRole="button" className="self-start py-3 mt-1">
+              <Text className="text-sm font-semibold" style={{ color: accentColor }}>Edit availability in Profile</Text>
+            </TouchableOpacity>
+          </View>}
         </ApplicationSection>
+        </View>
         {(skills.length > 0 || requirements.length > 0) && (
           <ApplicationSection title="Skills & requirements" icon="checklist">
             {skills.length > 0 && (
@@ -579,15 +626,17 @@ export default function JobDetailsScreen() {
             </View>
           ) : (
             <TouchableOpacity
-              onPress={handleApplyJob}
+              onPress={() => handleApplyJob()}
+              disabled={applying}
+              accessibilityState={{ disabled: applying, busy: applying }}
               accessibilityRole="button"
               accessibilityLabel="Apply now"
               activeOpacity={0.8}
               className="flex-row items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-600"
               style={{ flex: 1.4, minHeight: 48 }}
             >
-              <Text className="text-sm font-semibold text-white">Apply now</Text>
-              <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
+              <Text className="text-sm font-semibold text-white">{applying ? 'Applying…' : 'Apply now'}</Text>
+              {applying ? <ActivityIndicator size="small" color="#FFFFFF" /> : <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />}
             </TouchableOpacity>
           )}
         </View>
@@ -714,6 +763,8 @@ export default function JobDetailsScreen() {
         onPrimaryPress={notification.onPrimaryPress}
         secondaryButtonText={notification.secondaryButtonText}
         onSecondaryPress={notification.onSecondaryPress}
+        onRequestClose={closeNotification}
+        onBackdropPress={notification.onBackdropPress}
       />
     </View>
   );

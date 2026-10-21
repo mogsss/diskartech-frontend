@@ -1,4 +1,5 @@
 import '../global.css';
+import { ToastProvider } from '@/hooks/useToast';
 
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 
@@ -183,6 +184,7 @@ function RootLayoutNav() {
       <AppNotificationListeners />
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <OfflineBanner>
+      <ToastProvider>
       <Stack screenOptions={stackScreenOptions}>
         {/* Splash & onboarding */}
         <Stack.Screen name="index" />
@@ -225,6 +227,7 @@ function RootLayoutNav() {
         <Stack.Screen name="help-center" />
         <Stack.Screen name="about-diskartech" />
       </Stack>
+      </ToastProvider>
       </OfflineBanner>
       </StartupConsentGate>
     </SafeAreaProvider>

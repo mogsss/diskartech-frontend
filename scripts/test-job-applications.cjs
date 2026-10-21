@@ -22,7 +22,34 @@ function load(relative, dependencies = {}, prefix = '') {
 }
 
 const helpers = load('utils/jobApplications.ts');
-const { getAppliedJobIds } = helpers;
+const { getAppliedJobIds, sortApplicationsNewestFirst } = helpers;
+
+test('newest applications appear first even if an older record has a newer status update', () => {
+  const records = Object.freeze([
+    { id: 99, status: 'viewed', created_at: '2026-10-20T08:00:00Z', updated_at: '2026-10-23T08:00:00Z' },
+    { id: 2, status: 'pending', created_at: '2026-10-22T08:00:00Z' },
+    { id: 100, status: 'pending', created_at: '2026-10-21T08:00:00Z' },
+  ]);
+  const sorted = sortApplicationsNewestFirst(records);
+  assert.deepEqual(sorted.map(item => item.id), [2, 100, 99]);
+  assert.deepEqual(sorted.filter(item => item.status === 'pending').map(item => item.id), [2, 100]);
+  assert.deepEqual(records.map(item => item.id), [99, 2, 100]);
+});
+
+test('equal application dates use numeric record IDs, including equivalent timezone offsets', () => {
+  const records = [
+    { id: '9', created_at: '2026-10-21T08:00:00Z' },
+    { id: 10, created_at: '2026-10-21T08:00:00Z' },
+    { id: '11', created_at: '2026-10-21T16:00:00+08:00' },
+  ];
+  assert.deepEqual(sortApplicationsNewestFirst(records).map(item => item.id), ['11', 10, '9']);
+});
+
+test('missing or invalid application dates sort below dated records with a consistent ID order', () => {
+  const records = [{ id: 3 }, { id: 4, created_at: 'invalid' }, { id: 2, created_at: null }, { id: 1, created_at: '2026-10-21T08:00:00Z' }];
+  assert.deepEqual(sortApplicationsNewestFirst(records).map(item => item.id), [1, 4, 3, 2]);
+  assert.deepEqual(sortApplicationsNewestFirst([]), []);
+});
 
 test('cancelled history does not count as applied or get removed from the original records', () => {
   const records = Object.freeze([
@@ -62,6 +89,7 @@ function detailsFixture(history) {
   let cursor = 0, focus, cleanup;
   const jsx = (type, props) => ({ type, props });
   const react = {
+    useRef(initial) { const index = cursor++; return slots[index] ??= { current: initial }; },
     useState(initial) {
       const index = cursor++;
       if (!(index in slots)) slots[index] = initial;
@@ -104,6 +132,7 @@ function detailsFixture(history) {
     '@/utils/notifications': { sendAppNotification: async () => {} },
     '@/utils/notificationFeed': { getCreatedApplicationId: data => String(data.data.id) },
     '@/hooks/useDarkMode': { useDarkMode: () => ({ isDark: false, colors: {} }) },
+    '@/hooks/useToast': { useToast: () => ({ showToast() {} }) },
     '@/utils/jobRate': { getSalaryLabel: () => 'Hourly rate', getSalaryUnit: () => 'per hour' },
     '@/components/student/application-details/ApplicationSection': 'Section',
     '@/components/schedule/WeeklyScheduleSummary': 'Schedule', '@/components/schedule/ScheduleMatchNotice': 'Match',

@@ -42,6 +42,7 @@ function fixture(options = {}) {
   const Native = { Modal: 'main', View: 'div', ScrollView: 'section', Text: 'span', TouchableOpacity: 'button', TextInput: 'input', Switch: 'input', ActivityIndicator: 'progress', Platform: { OS: 'web' } };
   const component = load('components/schedule/WeeklyScheduleModal.tsx', {
     react: hooks, 'react-native': Native, '@/hooks/useDarkMode': { useDarkMode: theme }, '@/utils/weeklySchedule': weekly,
+    '@/hooks/useToast': { ToastViewport: () => null },
     '@expo/vector-icons': { MaterialIcons: icon }, '@react-native-community/datetimepicker': { __esModule: true, default: 'input', DateTimePickerAndroid: {} },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 20, bottom: 12 }) }, './WeeklyScheduleSummary': summary,
   }).default;

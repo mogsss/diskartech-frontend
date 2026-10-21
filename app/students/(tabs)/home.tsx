@@ -21,9 +21,9 @@ import { getAppliedJobIds } from '@/utils/jobApplications';
 import { matchJobWithQuery } from '@/utils/fuzzySearch';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
-import NotificationModal from '@/components/ui/modals/NotificationModal';
 
 type JobFeed = 'all' | 'nearby' | 'ai_match' | 'saved';
 const feedTabs: { id: JobFeed; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
@@ -34,6 +34,7 @@ const feedTabs: { id: JobFeed; label: string; icon: keyof typeof MaterialIcons.g
 ];
 
 export default function HomeScreen() {
+  const { showToast } = useToast();
   // Pigilan ang pagbalik sa login page kapag pinindot ang hardware back button sa root dashboard
   useFocusEffect(
     useCallback(() => {
@@ -60,7 +61,6 @@ export default function HomeScreen() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<JobFeed>('all');
-  const [bookmarkErrorVisible, setBookmarkErrorVisible] = useState(false);
 
   const [realNearbyJobs, setRealNearbyJobs] = useState<any[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(true);
@@ -286,10 +286,17 @@ export default function HomeScreen() {
     router.push(`/students/job-details?id=${jobId}`);
   };
 
-  const handleToggleBookmark = async (jobId: string) => {
+  const handleToggleBookmark = async (jobId: string, wasBookmarked: boolean) => {
     try {
       const response = await api.post('/student/toggle-save-job', { job_id: jobId });
       if (response.data && response.data.status === 'success') {
+        showToast({
+          type: 'success',
+          title: wasBookmarked ? 'Job removed' : 'Job saved',
+          message: response.data.message || (wasBookmarked
+            ? 'Job removed from your saved bookmarks.'
+            : 'Job added to your saved bookmarks.'),
+        });
         await fetchSavedJobs();
 
         setRealAllJobs((prev) =>
@@ -316,7 +323,7 @@ export default function HomeScreen() {
       }
     } catch (error: any) {
       console.error('Error toggling bookmark:', error);
-      setBookmarkErrorVisible(true);
+      showToast({ type: 'error', title: 'Could not update saved jobs', message: 'Please try again in a moment.' });
     }
   };
 
@@ -477,7 +484,7 @@ export default function HomeScreen() {
           verified: owner?.isVerified === true || owner?.isVerified === 1,
           applicants: job.applications_count ?? 0,
           featured: isFeaturedJob(job),
-        }} onPress={() => handleJobPress(job.id.toString())} onBookmark={() => handleToggleBookmark(job.id.toString())} />
+        }} onPress={() => handleJobPress(job.id.toString())} onBookmark={() => handleToggleBookmark(job.id.toString(), Boolean(job.bookmarked))} />
       </View>
     );
   };
@@ -508,7 +515,6 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       />
       <SideDrawerMenu visible={isDrawerVisible} onClose={() => setDrawerVisible(false)} user={{ name: studentProfile.name, role: 'student', avatarUri: studentProfile.avatarUri, avatarInitials: studentProfile.avatarInitials, isVerified: studentProfile.isVerified, rejectionReason: studentProfile.rejectionReason }} />
-      <NotificationModal visible={bookmarkErrorVisible} title="Could not update saved jobs" message="Please try again in a moment." iconName="bookmark-border" onPrimaryPress={() => setBookmarkErrorVisible(false)} />
     </View>
   );
 }

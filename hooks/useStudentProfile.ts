@@ -11,6 +11,7 @@ import { resolveMediaUrl } from '@/utils/media';
 import { normalizeAiResult } from '@/utils/documentAnalysis';
 import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
 import { ScheduleSlot, scheduleDraft, weeklySummary } from '@/utils/weeklySchedule';
+import { useToast } from '@/hooks/useToast';
 
 type StudentDocumentType = 'student_resume' | 'school_id' | 'coe';
 
@@ -20,6 +21,7 @@ const getFilename = (path?: string) => {
 };
 
 export function useStudentProfile() {
+  const { showToast } = useToast();
   const [studentName, setStudentName] = useState('Junnyl Mabini');
   const [studentEmail, setStudentEmail] = useState('junnyl.mabini@example.com');
   const [school, setSchool] = useState('Not specified');
@@ -207,7 +209,10 @@ export function useStudentProfile() {
   const handleSaveAvailability = async (days: string[], timeSlot: string, slots: ScheduleSlot[]): Promise<boolean> => {
     profileRevision.current += 1;
     try {
-      if (!await supportsWeeklySchedules()) return false;
+      if (!await supportsWeeklySchedules()) {
+        showToast({ type: 'error', title: 'Could not save availability', message: 'Schedule saving is temporarily unavailable. Please try again later.' });
+        return false;
+      }
       const token = await AsyncStorage.getItem('userToken');
 
       const response = await fetch(`${BACKEND_URL}/api/student/update-availability`, {
@@ -222,11 +227,8 @@ export function useStudentProfile() {
 
       const responseText = await response.text();
       let data;
-      try { data = JSON.parse(responseText); } catch (e) {
-        showAlertModal({
-          title: 'Server Error', message: 'Nagbalik ng HTML page ang server.', iconName: 'error-outline',
-          iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-        });
+      try { data = JSON.parse(responseText); } catch {
+        showToast({ type: 'error', title: 'Could not save availability', message: 'Unable to save right now. Please try again.' });
         return false;
       }
 
@@ -237,10 +239,7 @@ export function useStudentProfile() {
         setScheduleSlots(data.profile?.schedule_slots || slots);
         setAvailabilityModalVisible(false);
         
-        showAlertModal({
-          title: 'Success!', message: 'Your availability has been updated successfully.', iconName: 'check-circle',
-          iconColor: '#16a34a', iconBgColor: 'bg-green-50', primaryButtonText: 'Awesome', onPrimaryPress: () => setAlertModalVisible(false),
-        });
+        showToast({ type: 'success', title: 'Availability updated', message: 'Your availability has been updated successfully.' });
 
         try {
         const storedProfile = await AsyncStorage.getItem('userProfile');
@@ -254,16 +253,10 @@ export function useStudentProfile() {
         } catch { /* A cache error must not turn a completed save into a failure. */ }
         return true;
       } else {
-        showAlertModal({
-          title: 'Update Failed', message: data.message || 'Failed to update availability', iconName: 'error-outline',
-          iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'Try Again', onPrimaryPress: () => setAlertModalVisible(false),
-        });
+        showToast({ type: 'error', title: 'Could not save availability', message: data.message || 'Failed to update availability.' });
       }
-    } catch (error) {
-      showAlertModal({
-        title: 'Network Error', message: 'Please check your internet connection.', iconName: 'wifi-off',
-        iconColor: '#64748b', iconBgColor: 'bg-slate-100', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-      });
+    } catch {
+      showToast({ type: 'error', title: 'Could not save availability', message: 'Please check your internet connection.' });
     }
     return false;
   };
@@ -284,11 +277,8 @@ export function useStudentProfile() {
 
       const responseText = await response.text();
       let data;
-      try { data = JSON.parse(responseText); } catch (e) {
-        showAlertModal({
-          title: 'Server Error', message: 'Nagbalik ng HTML page ang server.', iconName: 'error-outline',
-          iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-        });
+      try { data = JSON.parse(responseText); } catch {
+        showToast({ type: 'error', title: 'Could not save skills', message: 'Unable to save right now. Please try again.' });
         return;
       }
 
@@ -296,23 +286,20 @@ export function useStudentProfile() {
         setSkills(updatedSkills);
         setAddSkillModalVisible(false);
 
-        const storedProfile = await AsyncStorage.getItem('userProfile');
-        if (storedProfile) {
-          const profile = JSON.parse(storedProfile);
-          profile.skillset = updatedSkills;
-          await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
-        }
+        try {
+          const storedProfile = await AsyncStorage.getItem('userProfile');
+          if (storedProfile) {
+            const profile = JSON.parse(storedProfile);
+            profile.skillset = updatedSkills;
+            await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+          }
+        } catch { /* A cache error must not turn a completed save into a failure. */ }
+        showToast({ type: 'success', title: 'Skills updated', message: 'Your skills have been updated successfully.' });
       } else {
-        showAlertModal({
-          title: 'Update Failed', message: data.message || 'Failed to update skills', iconName: 'error-outline',
-          iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-        });
+        showToast({ type: 'error', title: 'Could not save skills', message: data.message || 'Failed to update skills.' });
       }
-    } catch (error) {
-      showAlertModal({
-        title: 'Network Error', message: 'Please check your connection and try again.', iconName: 'wifi-off',
-        iconColor: '#64748b', iconBgColor: 'bg-slate-100', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-      });
+    } catch {
+      showToast({ type: 'error', title: 'Could not save skills', message: 'Please check your connection and try again.' });
     }
   };
 
@@ -384,40 +371,28 @@ export function useStudentProfile() {
         }
         setUploadingDocument(null);
 
-        showAlertModal({
+        showToast({
+          type: 'success',
           title: 'Upload Successful',
           message: `${title} has been uploaded and saved successfully!`,
-          iconName: 'cloud-done',
-          iconColor: '#16a34a',
-          iconBgColor: 'bg-green-50',
-          primaryButtonText: 'Great',
-          onPrimaryPress: () => setAlertModalVisible(false),
         });
         
       } else {
         setUploadingDocument(null);
-        showAlertModal({
+        showToast({
+          type: 'error',
           title: 'Upload Failed',
           message: data.message || `Failed to upload ${title}. Please try again.`,
-          iconName: 'error-outline',
-          iconColor: '#ef4444',
-          iconBgColor: 'bg-red-50',
-          primaryButtonText: 'OK',
-          onPrimaryPress: () => setAlertModalVisible(false),
         });
       }
     } catch (error: any) {
       setUploadingDocument(null);
       const firstValidation = Object.values(error.response?.data?.errors || {}).flat().find((message) => typeof message === 'string');
-      showAlertModal({
-        title: 'Error',
-        message: String(firstValidation || error.response?.data?.message || error.message || 'An error occurred while uploading. Check your connection.'),
-        iconName: 'wifi-off',
-        iconColor: '#64748b',
-        iconBgColor: 'bg-slate-100',
-        primaryButtonText: 'OK',
-        onPrimaryPress: () => setAlertModalVisible(false),
-        ...(getUploadRateLimitNotice(error) ?? {}),
+      const cooldown = getUploadRateLimitNotice(error);
+      showToast({
+        type: cooldown ? 'warning' : 'error',
+        title: cooldown?.title ?? 'Upload Failed',
+        message: cooldown?.message ?? String(firstValidation || error.response?.data?.message || error.message || 'An error occurred while uploading. Check your connection.'),
       });
     } finally {
       documentUploadBusy.current = false;
@@ -512,24 +487,22 @@ export function useStudentProfile() {
           }
         } catch { /* A cache failure does not invalidate a completed upload. */ }
 
-        showAlertModal({
-          title: 'Profile Updated', message: 'Profile picture uploaded successfully!', iconName: 'check-circle',
-          iconColor: '#16a34a', iconBgColor: 'bg-green-50', primaryButtonText: 'Nice', onPrimaryPress: () => setAlertModalVisible(false),
+        showToast({
+          type: 'success', title: 'Profile Updated', message: 'Profile picture uploaded successfully!',
         });
 
       } else {
-        showAlertModal({
-          title: 'Upload Failed', message: data.message || 'Failed to upload profile picture', iconName: 'error-outline',
-          iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
+        showToast({
+          type: 'error', title: 'Upload Failed', message: data.message || 'Failed to upload profile picture',
         });
       }
     } catch (error: any) {
       setUploadingProfilePicture(false);
       const firstValidation = Object.values(error.response?.data?.errors || {}).flat().find(message => typeof message === 'string');
-      showAlertModal({
-        title: 'Upload Failed', message: String(firstValidation || error.response?.data?.message || 'Unable to upload your profile picture. Please try again.'), iconName: 'error-outline',
-        iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
-        ...(getUploadRateLimitNotice(error) ?? {}),
+      const cooldown = getUploadRateLimitNotice(error);
+      showToast({
+        type: cooldown ? 'warning' : 'error', title: cooldown?.title ?? 'Upload Failed',
+        message: cooldown?.message ?? String(firstValidation || error.response?.data?.message || 'Unable to upload your profile picture. Please try again.'),
       });
     } finally {
       documentUploadBusy.current = false;

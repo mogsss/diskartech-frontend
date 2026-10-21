@@ -3,6 +3,7 @@ import { addScheduleSlot, currentScheduleDay, formatTime, ScheduleDraft, schedul
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import React, { useEffect, useRef, useState } from 'react';
+import { ToastViewport } from '@/hooks/useToast';
 import { ActivityIndicator, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -346,6 +347,7 @@ export default function WeeklyScheduleModal({ visible, value, mode, defaultToTod
           </View>
         </View>
       </View>
+      <ToastViewport active={visible} />
     </View>
   </Modal>;
 }

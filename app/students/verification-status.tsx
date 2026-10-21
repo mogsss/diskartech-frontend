@@ -1,5 +1,4 @@
 import LoadingModal from '@/components/ui/modals/LoadingModal';
-import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,12 +10,14 @@ import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getDocumentAnalysisStatus, normalizeAiResult } from '@/utils/documentAnalysis';
 import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
+import { useToast } from '@/hooks/useToast';
 
 type DocumentType = 'school_id' | 'coe' | 'student_resume';
 type AiResults = { school_id: boolean | null; coe: boolean | null };
 
 export default function StudentVerificationStatusScreen() {
   const { isDark, colors } = useDarkMode();
+  const { showToast } = useToast();
   const [hasSchoolId, setHasSchoolId] = useState(false);
   const [hasCoe, setHasCoe] = useState(false);
   const [hasResume, setHasResume] = useState(false);
@@ -27,13 +28,6 @@ export default function StudentVerificationStatusScreen() {
   const [hasProfile, setHasProfile] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [notification, setNotification] = useState<{
-    visible: boolean;
-    title: string;
-    message: string;
-    iconName: keyof typeof MaterialIcons.glyphMap;
-    iconColor: string;
-  }>({ visible: false, title: '', message: '', iconName: 'info-outline', iconColor: '#DC2626' });
   const [aiResults, setAiResults] = useState<AiResults>({ school_id: null, coe: null });
   const uploadBusy = useRef(false);
   const profileRevision = useRef(0);
@@ -83,7 +77,7 @@ export default function StudentVerificationStatusScreen() {
       if (result.canceled) return;
       const file = result.assets[0];
       if (file.size && file.size > 5 * 1024 * 1024) {
-        setNotification({ visible: true, title: 'File too large', message: 'Please choose a PDF, JPG or PNG file no larger than 5 MB.', iconName: 'warning-amber', iconColor: '#D97706' });
+        showToast({ type: 'warning', title: 'File too large', message: 'Please choose a PDF, JPG or PNG file no larger than 5 MB.' });
         return;
       }
       setIsUploading(true);
@@ -100,12 +94,13 @@ export default function StudentVerificationStatusScreen() {
         setIsVerified(false);
         setAiResults((current) => ({ ...current, [documentType]: null }));
       }
-      setNotification({ visible: true, title: 'Document uploaded', message: 'Your document has been uploaded successfully.', iconName: 'check-circle-outline', iconColor: '#15803D' });
+      showToast({ type: 'success', title: 'Document uploaded', message: 'Your document has been uploaded successfully.' });
     } catch (error: any) {
       const validationErrors = error.response?.data?.errors;
       const firstValidation = validationErrors ? Object.values(validationErrors).flat().find((message) => typeof message === 'string') : null;
       const message = firstValidation || error.response?.data?.message || error.message || 'Please check your connection and try again.';
-      setNotification({ visible: true, title: 'Upload failed', message: String(message), iconName: 'error-outline', iconColor: '#DC2626', ...(getUploadRateLimitNotice(error) ?? {}) });
+      const cooldown = getUploadRateLimitNotice(error);
+      showToast({ type: cooldown ? 'warning' : 'error', title: cooldown?.title ?? 'Upload failed', message: cooldown?.message ?? String(message) });
     } finally {
       uploadBusy.current = false;
       setIsUploading(false);
@@ -203,7 +198,6 @@ export default function StudentVerificationStatusScreen() {
         )}
       </ScrollView>
       <LoadingModal visible={isUploading} message="Uploading document..." />
-      <NotificationModal visible={notification.visible} title={notification.title} message={notification.message} iconName={notification.iconName} iconColor={notification.iconColor} iconBgColor={notification.iconName === 'check-circle-outline' ? 'bg-emerald-50' : notification.iconColor === '#D97706' ? 'bg-amber-50' : 'bg-red-50'} onPrimaryPress={() => setNotification((current) => ({ ...current, visible: false }))} />
     </View>
   );
 }

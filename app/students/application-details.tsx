@@ -821,7 +821,12 @@ export default function StudentApplicationDetailsScreen() {
           companyName={companyName}
           applicationId={application.id || applicationId || ''}
           appliedAt={application.created_at}
-          updatedAt={application.terminated_at || application.updated_at}
+          updatedAt={application.updated_at}
+          hiredAt={application.hired_at}
+          terminatedAt={application.terminated_at}
+          interviewDate={application.interview_date}
+          interviewTime={application.interview_time}
+          interviewEndedAt={application.interview_ended_at}
           terminationReason={application.termination_reason}
         >
           {(status === 'terminated' || status === 'completed') && (
