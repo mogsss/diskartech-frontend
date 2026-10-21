@@ -95,6 +95,7 @@ function fixture() {
     '@/utils/jobRate': load('utils/jobRate.ts'),
     '@/utils/plainTextInput': load('utils/plainTextInput.ts'),
     '@/components/ui/modals/NotificationModal': { default: 'Notification' },
+    '@/components/schedule/WeeklyScheduleSummary': { default: 'WeeklyScheduleSummary' },
     axios: { isAxiosError: () => false },
   }).default;
   const render = () => {
