@@ -147,7 +147,7 @@ export default function StudentReportScreen() {
       <Stack.Screen options={{ gestureEnabled: !submitting }} />
       <SafeStatusBar backgroundColor={colors.background} withSpacer={false} />
       <View className="w-full max-w-2xl self-center px-5 pb-3 flex-row items-center gap-3" style={{ paddingTop: insets.top + 8 }}>
-        <TouchableOpacity onPress={goBack} disabled={submitting} accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.75} className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border, opacity: submitting ? 0.5 : 1 }}>
+        <TouchableOpacity onPress={goBack} disabled={submitting} accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.75} className="w-12 h-12 items-center justify-center" style={{ opacity: submitting ? 0.5 : 1 }}>
           <MaterialIcons name="arrow-back" size={23} color={colors.text} />
         </TouchableOpacity>
         <Text className="flex-1 text-xl font-bold" style={{ color: colors.text }}>{title}</Text>

@@ -19,6 +19,8 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { isAxiosError } from 'axios';
 import { getSalaryUnit } from '@/utils/jobRate';
 import { sanitizePlainText, containsMarkup, isValidCompensation } from '@/utils/plainTextInput';
+import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
+import { ScheduleSlot } from '@/utils/weeklySchedule';
 
 function startOfDay(value = new Date()): Date {
   const date = new Date(value);
@@ -43,6 +45,7 @@ interface HireModalProps {
   defaultSalaryType?: string | null;
   defaultWorkDays?: string | string[] | null;
   defaultWorkHours?: string | null;
+  defaultScheduleSlots?: ScheduleSlot[];
 }
 
 function parsePostedWorkDays(value: string | string[] | null): string[] {
@@ -82,6 +85,7 @@ export default function HireModal({
   defaultSalaryType = 'day',
   defaultWorkDays = [],
   defaultWorkHours = '',
+  defaultScheduleSlots,
 }: HireModalProps) {
   const { colors, isDark } = useDarkMode();
   const insets = useSafeAreaInsets();
@@ -193,7 +197,7 @@ export default function HireModal({
   const postedWorkHours = (defaultWorkHours ?? '').trim();
   const dayOptions = [...new Set([...AVAILABLE_DAYS, ...parsePostedWorkDays(defaultWorkDays)])];
   const timeOptions = [...new Set([...TIME_SLOTS, ...parseTimeSlots(postedWorkHours)])];
-  const workSchedule = [selectedDays.join(', '), serializeTimeSlots(selectedTimeSlots)].filter(Boolean).join(' \u2022 ');
+  const workSchedule = defaultScheduleSlots?.length ? 'Weekly hours from job post' : [selectedDays.join(', '), serializeTimeSlots(selectedTimeSlots)].filter(Boolean).join(' \u2022 ');
 
   useEffect(() => {
     if (visible) {
@@ -256,11 +260,11 @@ export default function HireModal({
       showNotice('Invalid End Date', 'The contract end date cannot be earlier than the start date.', 'event');
       return;
     }
-    if (selectedDays.length === 0) {
+    if (!defaultScheduleSlots?.length && selectedDays.length === 0) {
       showNotice('Work Days Required', 'Please select at least one work day.', 'calendar-today');
       return;
     }
-    if (selectedTimeSlots.length === 0) {
+    if (!defaultScheduleSlots?.length && selectedTimeSlots.length === 0) {
       showNotice('Working Hours Required', 'Please select the agreed working hours.', 'schedule');
       return;
     }
@@ -450,6 +454,7 @@ export default function HireModal({
                   <Text className="text-[11px] font-medium" style={{ color: accentColor }}>Until project completion</Text>
                 </TouchableOpacity>
               </View>
+              {defaultScheduleSlots?.length ? <View style={{ gap: 12 }}><WeeklyScheduleSummary slots={defaultScheduleSlots} /><Text style={{ color: colors.textSecondary, fontSize: 11, lineHeight: 20 }}>These hours come from the job post. Availability and active contract conflicts are checked again when hiring is confirmed.</Text></View> : <>
               <Text className="text-[11px] leading-5 mb-3" style={{ color: colors.textSecondary }}>Pre-selected from your job post. Adjust as agreed with the student.</Text>
               <Text className="text-xs font-medium mb-2" style={{ color: colors.text }}>Work days <Text style={{ color: accentColor }}>*</Text></Text>
               <View className="flex-row flex-wrap gap-1 mb-5">
@@ -501,6 +506,7 @@ export default function HireModal({
                   );
                 })}
               </View>
+              </>}
             </HireSection>
 
             <HireSection title="Agreed compensation" icon="payments">

@@ -112,7 +112,7 @@ export default function JobDetailsModal({ visible, onClose, job, onJobUpdated }:
             </View>
 
             <JobMetricsOverview rate={job.salary} salaryType={job.salary_type} applicantCount={applicantCount} onViewApplicants={handleViewApplicants} />
-            <JobScheduleCard availableDays={job.available_days} timeSlot={job.time_slot} />
+            <JobScheduleCard availableDays={job.available_days} timeSlot={job.time_slot} slots={job.schedule_slots} />
             <JobDescriptionCard description={job.description} />
             <JobRequirementsCard requirements={parseList(job.requirements)} />
             <JobSkillsCard skills={parseList(job.skills)} />

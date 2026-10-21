@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
+import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
+import { ScheduleSlot } from '@/utils/weeklySchedule';
 
 interface JobMetricsOverviewProps {
   rate?: string | number | null;
@@ -72,9 +74,10 @@ function DetailSection({ title, icon, count, children }: {
 interface JobScheduleCardProps {
   availableDays: unknown;
   timeSlot?: string;
+  slots?: ScheduleSlot[];
 }
 
-export function JobScheduleCard({ availableDays, timeSlot }: JobScheduleCardProps) {
+export function JobScheduleCard({ availableDays, timeSlot, slots }: JobScheduleCardProps) {
   const { colors } = useDarkMode();
   let parsedDays = availableDays;
   if (typeof availableDays === 'string') {
@@ -86,6 +89,7 @@ export function JobScheduleCard({ availableDays, timeSlot }: JobScheduleCardProp
 
   return (
     <DetailSection title="Work schedule" icon="calendar-today">
+      {slots?.length ? <WeeklyScheduleSummary slots={slots} /> : <>
       <View className="mb-3">
         <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Work days</Text>
         <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{daysLabel}</Text>
@@ -94,6 +98,7 @@ export function JobScheduleCard({ availableDays, timeSlot }: JobScheduleCardProp
         <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Time slot</Text>
         <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{timeSlot || 'Not specified'}</Text>
       </View>
+      </>}
     </DetailSection>
   );
 }

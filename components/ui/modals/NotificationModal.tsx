@@ -15,6 +15,7 @@ interface NotificationModalProps {
   secondaryButtonText?: string;
   onSecondaryPress?: () => void;
   buttonLayout?: 'stacked' | 'row';
+  hideActions?: boolean;
 }
 
 export default function NotificationModal({
@@ -29,6 +30,7 @@ export default function NotificationModal({
   secondaryButtonText,
   onSecondaryPress,
   buttonLayout = 'stacked',
+  hideActions = false,
 }: NotificationModalProps) {
   const { colors, isDark } = useDarkMode();
   const displayedIconColor = isDark && ['#DC2626', '#D32F2F', '#B91C1C'].includes(iconColor.toUpperCase())
@@ -80,7 +82,7 @@ export default function NotificationModal({
             {message}
           </Text>
 
-          <View className={useButtonRow ? 'w-full flex-row items-stretch gap-3' : 'w-full'}>
+          {!hideActions && <View className={useButtonRow ? 'w-full flex-row items-stretch gap-3' : 'w-full'}>
             {useButtonRow && secondaryAction}
             <TouchableOpacity
               onPress={onPrimaryPress}
@@ -94,7 +96,7 @@ export default function NotificationModal({
               <Text className="text-white font-bold text-base text-center">{primaryButtonText}</Text>
             </TouchableOpacity>
             {!useButtonRow && secondaryAction}
-          </View>
+          </View>}
         </View>
         
       </View>

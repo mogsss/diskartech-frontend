@@ -1,17 +1,17 @@
 import api, { STORAGE_URL } from '@/api/axios';
 import Avatar from '@/components/ui/Avatar';
+import SearchBar from '@/components/ui/SearchBar';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import DrawerMenuButton from '@/components/ui/DrawerMenuButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Colors } from '@/constants/colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Keyboard, Text, TouchableOpacity, View } from 'react-native';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { db } from '@/utils/firebase';
-import { collection, onSnapshot, query, where, or } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import {
   CHATS_COLLECTION,
   formatChatListTime,
@@ -29,21 +29,27 @@ interface LiveUserProfile {
   role?: string;
 }
 
+interface Conversation {
+  id: string;
+  otherUserId: string;
+  senderName: string;
+  senderAvatar: string;
+  lastMessage: string;
+  timestamp: string;
+  unread: boolean;
+  lastMessageAt: unknown;
+  isVerified?: boolean;
+}
+
 export default function EmployerMessagesScreen() {
-  const { colors } = useDarkMode();
-  const [conversationsList, setConversationsList] = useState<
-    {
-      id: string;
-      otherUserId: string;
-      senderName: string;
-      senderAvatar: string;
-      lastMessage: string;
-      timestamp: string;
-      unread: boolean;
-      lastMessageAt: any;
-      isVerified?: boolean;
-    }[]
-  >([]);
+  const { colors, isDark } = useDarkMode();
+  const [conversationsList, setConversationsList] = useState<Conversation[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'All' | 'Unread'>('All');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const listRef = useRef<FlatList<Conversation>>(null);
   const [currentOwnerId, setCurrentOwnerId] = useState<string | null>(null);
   const [liveUsersMap, setLiveUsersMap] = useState<Record<string, LiveUserProfile>>({});
   const [isDrawerVisible, setDrawerVisible] = useState(false);
@@ -60,12 +66,19 @@ export default function EmployerMessagesScreen() {
   });
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
     getLoggedInUserId().then((id) => {
+      if (!active) return;
       if (id !== 'unknown') setCurrentOwnerId(id);
+      else { setLoadError(true); setLoading(false); }
+    }).catch(() => {
+      if (active) { setLoadError(true); setLoading(false); }
     });
 
     AsyncStorage.getItem('userProfile').then((stored) => {
-      if (stored) {
+      if (stored && active) {
         try {
           const prof = JSON.parse(stored);
           const isH = prof.role === 'household' || !!prof.household_name;
@@ -87,17 +100,22 @@ export default function EmployerMessagesScreen() {
             isVerified: prof.isVerified === 1 || prof.isVerified === true,
             rejectionReason: prof.rejection_reason || null,
           });
-        } catch (e) {}
+        } catch {
+          console.warn('Unable to read the stored employer profile.');
+        }
       }
-    });
-  }, []);
+    }).catch(() => console.warn('Unable to load the employer profile.'));
+    return () => { active = false; };
+  }, [retryVersion]);
 
   useEffect(() => {
     if (!currentOwnerId) return;
+    let active = true;
 
     const unsubscribe = onSnapshot(
       collection(db, CHATS_COLLECTION),
       (snapshot) => {
+        if (!active) return;
         const myId = String(currentOwnerId);
         const matchedDocs = snapshot.docs.filter((docSnap) => {
           const raw = docSnap.data();
@@ -152,8 +170,8 @@ export default function EmployerMessagesScreen() {
 
         // Sort descending: most recent message at the top
         firestoreConvs.sort((a, b) => {
-          const timeA = a.lastMessageAt?.toMillis ? a.lastMessageAt.toMillis() : 0;
-          const timeB = b.lastMessageAt?.toMillis ? b.lastMessageAt.toMillis() : 0;
+          const timeA = getTimestampMs(a.lastMessageAt);
+          const timeB = getTimestampMs(b.lastMessageAt);
           return timeB - timeA;
         });
 
@@ -178,6 +196,8 @@ export default function EmployerMessagesScreen() {
         });
 
         setConversationsList(uniqueConvs);
+        setLoading(false);
+        setLoadError(false);
 
         // Kumuha ng live verification statuses para sa mga kachat mula sa backend
         const userIdsToFetch = Array.from(
@@ -192,7 +212,7 @@ export default function EmployerMessagesScreen() {
           api
             .get(`/users/verification-statuses?ids=${userIdsToFetch.join(',')}`)
             .then((res) => {
-              if (res.data?.statuses) {
+              if (active && res.data?.statuses) {
                 setLiveUsersMap((prev) => ({ ...prev, ...res.data.statuses }));
               }
             })
@@ -202,111 +222,120 @@ export default function EmployerMessagesScreen() {
         }
       },
       (error) => {
+        if (!active) return;
         console.error('Error fetching conversations: ', error);
+        setLoading(false);
+        setLoadError(true);
       }
     );
 
-    return () => unsubscribe();
-  }, [currentOwnerId]);
+    return () => { active = false; unsubscribe(); };
+  }, [currentOwnerId, retryVersion]);
 
   const handleConversationPress = (conversationId: string) => {
     router.push(`/chat?id=${conversationId}` as any);
   };
 
+  const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
+  const accentText = isDark ? colors.accent : colors.primary;
+  const subtle = isDark ? '#263449' : '#F1F5F9';
+  const unreadCount = conversationsList.filter((conversation) => conversation.unread).length;
+  const getDisplayProfile = (conversation: Conversation) => {
+    const live = liveUsersMap[conversation.otherUserId];
+    return {
+      name: live?.name || conversation.senderName || 'Student',
+      avatar: live?.avatar || conversation.senderAvatar,
+      verified: Boolean(live ? live.isVerified : conversation.isVerified),
+    };
+  };
+  const filteredConversations = conversationsList.filter((conversation) => {
+    if (activeFilter === 'Unread' && !conversation.unread) return false;
+    const queryText = searchQuery.trim().toLowerCase();
+    if (!queryText) return true;
+    const { name } = getDisplayProfile(conversation);
+    return name.toLowerCase().includes(queryText) || conversation.lastMessage.toLowerCase().includes(queryText);
+  });
+  const resetFilters = () => { setSearchQuery(''); setActiveFilter('All'); };
+  const retry = () => setRetryVersion((version) => version + 1);
+
+  const renderConversation = ({ item: conversation }: { item: Conversation }) => {
+    const profile = getDisplayProfile(conversation);
+    return (
+      <TouchableOpacity
+        onPress={() => handleConversationPress(conversation.id)}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={`${profile.name}${conversation.unread ? ', unread message' : ''}: ${conversation.lastMessage}`}
+        className="px-6 py-3 flex-row items-center gap-3"
+      >
+        <Avatar uri={profile.avatar} name={profile.name} size={56} />
+        <View className="flex-1">
+          <View className="flex-row items-start justify-between gap-2">
+            <View className="flex-1 flex-row items-center gap-1.5">
+              <Text className={conversation.unread ? 'text-base font-bold shrink' : 'text-base font-semibold shrink'} style={{ color: colors.text }} numberOfLines={1}>{profile.name}</Text>
+              {profile.verified && <MaterialIcons name="verified" size={15} color={isDark ? '#6EE7B7' : '#15803D'} />}
+            </View>
+            <Text className="text-xs leading-5" style={{ color: conversation.unread ? accentText : colors.textSecondary }}>{conversation.timestamp}</Text>
+          </View>
+          <View className="flex-row items-center gap-3 mt-1.5">
+            <Text className={conversation.unread ? 'flex-1 text-sm leading-5 font-medium' : 'flex-1 text-sm leading-5'} style={{ color: conversation.unread ? colors.text : colors.textSecondary }} numberOfLines={1}>{conversation.lastMessage}</Text>
+            {conversation.unread && <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.primary }} />}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = () => {
+    const hasFilters = searchQuery.trim().length > 0 || activeFilter === 'Unread';
+    return (
+      <View className="mx-6 px-6 py-8 items-center">
+        {loading ? <ActivityIndicator size="large" color={colors.primary} /> : <View className="w-16 h-16 rounded-3xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={loadError ? 'wifi-off' : searchQuery.trim() ? 'search-off' : activeFilter === 'Unread' ? 'mark-chat-read' : 'chat-bubble-outline'} size={30} color={accentText} /></View>}
+        <Text className="text-lg font-bold text-center mt-4" style={{ color: colors.text }}>{loading ? 'Loading conversations' : loadError ? 'Unable to load messages' : searchQuery.trim() ? 'No matching conversations' : activeFilter === 'Unread' ? "You're all caught up" : 'No messages yet'}</Text>
+        <Text className="text-sm leading-6 text-center mt-2" style={{ color: colors.textSecondary }}>{loading ? 'Your latest conversations will appear here shortly.' : loadError ? 'Check your connection and try again.' : searchQuery.trim() ? 'Try another name or keyword, or view all conversations.' : activeFilter === 'Unread' ? 'You have no unread conversations right now.' : 'Your conversations with applicants and students will appear here.'}</Text>
+        {!loading && (loadError || hasFilters) && <TouchableOpacity onPress={loadError ? retry : resetFilters} activeOpacity={0.8} accessibilityRole="button" className="min-h-12 flex-row items-center gap-2 px-4 rounded-xl mt-5" style={{ backgroundColor: accentSurface }}><Text className="text-sm font-semibold" style={{ color: accentText }}>{loadError ? 'Try again' : 'View all conversations'}</Text><MaterialIcons name={loadError ? 'refresh' : 'arrow-forward'} size={16} color={accentText} /></TouchableOpacity>}
+      </View>
+    );
+  };
+
   return (
     <View style={{ backgroundColor: colors.background }} className="flex-1">
-      <SafeStatusBar backgroundColor={colors.surface} />
-      <View style={{ backgroundColor: colors.surface, borderBottomColor: colors.border }} className="w-full max-w-2xl self-center px-6 pt-2 pb-3 border-b flex-row items-center justify-between">
-        <DrawerMenuButton onPress={() => setDrawerVisible(true)} />
-
-        <Text style={{ color: colors.text }} className="text-xl font-bold tracking-tight flex-1 text-center pr-12">
-          Messages
-        </Text>
-      </View>
-
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="p-6 pb-10"
-        showsVerticalScrollIndicator={false}
-      >
-        {conversationsList.length === 0 ? (
-          <View className="flex-1 justify-center items-center mt-32">
-            <MaterialIcons name="chat-bubble-outline" size={56} color={colors.textSecondary} />
-            <Text style={{ color: colors.text }} className="mt-4 text-base font-medium">No messages yet</Text>
-            <Text style={{ color: colors.textSecondary }} className="text-xs text-center mt-1 px-8">
-              Applicants and students who reach out will appear here.
-            </Text>
+      <SafeStatusBar />
+      <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3">
+        <View className="flex-row items-center gap-3">
+          <DrawerMenuButton onPress={() => setDrawerVisible(true)} />
+          <View className="flex-1">
+            <Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Messages</Text>
           </View>
-        ) : (
-          conversationsList.map((conv) => {
-            const live = liveUsersMap[conv.otherUserId];
-            const displayName = live?.name || conv.senderName;
-            const displayAvatar = live?.avatar || conv.senderAvatar;
-            const isVerified = Boolean(live ? live.isVerified : conv.isVerified);
-
+        </View>
+        <View className="mt-3"><SearchBar placeholder="Search conversations" value={searchQuery} onChangeText={(value) => { setSearchQuery(value); listRef.current?.scrollToOffset({ offset: 0, animated: false }); }} onSearch={() => Keyboard.dismiss()} /></View>
+        <View className="flex-row items-center gap-2 mt-3">
+          {(['All', 'Unread'] as const).map((filter) => {
+            const selected = activeFilter === filter;
+            const count = filter === 'All' ? conversationsList.length : unreadCount;
             return (
-              <TouchableOpacity
-                key={conv.id}
-                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                className={`flex-row rounded-2xl p-4 mb-3 shadow-sm items-center border ${
-                  conv.unread ? 'border-l-[3px] border-l-red-600' : ''
-                }`}
-                onPress={() => handleConversationPress(conv.id)}
-                activeOpacity={0.7}
-              >
-                <View className="mr-4">
-                  <Avatar uri={displayAvatar} name={displayName} size={52} online />
-                </View>
-                <View className="flex-1 justify-center">
-                  <View className="flex-row justify-between items-center mb-1">
-                    <View className="flex-1 mr-2 flex-row items-center gap-1.5">
-                      <Text
-                        style={{ color: colors.text }}
-                        className={`text-sm ${
-                          conv.unread ? 'font-bold' : 'font-semibold'
-                        }`}
-                        numberOfLines={1}
-                      >
-                        {displayName}
-                      </Text>
-                      {isVerified && (
-                        <MaterialIcons name="verified" size={16} color="#10B981" />
-                      )}
-                    </View>
-                    <Text style={{ color: colors.textSecondary }} className="text-xs">{conv.timestamp}</Text>
-                  </View>
-                  <View className="flex-row items-center gap-2">
-                    <Text
-                      style={{ color: conv.unread ? colors.text : colors.textSecondary }}
-                      className={`text-sm flex-1 ${
-                        conv.unread ? 'font-bold' : ''
-                      }`}
-                      numberOfLines={1}
-                    >
-                      {conv.lastMessage}
-                    </Text>
-                    {conv.unread && <View className="w-2 h-2 rounded-full bg-red-600" />}
-                  </View>
-                </View>
+              <TouchableOpacity key={filter} onPress={() => { setActiveFilter(filter); listRef.current?.scrollToOffset({ offset: 0, animated: true }); }} activeOpacity={0.75} accessibilityRole="button" accessibilityState={{ selected }} className="min-h-12 flex-row items-center gap-2 rounded-xl border px-4 py-2.5" style={{ backgroundColor: selected ? colors.primary : colors.surface, borderColor: selected ? colors.primary : colors.border }}>
+                <Text className="text-xs font-semibold" style={{ color: selected ? '#FFFFFF' : colors.textSecondary }}>{filter}</Text>
+                {!loading && <View className="min-w-5 rounded-full items-center justify-center px-1.5 py-0.5" style={{ backgroundColor: selected ? 'rgba(255, 255, 255, 0.2)' : subtle }}><Text className="text-xs font-medium" style={{ color: selected ? '#FFFFFF' : colors.textSecondary }}>{count}</Text></View>}
               </TouchableOpacity>
             );
-          })
-        )}
-      </ScrollView>
-
-      {/* Slide-out Burger Menu / Side Drawer */}
-      <SideDrawerMenu
-        visible={isDrawerVisible}
-        onClose={() => setDrawerVisible(false)}
-        user={{
-          name: userProfile.name,
-          role: userProfile.role || 'business',
-          avatarUri: userProfile.avatarUri,
-          avatarInitials: userProfile.avatarInitials,
-          isVerified: userProfile.isVerified,
-          rejectionReason: userProfile.rejectionReason,
-        }}
+          })}
+        </View>
+      </View>
+      <FlatList
+        ref={listRef}
+        className="flex-1"
+        data={loading ? [] : filteredConversations}
+        keyExtractor={(conversation) => conversation.id}
+        renderItem={renderConversation}
+        contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        ListHeaderComponent={loadError && conversationsList.length > 0 ? <View className="px-6 pb-3"><TouchableOpacity onPress={retry} accessibilityRole="button" activeOpacity={0.75} className="flex-row items-center gap-2 rounded-xl p-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="refresh" size={18} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: accentText }}>Could not update messages. Tap to reconnect.</Text></TouchableOpacity></View> : null}
+        ListEmptyComponent={renderEmptyState()}
       />
+      <SideDrawerMenu visible={isDrawerVisible} onClose={() => setDrawerVisible(false)} user={{ name: userProfile.name, role: userProfile.role || 'business', avatarUri: userProfile.avatarUri, avatarInitials: userProfile.avatarInitials, isVerified: userProfile.isVerified, rejectionReason: userProfile.rejectionReason }} />
     </View>
   );
 }

@@ -122,6 +122,7 @@ export default function ChatScreen() {
     onPrimaryPress: () => void;
     secondaryButtonText?: string;
     onSecondaryPress?: () => void;
+    buttonLayout?: 'stacked' | 'row';
   }>({
     visible: false,
     title: '',
@@ -574,12 +575,13 @@ export default function ChatScreen() {
             setNotification({
               visible: true,
               title: 'Clear Chat',
-              message: 'Sigurado ka ba na nais mong burahin ang mga mensahe sa iyong account? Hindi ito mabubura sa iyong kausap.',
+              message: 'Are you sure you want to delete the messages from your account? They will still be visible to the other person.',
               iconName: 'delete-outline',
               iconColor: '#DC2626',
               iconBgColor: 'bg-red-50',
-              primaryButtonText: 'Oo, Burahin',
-              secondaryButtonText: 'Kanselahin',
+              primaryButtonText: 'Delete',
+              secondaryButtonText: 'Cancel',
+              buttonLayout: 'row',
               onSecondaryPress: closeNotification,
               onPrimaryPress: async () => {
                 closeNotification();
@@ -589,7 +591,7 @@ export default function ChatScreen() {
                   setNotification({
                     visible: true,
                     title: 'Chat Cleared',
-                    message: 'Matagumpay na nabura ang mga mensahe sa iyong account.',
+                    message: 'The messages have been deleted from your account.',
                     iconName: 'check-circle',
                     iconColor: '#16A34A',
                     iconBgColor: 'bg-emerald-50',
@@ -601,7 +603,7 @@ export default function ChatScreen() {
                   setNotification({
                     visible: true,
                     title: 'Error',
-                    message: 'Hindi nabura ang chat. Pakisubukang muli.',
+                    message: 'Could not clear the chat. Please try again.',
                     iconName: 'error-outline',
                     iconColor: '#DC2626',
                     iconBgColor: 'bg-red-50',
@@ -661,6 +663,7 @@ export default function ChatScreen() {
           onPrimaryPress={notification.onPrimaryPress}
           secondaryButtonText={notification.secondaryButtonText}
           onSecondaryPress={notification.onSecondaryPress}
+          buttonLayout={notification.buttonLayout}
         />
       </View>
     </View>

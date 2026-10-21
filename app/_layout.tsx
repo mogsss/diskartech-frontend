@@ -218,6 +218,8 @@ function RootLayoutNav() {
         <Stack.Screen name="online-interview-call" />
         <Stack.Screen name="terms-and-conditions" />
         <Stack.Screen name="privacy-policy" />
+        <Stack.Screen name="cookie-policy" />
+      <Stack.Screen name="delete-account" />
         <Stack.Screen name="help-center" />
         <Stack.Screen name="about-diskartech" />
       </Stack>

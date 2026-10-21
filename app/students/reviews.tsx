@@ -33,8 +33,7 @@ export default function ReviewsScreen() {
       >
         <TouchableOpacity 
           onPress={() => router.back()} 
-          className="w-10 h-10 rounded-full items-center justify-center mr-4"
-          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+          className="w-10 h-10 items-center justify-center mr-4"
         >
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
@@ -61,7 +60,7 @@ export default function ReviewsScreen() {
               </View>
               <Text className="text-xl font-bold text-[#FFB300]">{review.rating}</Text>
             </View>
-            <Text className="text-sm italic leading-5 mb-3" style={{ color: colors.textSecondary }}>"{review.comment}"</Text>
+            <Text className="text-sm italic leading-5 mb-3" style={{ color: colors.textSecondary }}>&quot;{review.comment}&quot;</Text>
             <Text className="text-xs" style={{ color: colors.textSecondary }}>{review.date}</Text>
           </View>
         ))}

@@ -86,8 +86,7 @@ export default function ApplicantsListScreen() {
         <View className="flex-row items-center mb-3">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-full items-center justify-center mr-3"
-            style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9' }}
+            className="w-10 h-10 items-center justify-center mr-3"
             activeOpacity={0.7}
           >
             <MaterialIcons name="arrow-back" size={24} color={colors.text} />

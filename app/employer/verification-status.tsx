@@ -199,7 +199,7 @@ export default function VerificationStatusScreen() {
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3 flex-row items-center gap-3">
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Go back" className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}><MaterialIcons name="arrow-back" size={23} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Go back" className="w-12 h-12 items-center justify-center"><MaterialIcons name="arrow-back" size={23} color={colors.text} /></TouchableOpacity>
         <Text className="flex-1 text-xl font-bold tracking-tight" style={{ color: colors.text }}>Verification status</Text>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} enabled={!isUploading} colors={[accentText]} tintColor={accentText} />}>

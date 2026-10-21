@@ -29,6 +29,8 @@ import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ApplicationSection from '@/components/student/application-details/ApplicationSection';
+import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
+import ScheduleMatchNotice from '@/components/schedule/ScheduleMatchNotice';
 
 export default function JobDetailsScreen() {
   const { colors, isDark } = useDarkMode();
@@ -435,8 +437,7 @@ export default function JobDetailsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Back"
               activeOpacity={0.7}
-              className="w-11 h-11 rounded-xl items-center justify-center"
-              style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+              className="w-11 h-11 items-center justify-center"
             >
               <MaterialIcons name="arrow-back" size={20} color={colors.text} />
             </TouchableOpacity>
@@ -512,6 +513,8 @@ export default function JobDetailsScreen() {
         </View>
 
         <ApplicationSection title="Work schedule" icon="calendar-today">
+          <ScheduleMatchNotice match={job.schedule_match} />
+          {job.schedule_slots?.length ? <WeeklyScheduleSummary slots={job.schedule_slots} /> : <>
           <View className="mb-3">
             <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Work days</Text>
             <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{workDays}</Text>
@@ -520,6 +523,7 @@ export default function JobDetailsScreen() {
             <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Time slot</Text>
             <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{job.time_slot || 'Not specified'}</Text>
           </View>
+          </>}
         </ApplicationSection>
         {(skills.length > 0 || requirements.length > 0) && (
           <ApplicationSection title="Skills & requirements" icon="checklist">

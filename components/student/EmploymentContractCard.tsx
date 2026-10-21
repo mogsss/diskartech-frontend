@@ -4,11 +4,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import ApplicationSection from '@/components/student/application-details/ApplicationSection';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryUnit } from '@/utils/jobRate';
+import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
+import { ScheduleSlot } from '@/utils/weeklySchedule';
 
 interface EmploymentContractCardProps {
   startDate?: string;
   endDate?: string;
   workSchedule?: string;
+  scheduleSlots?: ScheduleSlot[];
   agreedRate?: string | number;
   salaryType?: string | null;
   contractTerms?: string;
@@ -21,6 +24,7 @@ export default function EmploymentContractCard({
   startDate,
   endDate,
   workSchedule,
+  scheduleSlots,
   agreedRate,
   salaryType,
   contractTerms,
@@ -62,7 +66,7 @@ export default function EmploymentContractCard({
           style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC', borderColor: colors.border }}
         >
           <Text className="text-[10px] font-semibold uppercase" style={{ color: colors.textSecondary }}>Schedule</Text>
-          <Text className="text-xs font-bold mt-0.5" style={{ color: colors.text }}>{workSchedule || 'Flexible'}</Text>
+          {scheduleSlots?.length ? <View style={{ marginTop: 10 }}><WeeklyScheduleSummary slots={scheduleSlots} /></View> : <Text className="text-xs font-bold mt-0.5" style={{ color: colors.text }}>{workSchedule || 'Flexible'}</Text>}
         </View>
         <View 
           className="flex-1 rounded-2xl p-3 border"

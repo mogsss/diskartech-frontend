@@ -412,7 +412,7 @@ export default function SearchScreen() {
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3">
         <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 border rounded-2xl items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+          <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 items-center justify-center">
             <MaterialIcons name="menu" size={23} color={colors.text} />
           </TouchableOpacity>
           <View className="flex-1">

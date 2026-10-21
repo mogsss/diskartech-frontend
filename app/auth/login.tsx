@@ -327,8 +327,7 @@ export default function LoginScreen() {
             {/* Back button */}
             <TouchableOpacity
               onPress={() => router.back()}
-              style={{ backgroundColor: isDark ? colors.surface : '#F1F5F9' }}
-              className="w-10 h-10 rounded-full items-center justify-center mb-6"
+              className="w-10 h-10 items-center justify-center mb-6"
             >
               <MaterialIcons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>

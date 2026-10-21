@@ -16,6 +16,7 @@ import SearchBar from '@/components/ui/SearchBar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
+import { buildForYouJobs, isFeaturedJob } from '@/utils/jobFeatured';
 import { matchJobWithQuery } from '@/utils/fuzzySearch';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
@@ -363,11 +364,13 @@ export default function HomeScreen() {
     return closest;
   };
 
+  const forYouJobs = buildForYouJobs(aiMatchedJobs, realAllJobs);
+
   const currentJobsList =
     activeTab === 'nearby'
       ? filterBySearch(realNearbyJobs)
       : activeTab === 'ai_match'
-        ? filterBySearch(aiMatchedJobs)
+        ? filterBySearch(forYouJobs)
         : activeTab === 'saved'
           ? filterBySearch(savedJobs)
           : filterBySearch(realAllJobs);
@@ -376,7 +379,7 @@ export default function HomeScreen() {
     activeTab === 'nearby'
       ? loadingNearby
       : activeTab === 'ai_match'
-        ? loadingAi
+        ? loadingAi && forYouJobs.length === 0
         : activeTab === 'saved'
           ? loadingSaved
           : loadingAll;
@@ -386,9 +389,11 @@ export default function HomeScreen() {
 
   const feedTitle = { all: 'Explore opportunities', nearby: 'Jobs near you', ai_match: 'Recommended for you', saved: 'Your saved jobs' }[activeTab];
   const feedDescription = {
-    all: 'Find a role that macth with your schedule.',
+    all: 'Find a role that match with your schedule.',
     nearby: 'Opportunities close to your profile location.',
-    ai_match: matchedSource === 'fallback_math' ? 'Opportunities based on your available days.' : 'Matches based on your skills and schedule.',
+    ai_match: matchedSource === 'fallback_math'
+      ? 'Featured Premium openings plus matches based on your available days.'
+      : 'Featured Premium openings plus matches based on your skills and schedule.',
     saved: 'Keep your favorite opportunities in one place.',
   }[activeTab];
   const accentSurface = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2';
@@ -464,6 +469,7 @@ export default function HomeScreen() {
           location: owner?.location || 'Pinamalayan',
           distance: formatDistance(job.distance),
           schedule: getCleanSchedule(job),
+          scheduleMatch: activeTab === 'ai_match' ? undefined : job.schedule_match,
           category: job.category || 'General',
           requirements: parseJsonField(job.requirements),
           skills: parseJsonField(job.skills),
@@ -471,6 +477,7 @@ export default function HomeScreen() {
           isApplied: job.isApplied ?? appliedJobIds.has(job.id?.toString()),
           verified: owner?.isVerified === true || owner?.isVerified === 1,
           applicants: job.applications_count ?? 0,
+          featured: isFeaturedJob(job),
         }} onPress={() => handleJobPress(job.id.toString())} onBookmark={() => handleToggleBookmark(job.id.toString())} />
       </View>
     );
@@ -480,11 +487,11 @@ export default function HomeScreen() {
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <SafeStatusBar />
       <View className="flex-row items-center gap-3 px-6 pt-2 pb-3 w-full max-w-2xl self-center">
-        <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 border rounded-2xl items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 items-center justify-center"><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
         <View className="flex-1">
           <Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>DiskarTech<Text style={{ color: colors.primary }}>.</Text></Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 border rounded-2xl items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 items-center justify-center">
           <MaterialIcons name="notifications-none" size={23} color={colors.text} />
           {hasUnreadNotifs && <View className="absolute top-2.5 right-3 w-2 h-2 rounded-full border-2" style={{ backgroundColor: colors.primary, borderColor: colors.surface }} />}
         </TouchableOpacity>

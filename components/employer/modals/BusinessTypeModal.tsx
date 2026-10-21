@@ -99,7 +99,7 @@ export default function BusinessTypeModal({ visible, onClose, onSelect, selected
           <View style={{ flex: 1, justifyContent: 'flex-end', paddingTop: insets.top + 12 }} onLayout={({ nativeEvent }) => setAvailableHeight(nativeEvent.layout.height)}>
             <View className="rounded-t-3xl" style={{ height: sheetHeight, backgroundColor: colors.surface, paddingBottom: bottomPadding }}>
               <View className="flex-row items-center gap-3 px-6 pt-5 pb-4 border-b shrink-0" style={{ borderColor: colors.border }} onLayout={({ nativeEvent }) => setHeaderHeight(nativeEvent.layout.height)}>
-                {customMode && <TouchableOpacity onPress={() => { Keyboard.dismiss(); setCustomMode(false); setError(''); }} accessibilityRole="button" accessibilityLabel="Back to business types" className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}>
+                {customMode && <TouchableOpacity onPress={() => { Keyboard.dismiss(); setCustomMode(false); setError(''); }} accessibilityRole="button" accessibilityLabel="Back to business types" className="w-10 h-10 items-center justify-center">
                   <MaterialIcons name="arrow-back" size={22} color={colors.text} />
                 </TouchableOpacity>}
                 <View className="flex-1">

@@ -786,8 +786,7 @@ export default function StudentApplicationDetailsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Back"
               activeOpacity={0.7}
-              className="w-11 h-11 rounded-xl items-center justify-center"
-              style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+              className="w-11 h-11 items-center justify-center"
             >
               <MaterialIcons name="arrow-back" size={20} color={colors.text} />
             </TouchableOpacity>
@@ -872,6 +871,7 @@ export default function StudentApplicationDetailsScreen() {
             startDate={application?.start_date}
             endDate={application?.end_date}
             workSchedule={application?.work_schedule || getCleanDays(job)}
+            scheduleSlots={application?.work_schedule_slots}
             agreedRate={application?.agreed_rate || job?.salary}
             salaryType={job?.salary_type}
             contractTerms={application?.contract_terms}

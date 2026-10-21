@@ -188,7 +188,7 @@ export default function HelpCenterScreen() {
         <View className="flex-row items-center justify-between mb-3">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-full bg-white/20 items-center justify-center active:bg-white/30"
+            className="w-10 h-10 items-center justify-center"
             accessibilityLabel="Go back"
           >
             <MaterialIcons name="arrow-back" size={24} color={Colors.white} />

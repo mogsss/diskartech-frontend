@@ -116,7 +116,7 @@ export default function DigitalSignatureModal({
   <div id="canvas-container">
     <canvas id="sigCanvas"></canvas>
     <div class="baseline"></div>
-    <div class="baseline-label">Sign above this line ✍️</div>
+    <div class="baseline-label">Sign above this line</div>
   </div>
 
   <script>

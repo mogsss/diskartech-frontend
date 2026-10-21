@@ -20,6 +20,8 @@ function load(relative, dependencies = {}, prefix = '') {
   return loaded.exports;
 }
 const analysis = load('utils/documentAnalysis.ts');
+const weeklySchedule = load('utils/weeklySchedule.ts');
+const uploadRateLimit = load('utils/uploadRateLimit.ts');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() {
   let resolve, reject;
@@ -48,6 +50,7 @@ function harness() {
   const cache = new Map([['userProfile', JSON.stringify(initial)], ['userToken', 'test-session']]);
   const storage = { getItem: async key => cache.get(key) ?? null, setItem: async (key, value) => cache.set(key, value) };
   const api = { get: async () => ({ data: { profile: JSON.parse(cache.get('userProfile')) } }), post: async () => { throw new Error('Upload mock not configured'); } };
+  const network = { async fetch() { throw new Error('Availability response not configured'); } };
   const picker = { getDocumentAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///test/coe.pdf', name: 'coe.pdf', mimeType: 'application/pdf', size: 50 }] }) };
   const imagePicker = { launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///test/avatar.jpg', fileName: 'avatar.jpg', mimeType: 'image/jpeg' }] }) };
   const hook = load('hooks/useStudentProfile.ts', {
@@ -57,8 +60,12 @@ function harness() {
     'expo-document-picker': picker, 'expo-image-picker': imagePicker,
     '@/utils/notifications': {}, '@/api/axios': api,
     '@/utils/media': { resolveMediaUrl: value => value ?? null }, '@/utils/documentAnalysis': analysis,
-  }, 'const FormData = class { fields = new Map(); append(key, value) { this.fields.set(key, value); } };\nconst setInterval = callback => { require("testTimers").poll = callback; return 1; };\nconst clearInterval = () => { require("testTimers").poll = null; };\n');
-  return { api, picker, imagePicker, cache, storage, timers,
+    '@/utils/weeklySchedule': weeklySchedule,
+    '@/utils/uploadRateLimit': uploadRateLimit,
+    '@/utils/weeklyScheduleApi': { supportsWeeklySchedules: async () => true },
+    testFetch: network,
+  }, 'const fetch = (...args) => require("testFetch").fetch(...args);\nconst FormData = class { fields = new Map(); append(key, value) { this.fields.set(key, value); } };\nconst setInterval = callback => { require("testTimers").poll = callback; return 1; };\nconst clearInterval = () => { require("testTimers").poll = null; };\n');
+  return { api, picker, imagePicker, cache, storage, timers, network,
     focus() { focusCleanup = focusEffect(); }, blur() { focusCleanup(); },
     render() { cursor = 0; return hook.useStudentProfile(); } };
 }
@@ -213,4 +220,28 @@ test('cache failures after a successful upload do not leave loading active or re
   assert.equal(app.render().alertModalConfig.title, 'Upload Successful');
   assert.equal(app.render().uploadedDocs.coe_raw, 'replacement.pdf');
   assert.equal(app.render().uploadedDocs.coe_ai_is_valid, null);
+});
+
+test('saving exact availability persists server hours and rejects an older polling response', async () => {
+  const app = harness(); await app.render().fetchStudentProfile();
+  const stale = deferred(); app.api.get = () => stale.promise;
+  const refresh = app.render().fetchStudentProfile(); await tick();
+  const slots = [{ day_of_week: 'Wed', start_time: '22:00', end_time: '06:00', ends_next_day: true }];
+  app.network.fetch = async (url, init) => {
+    assert.deepEqual(JSON.parse(init.body).schedule_slots, slots);
+    return { ok: true, text: async () => JSON.stringify({ profile: { available_days: ['Wed'], time_slot: 'Wed 22:00-06:00 (+1d)', schedule_slots: slots } }) };
+  };
+  assert.equal(await app.render().handleSaveAvailability(['Wed'], 'Wednesday night', slots), true);
+  stale.resolve({ data: { profile: { available_days: ['Mon'], time_slot: 'Whole Day' } } }); await refresh;
+  assert.deepEqual(app.render().scheduleSlots, slots);
+  assert.deepEqual(JSON.parse(app.cache.get('userProfile')).schedule_slots, slots);
+});
+
+test('a failed availability save preserves the saved schedule and keeps the editor open', async () => {
+  const app = harness(); const initial = app.cache.get('userProfile');
+  app.render().setAvailabilityModalVisible(true);
+  app.network.fetch = async () => ({ ok: false, text: async () => JSON.stringify({ message: 'Hours overlap.' }) });
+  assert.equal(await app.render().handleSaveAvailability(['Mon'], 'Invalid', []), false);
+  assert.equal(app.render().isAvailabilityModalVisible, true);
+  assert.equal(app.cache.get('userProfile'), initial);
 });

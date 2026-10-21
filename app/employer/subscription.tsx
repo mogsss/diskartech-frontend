@@ -30,7 +30,7 @@ export default function SubscriptionScreen() {
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center px-6 pt-2 pb-3 flex-row items-center gap-3">
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Back to profile" className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Back to profile" className="w-12 h-12 items-center justify-center">
           <MaterialIcons name="arrow-back" size={23} color={colors.text} />
         </TouchableOpacity>
         <Text className="flex-1 text-xl font-bold" style={{ color: colors.text }}>Subscription plans</Text>
@@ -82,6 +82,7 @@ export default function SubscriptionScreen() {
             </View>
             <Text className="text-sm font-medium mt-2" style={{ color: colors.text }}>{plan === 'premium' ? 'Unlimited active job posts' : `Up to ${JOB_LIMITS.basic} active job posts`}</Text>
             <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{plan === 'basic' ? 'Post up to 3 openings at a time. Closing a post frees a slot.' : 'Post as many openings as you need while your Premium plan is active.'}</Text>
+            {plan === 'premium' && <Text className="text-xs leading-5 mt-2" style={{ color: colors.textSecondary }}>Your active job posts get Featured placement in students’ For You feed, even when they do not match their skills or schedule.</Text>}
           </TouchableOpacity>;
         })}
 

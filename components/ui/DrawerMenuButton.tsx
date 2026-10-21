@@ -16,8 +16,7 @@ export default function DrawerMenuButton({ onPress }: DrawerMenuButtonProps) {
       activeOpacity={0.75}
       accessibilityRole="button"
       accessibilityLabel="Open navigation menu"
-      className="w-12 h-12 rounded-2xl border items-center justify-center"
-      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+      className="w-12 h-12 items-center justify-center"
     >
       <MaterialIcons name="menu" size={23} color={colors.text} />
     </TouchableOpacity>

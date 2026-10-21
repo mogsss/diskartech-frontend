@@ -297,7 +297,7 @@ export default function MessagesScreen() {
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3">
         <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 items-center justify-center"><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
           <View className="flex-1"><Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Messages</Text></View>
         </View>
         <View className="mt-3"><SearchBar placeholder="Search conversations" value={searchQuery} onChangeText={(value) => { setSearchQuery(value); listRef.current?.scrollToOffset({ offset: 0, animated: false }); }} onSearch={() => Keyboard.dismiss()} /></View>

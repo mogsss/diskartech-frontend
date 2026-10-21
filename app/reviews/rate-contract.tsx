@@ -238,8 +238,7 @@ export default function RateContractScreen() {
         <View className="flex-row items-center flex-1">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-full items-center justify-center mr-3 active:opacity-80"
-            style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9' }}
+            className="w-10 h-10 items-center justify-center mr-3 active:opacity-80"
           >
             <MaterialIcons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>

@@ -4,6 +4,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
 import ApplicationSection from '@/components/student/application-details/ApplicationSection';
+import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
+import ScheduleMatchNotice from '@/components/schedule/ScheduleMatchNotice';
 
 interface JobOverviewCardProps {
   job: any;
@@ -41,6 +43,8 @@ export default function JobOverviewCard({ job, cleanDays, embedded }: JobOvervie
       </View>
       <View className="border-t pt-4" style={{ borderTopColor: colors.border }}>
         <Text className="text-sm font-semibold mb-3" style={{ color: colors.text }}>Work schedule</Text>
+        <ScheduleMatchNotice match={job.schedule_match} />
+        {job.schedule_slots?.length > 0 ? <WeeklyScheduleSummary slots={job.schedule_slots} /> :
         <View className="gap-3">
           <View>
             <Text className="text-[11px] mb-1" style={{ color: colors.textSecondary }}>Work days</Text>
@@ -51,6 +55,7 @@ export default function JobOverviewCard({ job, cleanDays, embedded }: JobOvervie
             <Text className="text-sm font-medium leading-5" style={{ color: colors.text }}>{job.time_slot || 'Not specified'}</Text>
           </View>
         </View>
+        }
       </View>
       <View className="border-t pt-4 mt-4" style={{ borderTopColor: colors.border }}>
         <Text className="text-sm font-semibold mb-2" style={{ color: colors.text }}>About the role</Text>

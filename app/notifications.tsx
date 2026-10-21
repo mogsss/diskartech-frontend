@@ -638,8 +638,7 @@ export default function NotificationsScreen() {
             onPress={() => router.back()}
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            className="h-11 w-11 items-center justify-center rounded-2xl border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+            className="h-11 w-11 items-center justify-center"
           >
             <MaterialIcons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>

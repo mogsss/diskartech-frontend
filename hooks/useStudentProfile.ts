@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { supportsWeeklySchedules } from '@/utils/weeklyScheduleApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { isCancel } from 'axios';
@@ -9,6 +10,7 @@ import api, { BACKEND_URL } from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
 import { normalizeAiResult } from '@/utils/documentAnalysis';
 import { getUploadRateLimitNotice } from '@/utils/uploadRateLimit';
+import { ScheduleSlot, scheduleDraft, weeklySummary } from '@/utils/weeklySchedule';
 
 type StudentDocumentType = 'student_resume' | 'school_id' | 'coe';
 
@@ -61,6 +63,7 @@ export function useStudentProfile() {
   const [isAddSkillModalVisible, setAddSkillModalVisible] = useState(false);
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('');
   const [isAvailabilityModalVisible, setAvailabilityModalVisible] = useState(false);
 
@@ -118,6 +121,7 @@ export function useStudentProfile() {
 
         if (profile.available_days) setSelectedDays(profile.available_days);
         if (profile.time_slot) setSelectedTimeSlot(profile.time_slot);
+        setScheduleSlots(scheduleDraft(profile.schedule_slots, profile.available_days, profile.time_slot).slots);
       }
 
       if (storedUser && storedUser !== 'null' && storedUser !== 'undefined') {
@@ -169,6 +173,7 @@ export function useStudentProfile() {
 
           if (apiProfile.available_days) setSelectedDays(apiProfile.available_days);
           if (apiProfile.time_slot) setSelectedTimeSlot(apiProfile.time_slot);
+          setScheduleSlots(scheduleDraft(apiProfile.schedule_slots, apiProfile.available_days, apiProfile.time_slot).slots);
 
           await AsyncStorage.setItem('userProfile', JSON.stringify(apiProfile));
           needsFreshProfile.current = false;
@@ -199,8 +204,10 @@ export function useStudentProfile() {
     };
   }, [fetchStudentProfile]));
 
-  const handleSaveAvailability = async (days: string[], timeSlot: string) => {
+  const handleSaveAvailability = async (days: string[], timeSlot: string, slots: ScheduleSlot[]): Promise<boolean> => {
+    profileRevision.current += 1;
     try {
+      if (!await supportsWeeklySchedules()) return false;
       const token = await AsyncStorage.getItem('userToken');
 
       const response = await fetch(`${BACKEND_URL}/api/student/update-availability`, {
@@ -210,7 +217,7 @@ export function useStudentProfile() {
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ days, time_slot: timeSlot }),
+        body: JSON.stringify({ days, time_slot: timeSlot, schedule_slots: slots }),
       });
 
       const responseText = await response.text();
@@ -220,12 +227,14 @@ export function useStudentProfile() {
           title: 'Server Error', message: 'Nagbalik ng HTML page ang server.', iconName: 'error-outline',
           iconColor: '#ef4444', iconBgColor: 'bg-red-50', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
         });
-        return;
+        return false;
       }
 
       if (response.ok) {
-        setSelectedDays(days);
-        setSelectedTimeSlot(timeSlot);
+        profileRevision.current += 1;
+        setSelectedDays(data.profile?.available_days || days);
+        setSelectedTimeSlot(data.profile?.time_slot || timeSlot);
+        setScheduleSlots(data.profile?.schedule_slots || slots);
         setAvailabilityModalVisible(false);
         
         showAlertModal({
@@ -233,13 +242,17 @@ export function useStudentProfile() {
           iconColor: '#16a34a', iconBgColor: 'bg-green-50', primaryButtonText: 'Awesome', onPrimaryPress: () => setAlertModalVisible(false),
         });
 
+        try {
         const storedProfile = await AsyncStorage.getItem('userProfile');
         if (storedProfile) {
           const profile = JSON.parse(storedProfile);
           profile.available_days = days;
           profile.time_slot = timeSlot;
+          profile.schedule_slots = data.profile?.schedule_slots || slots;
           await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
         }
+        } catch { /* A cache error must not turn a completed save into a failure. */ }
+        return true;
       } else {
         showAlertModal({
           title: 'Update Failed', message: data.message || 'Failed to update availability', iconName: 'error-outline',
@@ -252,6 +265,7 @@ export function useStudentProfile() {
         iconColor: '#64748b', iconBgColor: 'bg-slate-100', primaryButtonText: 'OK', onPrimaryPress: () => setAlertModalVisible(false),
       });
     }
+    return false;
   };
 
   const handleSaveSkills = async (updatedSkills: string[]) => {
@@ -525,6 +539,7 @@ export function useStudentProfile() {
   };
 
   const formatScheduleText = () => {
+    if (scheduleSlots.length) return weeklySummary(scheduleSlots);
     if (!selectedDays || selectedDays.length === 0) return 'No days selected';
     return `${selectedDays.join(', ')} | ${selectedTimeSlot || ''}`;
   };
@@ -532,7 +547,7 @@ export function useStudentProfile() {
   return {
     studentName, studentEmail, school, course, yearLevel, location, isVerified, rejectionReason, rating, reviewCount, profilePicUri, uploadedDocs,
     skills, isAddSkillModalVisible, setAddSkillModalVisible, handleSaveSkills,
-    selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
+    selectedDays, selectedTimeSlot, scheduleSlots, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
     isLogoutModalVisible, setLogoutModalVisible, handleLogout,
     alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
     handleUploadDocument, handleUploadProfilePic, fetchStudentProfile, uploadingDocument, uploadingProfilePicture

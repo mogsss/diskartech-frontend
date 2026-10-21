@@ -137,7 +137,7 @@ export default function OnlineInterviewCallScreen() {
   return <View className="flex-1" style={{ backgroundColor: colors.background }}>
     <SafeStatusBar backgroundColor={colors.background} withSpacer={false} />
     <View className="px-5 pb-3 flex-row items-center gap-3" style={{ paddingTop: insets.top + 8 }}>
-      <TouchableOpacity onPress={back} accessibilityRole="button" accessibilityLabel="Go back" className="w-11 h-11 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}><MaterialIcons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity>
+      <TouchableOpacity onPress={back} accessibilityRole="button" accessibilityLabel="Go back" className="w-11 h-11 items-center justify-center"><MaterialIcons name="arrow-back" size={22} color={colors.text} /></TouchableOpacity>
       <Text className="text-lg font-bold" style={{ color: colors.text }}>Online interview</Text>
     </View>
     <View className="flex-1 items-center justify-center px-8 gap-4" style={{ paddingBottom: insets.bottom }}>

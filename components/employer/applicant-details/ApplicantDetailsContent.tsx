@@ -6,6 +6,7 @@ import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryUnit } from '@/utils/jobRate';
 import { formatDate } from '@/utils/helpers';
 import { useInterviewCallAvailability } from '@/hooks/useInterviewCallAvailability';
+import WeeklyScheduleSummary from '@/components/schedule/WeeklyScheduleSummary';
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -29,7 +30,7 @@ export function ApplicantActionButton({ label, icon, onPress, disabled = false, 
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
       activeOpacity={0.7}
       className={size === 'large' ? 'flex-1 flex-row items-center justify-center gap-2 rounded-2xl border px-4 py-3.5' : 'flex-1 flex-row items-center justify-center gap-2 rounded-xl border px-3 py-3'}
-      style={{ minHeight: size === 'large' ? 52 : 48, borderColor: variant === 'primary' ? colors.primary : colors.border, backgroundColor: variant === 'primary' ? colors.primary : size === 'large' ? colors.surface : variant === 'danger' ? (isDark ? 'rgba(220,38,38,0.08)' : '#FEF2F2') : (isDark ? colors.background : '#F8FAFC'), opacity: disabled || loading ? 0.5 : 1 }}
+      style={{ flex: size === 'large' && variant === 'primary' ? 1.65 : 1, minWidth: 0, minHeight: size === 'large' ? 52 : 48, borderColor: variant === 'primary' ? colors.primary : colors.border, backgroundColor: variant === 'primary' ? colors.primary : variant === 'danger' ? (isDark ? 'rgba(220,38,38,0.08)' : '#FEF2F2') : colors.surface, opacity: disabled || loading ? 0.5 : 1 }}
     >
       {loading ? <ActivityIndicator size="small" color={textColor} /> : icon ? <MaterialIcons name={icon} size={17} color={textColor} /> : null}
       <Text className={size === 'large' ? 'text-[15px] font-semibold text-center shrink leading-6' : 'text-[13px] font-semibold text-center shrink leading-[22px]'} style={{ color: textColor }}>{label}</Text>
@@ -38,17 +39,17 @@ export function ApplicantActionButton({ label, icon, onPress, disabled = false, 
 }
 
 function Section({ title, icon, children, headerAccessory }: { title: string; icon: IconName; children: React.ReactNode; headerAccessory?: React.ReactNode }) {
-  const { colors, isDark } = useDarkMode();
+  const { colors } = useDarkMode();
   return (
-    <View className="rounded-2xl border p-4 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-      <View className="flex-row items-center gap-2 mb-3">
-        <View className="w-7 h-7 rounded-lg items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2' }}>
-          <MaterialIcons name={icon} size={16} color={isDark ? colors.accent : '#B91C1C'} />
-        </View>
-        <Text className="flex-1 text-base leading-6 font-semibold" style={{ color: colors.text }}>{title}</Text>
+    <View className="mb-5">
+      <View className="flex-row flex-wrap items-center gap-2 mb-2 px-1">
+        <MaterialIcons name={icon} size={18} color={colors.textSecondary} />
+        <Text accessibilityRole="header" className="flex-1 text-sm leading-5 font-semibold" style={{ color: colors.text }}>{title}</Text>
         {headerAccessory}
       </View>
-      {children}
+      <View className="rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -56,7 +57,7 @@ function Section({ title, icon, children, headerAccessory }: { title: string; ic
 function Detail({ label, value }: { label: string; value?: string | number }) {
   const { colors } = useDarkMode();
   return (
-    <View className="flex-1 gap-1">
+    <View className="flex-1 min-w-0 gap-1">
       <Text className="text-[11px] leading-4 font-medium uppercase tracking-wide" style={{ color: colors.textSecondary }}>{label}</Text>
       <Text className="text-sm leading-6 font-medium" style={{ color: colors.text }}>{value || 'Not provided'}</Text>
     </View>
@@ -105,52 +106,60 @@ export default function ApplicantDetailsContent({ application, contractReview, a
   const successColor = isDark ? '#6EE7B7' : '#047857';
   const isPositive = isAccepted || status === 'completed';
   const isNegative = ['terminated', 'rejected', 'cancelled'].includes(status);
-  const statusColor = isPositive ? successColor : isNegative ? (isDark ? colors.accent : '#B91C1C') : colors.textSecondary;
+  const isInterview = status === 'interview';
+  const statusColor = isPositive ? successColor : isNegative ? (isDark ? colors.accent : '#B91C1C') : isInterview ? (isDark ? '#93C5FD' : '#1D4ED8') : (isDark ? '#FCD34D' : '#92400E');
+  const statusIcon: IconName = isPositive ? 'check-circle-outline' : isNegative ? 'cancel' : isInterview ? 'event-available' : 'schedule';
   const subtleBackground = isDark ? colors.background : '#F8FAFC';
   const resumePath = student.student_resume || student.resume || student.resume_path;
   const resumeFilename = resumePath ? String(resumePath).split(/[?#]/)[0].split('/').pop() || 'Uploaded resume' : '';
   const certificateRequested = application.certificate_status === 'requested';
   const certificateApproved = application.certificate_status === 'approved';
   const statusBadge = (
-    <View className="self-start shrink-0 rounded-lg px-2.5 py-1.5" style={{ backgroundColor: isPositive ? (isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5') : isNegative ? (isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2') : subtleBackground }}>
+    <View className="self-start flex-row items-center gap-1 rounded-full px-2.5 py-1.5" style={{ backgroundColor: isPositive ? (isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5') : isNegative ? (isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2') : isInterview ? (isDark ? 'rgba(59,130,246,0.12)' : '#EFF6FF') : (isDark ? 'rgba(245,158,11,0.12)' : '#FFFBEB') }}>
+      <MaterialIcons name={statusIcon} size={14} color={statusColor} />
       <Text className="text-xs leading-4 font-semibold" style={{ color: statusColor }}>{STATUS_LABELS[status] || status}</Text>
     </View>
   );
 
   return (
     <>
-      <View className="rounded-2xl border p-4 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-        <View className="flex-row items-center gap-3">
-          <Avatar uri={avatarUri} name={student.student_name} size={56} />
-          <View className="flex-1 gap-1">
-            <Text className="text-xl leading-7 font-bold" style={{ color: colors.text }}>{student.student_name || 'Student applicant'}</Text>
-            <Text className="text-[13px] leading-[22px]" style={{ color: colors.textSecondary }}>{student.course || student.student_school_name || 'Working student'}</Text>
-          </View>
-          <TouchableOpacity
-            onPress={onMessage}
-            disabled={disabled || messaging}
-            accessibilityRole="button"
-            accessibilityLabel="Message student"
-            accessibilityState={{ disabled: disabled || messaging, busy: messaging }}
-            activeOpacity={0.7}
-            className="w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2', opacity: disabled || messaging ? 0.5 : 1 }}
-          >
-            {messaging ? <ActivityIndicator size="small" color={isDark ? colors.accent : '#B91C1C'} /> : <MaterialIcons name="chat-bubble-outline" size={20} color={isDark ? colors.accent : '#B91C1C'} />}
-          </TouchableOpacity>
+      <View className="rounded-3xl border p-5 mb-6" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+        <View className="flex-row flex-wrap items-center justify-between gap-2 mb-5">
+          <Text className="text-[10px] leading-4 font-semibold tracking-widest" style={{ color: colors.textSecondary }}>STUDENT APPLICANT</Text>
+          {statusBadge}
         </View>
-        <View className="flex-row gap-3 border-t mt-4 pt-3" style={{ borderColor: colors.border }}>
+        <View className="flex-row items-center gap-4">
+          <Avatar uri={avatarUri} name={student.student_name} size={68} />
+          <View className="flex-1 min-w-0 gap-1">
+            <Text className="text-[22px] leading-8 font-bold" style={{ color: colors.text }}>{student.student_name || 'Student applicant'}</Text>
+            <Text className="text-[13px] leading-5" style={{ color: colors.textSecondary }}>{student.course || 'Working student'}</Text>
+          </View>
+        </View>
+        {student.student_school_name ? <View className="flex-row items-start gap-2 mt-4">
+          <MaterialIcons name="school" size={16} color={colors.textSecondary} style={{ marginTop: 2 }} />
+          <Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>{student.student_school_name}</Text>
+        </View> : null}
+        <View className="flex-row gap-4 border-t mt-4 pt-4" style={{ borderColor: colors.border }}>
           <Detail label="Applied" value={application.created_at ? formatDate(application.created_at) : 'Not provided'} />
-          <Detail label="Application" value={`#${application.id}`} />
+          <Detail label="Application ID" value={application.id ? `#${application.id}` : 'Not provided'} />
+        </View>
+        <View className="flex-row mt-4">
+          <ApplicantActionButton label="Message student" icon="chat-bubble-outline" onPress={onMessage} disabled={disabled} loading={messaging} />
         </View>
       </View>
 
-      <Section title="Applied position" icon="work-outline" headerAccessory={statusBadge}>
-        <Text className="text-[17px] leading-6 font-semibold mb-1" style={{ color: colors.text }}>{job.title || 'Job position'}</Text>
-        {job.category ? <Text className="text-[13px] leading-[22px] mb-3" style={{ color: colors.textSecondary }}>{job.category}</Text> : null}
-        <View className="flex-row gap-3">
-          <Detail label="Posted rate" value={job.salary ? `\u20B1${Number(job.salary).toLocaleString('en-PH')} ${getSalaryUnit(job.salary_type)}` : 'Not provided'} />
-          <Detail label="Workplace" value={workplace} />
+      <Section title="Applied position" icon="work-outline">
+        {job.category ? <View className="self-start rounded-lg px-2.5 py-1 mb-3" style={{ backgroundColor: subtleBackground }}>
+          <Text className="text-[11px] leading-4 font-medium" style={{ color: colors.textSecondary }}>{job.category}</Text>
+        </View> : null}
+        <Text className="text-lg leading-7 font-bold" style={{ color: colors.text }}>{job.title || 'Job position'}</Text>
+        <View className="flex-row flex-wrap items-baseline gap-x-1.5 gap-y-1 mt-3">
+          <Text className="text-[22px] leading-8 font-bold" style={{ color: colors.text }}>{job.salary ? `\u20B1${Number(job.salary).toLocaleString('en-PH')}` : 'Rate not provided'}</Text>
+          {Boolean(job.salary) && <Text className="text-[13px] leading-5" style={{ color: colors.textSecondary }}>{getSalaryUnit(job.salary_type)}</Text>}
+        </View>
+        <View className="flex-row items-start gap-2 border-t mt-4 pt-3" style={{ borderColor: colors.border }}>
+          <MaterialIcons name="place" size={18} color={colors.textSecondary} style={{ marginTop: 2 }} />
+          <Text className="flex-1 text-[13px] leading-[22px]" style={{ color: colors.textSecondary }}>{workplace || 'Workplace not provided'}</Text>
         </View>
       </Section>
 
@@ -213,42 +222,58 @@ export default function ApplicantDetailsContent({ application, contractReview, a
       </Section>}
 
       <Section title="Student information" icon="person-outline">
-        <View className="gap-3">
+        <View className="flex-row gap-3 mb-4">
           <Detail label="Age" value={student.age ? `${student.age} years old` : 'Not provided'} />
+          <Detail label="Year level" value={student.year_level} />
+        </View>
+        <View className="gap-3">
           <Detail label="Address" value={studentAddress || 'Not provided'} />
         </View>
         <View className="gap-3 border-t mt-4 pt-4" style={{ borderColor: colors.border }}>
           <Detail label="School" value={student.student_school_name} />
-          <View className="flex-row gap-3"><Detail label="Course" value={student.course} /><Detail label="Year level" value={student.year_level} /></View>
-          <Detail label="Available days" value={availableDaysText} />
+          <Detail label="Course" value={student.course} />
         </View>
       </Section>
-      <View className="flex-row items-center gap-3 rounded-2xl border p-4 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-        <View className="w-9 h-9 rounded-lg items-center justify-center" style={{ backgroundColor: subtleBackground }}>
-          <MaterialIcons name="description" size={18} color={colors.textSecondary} />
+
+      <Section title="Student availability" icon="calendar-today">
+        {student.schedule_slots?.length ? <WeeklyScheduleSummary slots={student.schedule_slots} /> :
+        <View className="gap-4">
+          <Detail label="Available days" value={availableDaysText === 'N/A' ? 'Not provided' : availableDaysText} />
+          <View className="border-t pt-3" style={{ borderColor: colors.border }}>
+            <Detail label="Preferred time" value={student.time_slot} />
+          </View>
         </View>
-        <View className="flex-1 gap-1">
-          <Text className="text-base leading-6 font-semibold" style={{ color: colors.text }}>Resume</Text>
-          <Text className="text-[13px] leading-[22px]" numberOfLines={1} ellipsizeMode="middle" style={{ color: colors.textSecondary }}>
-            {resumePath ? resumeFilename : 'No resume uploaded'}
-          </Text>
+        }
+      </Section>
+
+      <Section title="Resume" icon="description">
+        <View className="flex-row items-center gap-3">
+          <View className="w-9 h-9 rounded-lg items-center justify-center" style={{ backgroundColor: subtleBackground }}>
+            <MaterialIcons name="description" size={18} color={colors.textSecondary} />
+          </View>
+          <View className="flex-1 min-w-0 gap-1">
+            <Text className="text-sm leading-6 font-semibold" style={{ color: colors.text }}>{resumePath ? 'Student resume' : 'No resume uploaded'}</Text>
+            <Text className="text-[13px] leading-[22px]" numberOfLines={1} ellipsizeMode="middle" style={{ color: colors.textSecondary }}>
+              {resumePath ? resumeFilename : 'This student has not added a resume yet.'}
+            </Text>
+          </View>
+          {Boolean(resumePath) && (
+            <TouchableOpacity
+              onPress={onOpenResume}
+              disabled={disabled}
+              accessibilityRole="button"
+              accessibilityLabel="View resume"
+              accessibilityHint="Opens the student's uploaded resume"
+              accessibilityState={{ disabled }}
+              activeOpacity={0.7}
+              className="w-11 h-11 rounded-xl items-center justify-center"
+              style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2', opacity: disabled ? 0.5 : 1 }}
+            >
+              <MaterialIcons name="visibility" size={20} color={isDark ? colors.accent : '#B91C1C'} />
+            </TouchableOpacity>
+          )}
         </View>
-        {Boolean(resumePath) && (
-          <TouchableOpacity
-            onPress={onOpenResume}
-            disabled={disabled}
-            accessibilityRole="button"
-            accessibilityLabel="View resume"
-            accessibilityHint="Opens the student's uploaded resume"
-            accessibilityState={{ disabled }}
-            activeOpacity={0.7}
-            className="w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FEF2F2', opacity: disabled ? 0.5 : 1 }}
-          >
-            <MaterialIcons name="visibility" size={20} color={isDark ? colors.accent : '#B91C1C'} />
-          </TouchableOpacity>
-        )}
-      </View>
+      </Section>
     </>
   );
 }

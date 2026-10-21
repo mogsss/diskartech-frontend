@@ -4,13 +4,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Avatar from '@/components/ui/Avatar';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { Job } from '@/types';
+import ScheduleMatchNotice, { ScheduleMatch } from '@/components/schedule/ScheduleMatchNotice';
 import { getSalaryUnit } from '@/utils/jobRate';
 
 type HomeJob = Pick<Job,
   'jobTitle' | 'companyName' | 'salary' | 'salary_type' | 'location' | 'distance' | 'schedule' |
   'category' | 'bookmarked' | 'isApplied' | 'applicants' |
   'skills' | 'requirements'
-> & { companyLogo?: string; verified?: boolean };
+> & { companyLogo?: string; verified?: boolean; featured?: boolean; scheduleMatch?: ScheduleMatch };
 
 interface HomeJobCardProps {
   job: HomeJob;
@@ -46,10 +47,17 @@ export default function HomeJobCard({ job, onPress, onBookmark }: HomeJobCardPro
         </View>
 
         <View className="flex-row flex-wrap gap-1.5 mt-4">
+          {job.featured && (
+            <View className="flex-row items-center gap-1 rounded-lg px-2.5 py-1" style={{ backgroundColor: isDark ? '#3B321D' : '#FFFBEB' }}>
+              <MaterialIcons name="workspace-premium" size={14} color={isDark ? '#FCD34D' : '#92400E'} />
+              <Text className="text-xs font-semibold" style={{ color: isDark ? '#FCD34D' : '#92400E' }}>Featured</Text>
+            </View>
+          )}
           <View className="rounded-lg px-2.5 py-1 max-w-full" style={{ backgroundColor: subtle }}>
             <Text className="text-xs font-semibold" style={{ color: colors.textSecondary }} numberOfLines={1}>{job.category}</Text>
           </View>
         </View>
+        <ScheduleMatchNotice match={job.scheduleMatch} />
 
         <View className="flex-row items-center flex-wrap gap-1.5 mt-4 mb-3">
           <Text className="text-2xl font-bold tracking-tight" style={{ color: colors.text }}>{job.salary}</Text>

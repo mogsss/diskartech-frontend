@@ -143,20 +143,20 @@ export default function SettingsScreen() {
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <SafeStatusBar backgroundColor={colors.background} withSpacer={false} />
-      <View className="w-full max-w-2xl self-center flex-row items-center gap-3 px-6 pb-3" style={{ paddingTop: insets.top + 8 }}>
-        <TouchableOpacity onPress={goBack} accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.75} className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+      <View className="w-full max-w-2xl self-center flex-row items-center gap-3 px-3 pb-2" style={{ paddingTop: insets.top + 8 }}>
+        <TouchableOpacity onPress={goBack} accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.75} className="w-12 h-12 items-center justify-center">
           <MaterialIcons name="arrow-back" size={23} color={isDark ? colors.text : '#000000'} />
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Settings</Text>
-          <Text className="text-xs mt-1" style={{ color: colors.textSecondary }}>Make DiskarTech work for you</Text>
         </View>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center px-6 pt-2" contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }} showsVerticalScrollIndicator={false}>
         <SettingsSection title="Account">
           <SettingsRow icon="person-outline" title="Edit profile" description="Update your personal and account details." onPress={() => router.push('/edit-profile')} />
           {canChangePassword && <SettingsRow icon="lock-outline" title="Change password" description="Update your DiskarTech account password." onPress={() => router.push('/change-password')} />}
-          <SettingsRow icon="verified-user" title="Account verification" description="Review your documents and verification status." onPress={role ? openVerification : undefined} last trailing={settingsLoading && !profile ? <ActivityIndicator size="small" color={colors.accent} /> : <Text className="text-[11px] font-semibold text-right max-w-24" style={{ color: statusColor }}>{verificationLabel}</Text>} />
+          <SettingsRow icon="verified-user" title="Account verification" description="Review your documents and verification status." onPress={role ? openVerification : undefined} trailing={settingsLoading && !profile ? <ActivityIndicator size="small" color={colors.accent} /> : <Text className="text-[11px] font-semibold text-right max-w-24" style={{ color: statusColor }}>{verificationLabel}</Text>} />
+          <SettingsRow icon="person-remove" title="Delete account" description="Permanently close your DiskarTech account." onPress={() => router.push('/delete-account')} destructive last />
         </SettingsSection>
         <SettingsSection title="Preferences">
           <SettingsRow icon="dark-mode" title="Dark mode" description="Use a darker appearance." trailing={<Switch accessibilityLabel="Dark mode" value={isDark} disabled={themeBusy} onValueChange={async (value) => { setThemeBusy(true); try { await setDarkMode(value); } finally { setThemeBusy(false); } }} trackColor={{ false: colors.border, true: colors.accent + '60' }} thumbColor={isDark ? colors.accent : '#FFFFFF'} ios_backgroundColor={colors.border} />} />
@@ -171,7 +171,8 @@ export default function SettingsScreen() {
         <SettingsSection title="About and policies">
           <SettingsRow icon="info-outline" title="About DiskarTech" description="Our purpose and the features we offer." onPress={() => router.push('/about-diskartech')} />
           <SettingsRow icon="description" title="Terms and Conditions" onPress={() => router.push('/terms-and-conditions')} />
-          <SettingsRow icon="security" title="Privacy Policy" onPress={() => router.push('/privacy-policy')} last />
+          <SettingsRow icon="security" title="Privacy Policy" onPress={() => router.push('/privacy-policy')} />
+          <SettingsRow icon="cookie" title="Cookie Policy" onPress={() => router.push('/cookie-policy')} last />
         </SettingsSection>
         <TouchableOpacity onPress={() => setLogoutVisible(true)} disabled={loggingOut || pushBusy} accessibilityRole="button" accessibilityLabel="Log out" activeOpacity={0.75} className="min-h-12 rounded-2xl flex-row items-center justify-center gap-2 px-4 py-3.5 mt-1" style={{ backgroundColor: accentSurface, opacity: loggingOut || pushBusy ? 0.6 : 1 }}>
           {loggingOut ? <ActivityIndicator size="small" color={colors.accent} /> : <MaterialIcons name="logout" size={21} color={colors.accent} />}
@@ -190,16 +191,17 @@ function SettingsSection({ title, children }: { title: string; children: React.R
   return <View className="mb-5"><Text accessibilityRole="header" className="text-sm font-bold mb-3 ml-1" style={{ color: colors.text }}>{title}</Text><View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>{children}</View></View>;
 }
 
-function SettingsRow({ icon, title, description, onPress, trailing, last = false }: {
+function SettingsRow({ icon, title, description, onPress, trailing, last = false, destructive = false }: {
   icon: keyof typeof MaterialIcons.glyphMap;
   title: string;
   description?: string;
   onPress?: () => void;
   trailing?: React.ReactNode;
   last?: boolean;
+  destructive?: boolean;
 }) {
   const { colors, isDark } = useDarkMode();
-  const content = <><View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? colors.primary + '1F' : '#FFF1F2' }}><MaterialIcons name={icon} size={21} color={colors.accent} /></View><View className="flex-1"><Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>{description && <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{description}</Text>}</View>{trailing}{onPress && <MaterialIcons name="chevron-right" size={21} color={isDark ? colors.text : '#000000'} />}</>;
+  const content = <><View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? colors.primary + '1F' : '#FFF1F2' }}><MaterialIcons name={icon} size={21} color={colors.accent} /></View><View className="flex-1"><Text className="text-sm font-semibold leading-5" style={{ color: destructive ? colors.accent : colors.text }}>{title}</Text>{description && <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{description}</Text>}</View>{trailing}{onPress && <MaterialIcons name="chevron-right" size={21} color={isDark ? colors.text : '#000000'} />}</>;
   const className = 'flex-row items-center gap-3 px-4 py-4' + (last ? '' : ' border-b');
   return onPress ? <TouchableOpacity onPress={onPress} accessibilityRole="button" activeOpacity={0.75} className={className} style={{ borderColor: colors.border }}>{content}</TouchableOpacity> : <View className={className} style={{ borderColor: colors.border }}>{content}</View>;
 }

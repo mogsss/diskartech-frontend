@@ -318,13 +318,13 @@ export function setPushNotificationsEnabled(userId: string | number, enabled: bo
 /**
  * Alisin ang push token kapag nag-logout para hindi makatanggap ng notification ng ibang tao.
  */
-export async function clearPushToken(userId: string | number): Promise<void> {
+export async function clearPushToken(userId: string | number, options: { clearLocalToken?: boolean } = {}): Promise<void> {
   return queuePushTokenChange(async () => {
     try {
       const id = String(userId).trim();
       if (!id || id === 'unknown') return;
       await deleteDoc(doc(db, 'user_push_tokens', id));
-      await AsyncStorage.removeItem('expo_push_token');
+      if (options.clearLocalToken !== false) await AsyncStorage.removeItem('expo_push_token');
     } catch (e) {
       console.warn('Error clearing push token on logout:', e);
     }

@@ -235,7 +235,7 @@ export default function CertificateModal({
                   <Text className="text-[9px] mt-0.5" style={{ color: colors.textSecondary }}>Date: {data.issued_date}</Text>
                 </View>
 
-                <View className="w-16 h-16 rounded-full border-2 border-dashed border-red-500 items-center justify-center rotate-[-8deg]" style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.15)' : 'rgba(254, 242, 242, 0.8)' }}>
+                <View className="w-16 h-16 rounded-full  items-center justify-center rotate-[-8deg]" style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.15)' : 'rgba(254, 242, 242, 0.8)' }}>
                   <Text className="text-[8px] font-black text-red-600 text-center leading-3">
                     DISKARTECH{'\n'}VERIFIED{'\n'}SEAL
                   </Text>
@@ -278,7 +278,7 @@ export default function CertificateModal({
               >
                 <MaterialIcons name="picture-as-pdf" size={18} color="#FFFFFF" />
                 <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' }}>
-                  Download / Save as PDF
+                  Download
                 </Text>
               </TouchableOpacity>
             </View>

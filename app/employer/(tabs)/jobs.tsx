@@ -201,7 +201,7 @@ export default function EmployerJobsScreen() {
     }
     if (!isHousehold && jobQuota && !jobQuota.can_post_job) {
       setNotificationConfig({
-        visible: true, title: 'Active job limit reached', message: jobQuotaMessage(jobQuota), iconName: 'work-outline',
+        visible: true, title: 'Job Posting limit reached', message: jobQuotaMessage(jobQuota), iconName: 'work-outline',
         primaryButtonText: jobQuota.plan === 'basic' ? 'View Premium' : 'OK',
         onPrimaryPress: () => { setNotificationConfig(prev => ({ ...prev, visible: false })); if (jobQuota.plan === 'basic') router.push('/employer/subscription'); },
         secondaryButtonText: jobQuota.plan === 'basic' ? 'Cancel' : undefined,

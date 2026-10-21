@@ -101,7 +101,7 @@ export default function ChangePasswordScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <SafeStatusBar backgroundColor={colors.background} withSpacer={false} />
       <View className="w-full max-w-2xl self-center flex-row items-center gap-3 px-6 pb-3" style={{ paddingTop: insets.top + 8 }}>
-        <TouchableOpacity onPress={goBack} disabled={saving} accessibilityRole="button" accessibilityLabel="Go back" accessibilityState={{ disabled: saving }} activeOpacity={0.75} className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border, opacity: saving ? 0.5 : 1 }}>
+        <TouchableOpacity onPress={goBack} disabled={saving} accessibilityRole="button" accessibilityLabel="Go back" accessibilityState={{ disabled: saving }} activeOpacity={0.75} className="w-12 h-12 items-center justify-center" style={{ opacity: saving ? 0.5 : 1 }}>
           <MaterialIcons name="arrow-back" size={23} color={colors.text} />
         </TouchableOpacity>
         <Text className="flex-1 text-xl font-bold tracking-tight" style={{ color: colors.text }}>Change password</Text>

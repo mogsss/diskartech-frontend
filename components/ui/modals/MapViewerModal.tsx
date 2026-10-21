@@ -749,8 +749,7 @@ export default function MapViewerModal({
             <TouchableOpacity
               onPress={onClose}
               activeOpacity={0.7}
-              className="w-10 h-10 rounded-full items-center justify-center"
-              style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+              className="w-10 h-10 items-center justify-center"
             >
               <MaterialIcons name="arrow-back" size={22} color={colors.text} />
             </TouchableOpacity>

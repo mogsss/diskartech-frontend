@@ -30,7 +30,7 @@ import {
 } from 'react-native';
 
 export default function AcceptedJobScreen() {
-  const { isDark, colors } = useDarkMode();
+  const { colors } = useDarkMode();
   const { applicationId, jobId } = useLocalSearchParams<{
     applicationId?: string;
     jobId?: string;
@@ -506,8 +506,7 @@ export default function AcceptedJobScreen() {
         <View className="flex-row items-center flex-1">
           <TouchableOpacity
             onPress={() => router.back()}
-            style={{ backgroundColor: isDark ? colors.surface : '#F1F5F9' }}
-            className="w-10 h-10 rounded-full items-center justify-center mr-3"
+            className="w-10 h-10 items-center justify-center mr-3"
           >
             <MaterialIcons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>

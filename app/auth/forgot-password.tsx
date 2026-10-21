@@ -31,6 +31,7 @@ export default function ForgotPasswordScreen() {
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState<{ message: string; success: boolean } | null>(null);
   const remaining = Math.max(0, Math.ceil((resendAt - now) / 1000));
+  const remainingLabel = remaining >= 60 ? `${Math.floor(remaining / 60)}m ${String(remaining % 60).padStart(2, '0')}s` : `${remaining}s`;
   const checks = passwordChecks(password);
   const passwordErrors = validateNewPassword(password, confirmation);
 
@@ -52,9 +53,10 @@ export default function ForgotPasswordScreen() {
     pending.current = true; setBusy(true); Keyboard.dismiss();
     try {
       if (action === 'send') {
-        await api.post('/password/forgot', { email: normalizedEmail }, { timeout: 30000 });
+        const response = await api.post('/password/forgot', { email: normalizedEmail }, { timeout: 30000 });
+        const delay = Number(response.data?.retry_after);
         setEmail(normalizedEmail); setCode(''); setResetToken(''); setPassword(''); setConfirmation('');
-        setResendAt(Date.now() + 60000); setNow(Date.now()); setStep('code');
+        setResendAt(Date.now() + (Number.isFinite(delay) && delay > 0 ? delay : 90) * 1000); setNow(Date.now()); setStep('code');
       } else if (action === 'verify') {
         const response = await api.post('/password/verify-code', { email: normalizedEmail, code }, { timeout: 30000 });
         if (typeof response.data?.reset_token !== 'string' || !/^[a-f0-9]{64}$/.test(response.data.reset_token)) throw new Error('Invalid reset response');
@@ -98,7 +100,7 @@ export default function ForgotPasswordScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <SafeStatusBar backgroundColor={colors.background} withSpacer={false} />
       <View className="w-full max-w-2xl self-center flex-row items-center gap-3 px-6 pb-3" style={{ paddingTop: insets.top + 8 }}>
-        <TouchableOpacity onPress={() => router.back()} disabled={busy} accessibilityRole="button" accessibilityLabel="Back to login" accessibilityState={{ disabled: busy }} activeOpacity={0.75} className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: isDark ? colors.surface : '#F1F5F9', opacity: busy ? 0.5 : 1 }}>
+        <TouchableOpacity onPress={() => router.back()} disabled={busy} accessibilityRole="button" accessibilityLabel="Back to login" accessibilityState={{ disabled: busy }} activeOpacity={0.75} className="w-11 h-11 items-center justify-center" style={{ opacity: busy ? 0.5 : 1 }}>
           <MaterialIcons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text className="flex-1 text-base font-semibold" style={{ color: colors.text }}>Account recovery</Text>
@@ -153,16 +155,16 @@ export default function ForgotPasswordScreen() {
               </>}
           </View>
 
-          {step === 'code' && <Text className="text-xs leading-5 mt-3 px-1" style={{ color: colors.textSecondary }}>The code expires in 10 minutes. Check your spam folder if you don’t see it.</Text>}
+          {step === 'code' && <Text className="text-xs leading-5 mt-3 px-1" style={{ color: colors.textSecondary }}>The code expires in 5 minutes. Check your spam folder if you don’t see it.</Text>}
           <TouchableOpacity onPress={() => void request(action)} disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled, busy }} activeOpacity={0.8} className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl px-4 py-3.5 mt-5" style={{ backgroundColor: colors.primary, opacity: disabled ? 0.5 : 1 }}>
             {busy && <ActivityIndicator size="small" color="#FFFFFF" />}
-            <Text className="text-base font-semibold text-white">{busy ? 'Please wait...' : step === 'email' ? (remaining ? `Send code in ${remaining}s` : 'Send reset code') : step === 'code' ? 'Verify code' : 'Reset password'}</Text>
+            <Text className="text-base font-semibold text-white">{busy ? 'Please wait...' : step === 'email' ? (remaining ? `Send code in ${remainingLabel}` : 'Send reset code') : step === 'code' ? 'Verify code' : 'Reset password'}</Text>
           </TouchableOpacity>
 
           {step === 'code' && <View className="items-center mt-4">
             <Text className="text-xs" style={{ color: colors.textSecondary }}>Didn’t receive a code?</Text>
             <TouchableOpacity onPress={() => void request('send')} disabled={busy || remaining > 0} accessibilityRole="button" activeOpacity={0.7} className="min-h-11 justify-center px-4">
-              <Text className="text-sm font-semibold" style={{ color: remaining ? colors.textSecondary : colors.accent }}>{remaining ? `Resend code in ${remaining}s` : 'Resend code'}</Text>
+              <Text className="text-sm font-semibold" style={{ color: remaining ? colors.textSecondary : colors.accent }}>{remaining ? `Resend code in ${remainingLabel}` : 'Resend code'}</Text>
             </TouchableOpacity>
           </View>}
           {step === 'email' && <>

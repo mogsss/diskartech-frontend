@@ -41,9 +41,8 @@ export default function BaseRegisterScreen({
     >
       {/* Back button */}
       <TouchableOpacity 
-        onPress={onBack} 
-        style={{ backgroundColor: isDark ? colors.surface : '#F1F5F9' }}
-        className="w-10 h-10 rounded-full items-center justify-center mb-4"
+        onPress={onBack}
+        className="w-10 h-10 items-center justify-center mb-4"
       >
         <MaterialIcons name="arrow-back" size={24} color={colors.text} />
       </TouchableOpacity>

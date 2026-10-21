@@ -36,7 +36,7 @@ export default function ProfileScreen() {
   const {
     studentName, studentEmail, school, course, yearLevel, location, isVerified, rejectionReason, rating, reviewCount, profilePicUri, uploadedDocs,
     skills, isAddSkillModalVisible, setAddSkillModalVisible, handleSaveSkills,
-    selectedDays, selectedTimeSlot, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
+    selectedDays, selectedTimeSlot, scheduleSlots, isAvailabilityModalVisible, setAvailabilityModalVisible, handleSaveAvailability, formatScheduleText,
     isLogoutModalVisible, setLogoutModalVisible, handleLogout,
     alertModalVisible, setAlertModalVisible, alertModalConfig, showAlertModal,
     handleUploadDocument, handleUploadProfilePic, fetchStudentProfile, uploadingDocument, uploadingProfilePicture
@@ -165,7 +165,7 @@ export default function ProfileScreen() {
     <View style={{ backgroundColor: colors.background }} className="flex-1">
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3 flex-row items-center gap-3">
-        <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 items-center justify-center"><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
         <View className="flex-1"><Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Profile</Text></View>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}>
@@ -282,7 +282,8 @@ export default function ProfileScreen() {
         onClose={() => setAvailabilityModalVisible(false)}
         currentDays={selectedDays}
         currentTimeSlot={selectedTimeSlot}
-        onSave={(days, timeSlot) => handleSaveAvailability(days, timeSlot)}
+        currentSlots={scheduleSlots}
+        onSave={handleSaveAvailability}
       />
 
       <NotificationModal

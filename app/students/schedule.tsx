@@ -32,8 +32,7 @@ export default function ScheduleScreen() {
       >
         <TouchableOpacity 
           onPress={() => router.back()} 
-          className="w-10 h-10 rounded-full items-center justify-center mr-4"
-          style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
+          className="w-10 h-10 items-center justify-center mr-4"
         >
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
