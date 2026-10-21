@@ -16,7 +16,8 @@ import SearchBar from '@/components/ui/SearchBar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
-import { buildForYouJobs, isFeaturedJob } from '@/utils/jobFeatured';
+import { buildForYouJobs, isFeaturedJob, moveAppliedJobsLast } from '@/utils/jobFeatured';
+import { getAppliedJobIds } from '@/utils/jobApplications';
 import { matchJobWithQuery } from '@/utils/fuzzySearch';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
@@ -149,12 +150,7 @@ export default function HomeScreen() {
     try {
       const response = await api.get('/student/applications');
       if (response.data && response.data.status === 'success') {
-        const apps = response.data.applications || [];
-        const ids = new Set<string>(
-          apps
-            .map((a: any) => (a.job_id || a.job?.id)?.toString())
-            .filter(Boolean)
-        );
+        const ids = getAppliedJobIds(response.data.applications || []);
         setAppliedJobIds(ids);
         return ids;
       }
@@ -366,7 +362,7 @@ export default function HomeScreen() {
 
   const forYouJobs = buildForYouJobs(aiMatchedJobs, realAllJobs);
 
-  const currentJobsList =
+  const filteredJobsList =
     activeTab === 'nearby'
       ? filterBySearch(realNearbyJobs)
       : activeTab === 'ai_match'
@@ -374,6 +370,8 @@ export default function HomeScreen() {
         : activeTab === 'saved'
           ? filterBySearch(savedJobs)
           : filterBySearch(realAllJobs);
+
+  const currentJobsList = moveAppliedJobsLast(filteredJobsList, appliedJobIds);
 
   const isCurrentLoading =
     activeTab === 'nearby'
@@ -458,6 +456,7 @@ export default function HomeScreen() {
     const owner = job.household || job.employer;
     const rawAvatar = owner?.avatar || '';
     const numericSalary = Number(job.salary);
+    const isApplied = appliedJobIds.has(String(job.id));
     return (
       <View className="px-6">
         <HomeJobCard job={{
@@ -474,7 +473,7 @@ export default function HomeScreen() {
           requirements: parseJsonField(job.requirements),
           skills: parseJsonField(job.skills),
           bookmarked: job.bookmarked ?? false,
-          isApplied: job.isApplied ?? appliedJobIds.has(job.id?.toString()),
+          isApplied,
           verified: owner?.isVerified === true || owner?.isVerified === 1,
           applicants: job.applications_count ?? 0,
           featured: isFeaturedJob(job),

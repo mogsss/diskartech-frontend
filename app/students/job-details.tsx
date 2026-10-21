@@ -25,6 +25,7 @@ import {
 } from '@/utils/chat';
 import { sendAppNotification } from '@/utils/notifications';
 import { getCreatedApplicationId } from '@/utils/notificationFeed';
+import { getAppliedJobIds } from '@/utils/jobApplications';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { getSalaryLabel, getSalaryUnit } from '@/utils/jobRate';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -122,9 +123,7 @@ export default function JobDetailsScreen() {
           // I-check kung na-applyan na ang trabaho
           const appResponse = await api.get('/student/applications');
           if (isMounted && appResponse.data && appResponse.data.status === 'success') {
-            const hasApplied = (appResponse.data.applications || []).some(
-              (a: any) => (a.job_id || a.job?.id)?.toString() === id?.toString()
-            );
+            const hasApplied = getAppliedJobIds(appResponse.data.applications || []).has(String(id));
             setIsApplied((prev) => (prev !== hasApplied ? hasApplied : prev));
           }
         } catch (error) {

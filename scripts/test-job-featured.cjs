@@ -12,9 +12,46 @@ const loaded = new Module(filename, module);
 loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, filename);
-const { isFeaturedJob, buildForYouJobs } = loaded.exports;
+const { isFeaturedJob, buildForYouJobs, moveAppliedJobsLast } = loaded.exports;
 const now = Date.parse('2026-10-15T07:18:00Z');
 const job = (profile = {}) => ({ status: 'active', user: { role: 'employer' }, employer: profile });
+
+test('applied jobs move below new opportunities without changing either group or the source feed', () => {
+  const jobs = Object.freeze([
+    { id: 1, title: 'Applied featured job', is_featured: true },
+    { id: '2', title: 'Nearest new job' },
+    { id: 3, title: 'Next new job' },
+    { id: '4', title: 'Another applied job' },
+    { id: 5, title: 'Last new job' },
+  ]);
+  const result = moveAppliedJobsLast(jobs, new Set(['1', '4']));
+  assert.deepEqual(result.map(item => item.id), ['2', 3, 5, 1, '4']);
+  assert.deepEqual(jobs.map(item => item.id), [1, '2', 3, '4', 5]);
+  assert.equal(result[3], jobs[0], 'preserve the complete job record and its badge');
+});
+
+test('For You prioritizes unapplied jobs while preserving Featured and AI ranking within each group', () => {
+  const matches = [
+    { ...job(), id: 1, match_percentage: 95 },
+    { ...job(), id: 2, match_percentage: 80 },
+    { ...job(), id: 4, match_percentage: 70 },
+  ];
+  const premium = { ...job({ isSubscribed: true }), id: 3 };
+  const recommended = buildForYouJobs(matches, [...matches, premium], now);
+  const result = moveAppliedJobsLast(recommended, new Set(['2', '3']));
+  assert.deepEqual(result.map(item => item.id), [1, 4, 3, 2]);
+  assert.equal(result[2].is_featured, true);
+  assert.equal(result[0].match_percentage, 95);
+  assert.equal(result[3].match_percentage, 80);
+});
+
+test('refreshing applied IDs restores original ranking when a job is no longer marked applied', () => {
+  const jobs = [{ id: 3 }, { id: 1 }, { id: 2 }];
+  assert.deepEqual(moveAppliedJobsLast(jobs, new Set(['3'])).map(item => item.id), [1, 2, 3]);
+  assert.deepEqual(moveAppliedJobsLast(jobs, new Set()), jobs);
+  assert.deepEqual(moveAppliedJobsLast(jobs, new Set(['1', '2', '3'])), jobs);
+  assert.deepEqual(moveAppliedJobsLast([], new Set(['3'])), []);
+});
 
 test('All jobs, Nearby and Saved can show Premium badges without a matching-feed flag', () => {
   for (const isSubscribed of [true, 1, '1']) {

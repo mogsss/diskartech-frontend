@@ -9,6 +9,16 @@ interface JobFeatureData {
   } | null;
 }
 
+/** Keep each feed's ranking while moving the student's applied jobs below new opportunities. */
+export function moveAppliedJobsLast<T extends { id: string | number }>(
+  jobs: readonly T[],
+  appliedJobIds: ReadonlySet<string>
+): T[] {
+  return [...jobs].sort((a, b) =>
+    Number(appliedJobIds.has(String(a.id))) - Number(appliedJobIds.has(String(b.id)))
+  );
+}
+
 /** Use the feed flag when available; other job feeds include the employer's subscription. */
 export function isFeaturedJob(job: JobFeatureData, now = Date.now()): boolean {
   if (job.status !== 'active') return false;

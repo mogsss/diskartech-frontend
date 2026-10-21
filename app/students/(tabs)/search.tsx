@@ -21,6 +21,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import api from '@/api/axios';
 import { resolveMediaUrl } from '@/utils/media';
 import { matchJobWithQuery } from '@/utils/fuzzySearch';
+import { getAppliedJobIds } from '@/utils/jobApplications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
@@ -58,7 +59,7 @@ export default function SearchScreen() {
   // States para sa API data
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [savedJobs, setSavedJobs] = useState<any[]>([]);
-  const [appliedJobs, setAppliedJobs] = useState<any[]>([]);
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerVisible, setDrawerVisible] = useState(false);
@@ -131,7 +132,7 @@ export default function SearchScreen() {
       // Kunin ang student applications para malaman kung alin ang applied na
       const appResponse = await api.get('/student/applications');
       if (appResponse.data && appResponse.data.status === 'success') {
-        setAppliedJobs(appResponse.data.applications || []);
+        setAppliedJobIds(getAppliedJobIds(appResponse.data.applications || []));
       }
     } catch (error) {
       console.error('Error fetching jobs for search:', error);
@@ -396,7 +397,7 @@ export default function SearchScreen() {
             requirements: parseJsonField(job.requirements),
             skills: parseJsonField(job.skills),
             bookmarked: savedJobs.some((saved) => saved.id?.toString() === job.id?.toString()),
-            isApplied: appliedJobs.some((application) => (application.job_id || application.job?.id)?.toString() === job.id?.toString()),
+            isApplied: appliedJobIds.has(String(job.id)),
             verified: owner?.isVerified === true || owner?.isVerified === 1,
             applicants: job.applications_count ?? 0,
           }}

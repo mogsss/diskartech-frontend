@@ -386,13 +386,13 @@ export default function ApplicationsScreen() {
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <SafeStatusBar />
-      <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3">
-        <View className="flex-row items-center gap-3">
+      <View className="w-full max-w-2xl self-center shrink-0 pt-2 pb-3">
+        <View className="flex-row items-center gap-3 px-6">
           <TouchableOpacity onPress={() => setDrawerVisible(true)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Open navigation menu" className="w-12 h-12 items-center justify-center"><MaterialIcons name="menu" size={23} color={colors.text} /></TouchableOpacity>
           <View className="flex-1"><Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Applications</Text><Text className="text-xs leading-5 mt-0.5" style={{ color: colors.textSecondary }}>Keep track of your next opportunity</Text></View>
         </View>
-        <Text className="text-xs font-medium mt-4 mb-2" style={{ color: colors.textSecondary }}>Filter by status</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 pb-1" keyboardShouldPersistTaps="handled">
+        <Text className="text-xs font-medium mt-4 mb-2 px-6" style={{ color: colors.textSecondary }}>Filter by status</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="px-6 gap-2 pb-1" keyboardShouldPersistTaps="handled">
           {tabs.map((tab) => {
             const selected = activeTab === tab;
             const count = tab === 'All' ? applications.length : statusCounts[tab.toLowerCase()] || 0;
