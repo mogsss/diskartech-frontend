@@ -37,17 +37,17 @@ export function ProfileField({ label, required, inputRef, onFocus, onBlur, ...in
   );
 }
 
-export function FormSection({ title, description, icon, children }: {
+export function FormSection({ title, description, icon, children, headerOutside = false }: {
   title: string;
   description: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   children: React.ReactNode;
+  headerOutside?: boolean;
 }) {
   const { colors, isDark } = useDarkMode();
   const accentText = isDark ? colors.accent : colors.primary;
-  return (
-    <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-      <View className="flex-row items-start gap-3 px-5 py-4 border-b" style={{ borderColor: colors.border }}>
+  const header = (
+      <View className={`flex-row items-start gap-3 ${headerOutside ? 'px-1 mb-2' : 'px-5 py-4 border-b'}`} style={headerOutside ? undefined : { borderColor: colors.border }}>
         <View className="h-9 w-9 items-center justify-center">
           <MaterialIcons name={icon} size={19} color={accentText} />
         </View>
@@ -56,7 +56,19 @@ export function FormSection({ title, description, icon, children }: {
           <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{description}</Text>
         </View>
       </View>
-      <View className="p-5 gap-4">{children}</View>
+  );
+  const fields = <View className="p-5 gap-4">{children}</View>;
+  const cardStyle = { backgroundColor: colors.surface, borderColor: colors.border };
+
+  return headerOutside ? (
+    <View>
+      {header}
+      <View className="rounded-3xl border overflow-hidden" style={cardStyle}>{fields}</View>
+    </View>
+  ) : (
+    <View className="rounded-3xl border overflow-hidden" style={cardStyle}>
+      {header}
+      {fields}
     </View>
   );
 }
