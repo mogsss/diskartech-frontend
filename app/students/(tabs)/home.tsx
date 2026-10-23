@@ -501,7 +501,7 @@ export default function HomeScreen() {
         </View>
         <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 items-center justify-center">
           <MaterialIcons name="notifications-none" size={23} color={colors.text} />
-          {hasUnreadNotifs && <View className="absolute top-2.5 right-3 w-2 h-2 rounded-full border-2" style={{ backgroundColor: colors.primary, borderColor: colors.surface }} />}
+          {hasUnreadNotifs && <View className="absolute top-2.5 right-3 w-2 h-2 rounded-full border-2" style={{ backgroundColor: colors.primary, borderColor: colors.background }} />}
         </TouchableOpacity>
       </View>
       <View className="flex-1">

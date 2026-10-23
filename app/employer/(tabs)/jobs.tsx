@@ -322,7 +322,7 @@ export default function EmployerJobsScreen() {
                     className="p-4"
                   >
                     <View className="flex-row items-start gap-3 mb-4">
-                      <View className="w-11 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: accentBackground }}>
+                      <View className="w-11 h-11 items-center justify-center">
                         <MaterialIcons name={isHousehold ? 'home-work' : 'work-outline'} size={22} color={accentColor} />
                       </View>
                       <View className="flex-1" style={{ minWidth: 0 }}>
@@ -330,10 +330,7 @@ export default function EmployerJobsScreen() {
                           <Text className="flex-1 text-[10px] font-semibold tracking-wide" style={{ color: colors.textSecondary }} numberOfLines={1}>
                             {job.category || 'General'}
                           </Text>
-                          <View className="flex-row items-center gap-1.5 px-2 py-1 rounded-full" style={{ backgroundColor: active ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5') : mutedBackground }}>
-                            <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
-                            <Text className="text-[10px] font-semibold" style={{ color: statusColor }}>{statusLabel}</Text>
-                          </View>
+                          <Text className="py-1 text-[10px] font-semibold" style={{ color: statusColor }}>{statusLabel}</Text>
                         </View>
                         <Text className="text-base font-bold leading-5" style={{ color: colors.text }} numberOfLines={2}>{job.title}</Text>
                       </View>

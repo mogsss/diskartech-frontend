@@ -8,6 +8,7 @@ import { mergeNotificationSources, type NotificationFeedItem } from '@/utils/not
 import { applyNotificationPreferences, notificationTimestamp } from '@/utils/notificationPreferences';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { NOTIFICATION_DISMISSAL_TYPE } from '@/utils/notificationActions';
 import { useFocusEffect } from 'expo-router';
 
 export function useUnreadNotifications() {
@@ -86,7 +87,7 @@ export function useUnreadNotifications() {
       query(collection(db, APP_NOTIFICATIONS_COLLECTION), where('recipient_id', '==', myId)),
       snapshot => {
         if (!active) return;
-        setLiveItems(snapshot.docs.map(snapshotDoc => {
+        setLiveItems(snapshot.docs.filter(snapshotDoc => snapshotDoc.data().type !== NOTIFICATION_DISMISSAL_TYPE).map(snapshotDoc => {
           const item = snapshotDoc.data();
           return {
             id: `firestore_${snapshotDoc.id}`, firestoreDocId: snapshotDoc.id,

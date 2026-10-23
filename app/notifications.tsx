@@ -14,6 +14,7 @@ import { APP_NOTIFICATIONS_COLLECTION } from '@/utils/notifications';
 import { mergeNotificationSources } from '@/utils/notificationFeed';
 import { applyNotificationPreferences, getNotificationActionSources, saveNotificationAction } from '@/utils/notificationPreferences';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { deleteNotificationSources, NOTIFICATION_DISMISSAL_TYPE } from '@/utils/notificationActions';
 import { useToast } from '@/hooks/useToast';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -364,6 +365,7 @@ export default function NotificationsScreen() {
               const notifs: any[] = [];
               snapshot.docs.forEach((docSnap) => {
                 const data = docSnap.data();
+                if (data.type === NOTIFICATION_DISMISSAL_TYPE) return;
                 const ms = getTimestampMs(data.created_at);
                 const notifId = `firestore_${docSnap.id}`;
 
@@ -649,7 +651,13 @@ export default function NotificationsScreen() {
     actionInProgress.current = true;
     setWorking(true);
     try {
-      await saveNotificationAction(currentUserId, 'deleted', targets);
+      const result = await deleteNotificationSources(currentUserId, targets);
+      if (result.failedIds.length) {
+        showToast({ type: 'error', message: result.deletedIds.length
+          ? 'Some notifications could not be deleted. Please retry the remaining notifications.'
+          : 'Could not delete notifications. Check your connection and try again.' });
+        return;
+      }
       exitSelection();
       showToast({ type: 'success', title: 'Notifications deleted', message: 'Selected notifications have been removed.' });
     } catch (error) {
@@ -804,7 +812,7 @@ export default function NotificationsScreen() {
       <NotificationModal
         visible={deleteTargets !== null}
         title="Delete selected notifications?"
-        message="Remove these notifications from this device? Your applications and conversations will stay available."
+        message="Delete these notifications from your account? Your applications and conversations will stay available."
         iconName="delete-outline"
         primaryButtonText="Delete"
         onPrimaryPress={() => { void handleDeleteSelected(); }}

@@ -86,11 +86,138 @@ test('concurrent writes merge safely and a failed write neither hides cards nor 
   stop();
 });
 
-function screenFixture({ badge = false, role = 'student' } = {}) {
+function cloudFixture(role = 'student') {
+  const records = new Map([
+    ['app_notifications/invite', { recipient_id: '1', type: role === 'student' ? 'application_status' : 'application', title: role === 'student' ? 'Interview Invitation' : 'New Applicant', target_id: 27, created_at: 100, read: false }],
+    ['chats/conversation', { sender_id: '2', receiver_id: '1', last_sender_id: '2', last_message: 'Hello', last_message_at: 200 }],
+  ]);
+  const listeners = new Map(), writes = [], failures = new Set(), listenErrors = new Map();
+  let failDeletes = false, beforeCommit;
+  const snapshot = prefix => ({ docs: [...records].filter(([key]) => key.startsWith(`${prefix}/`) && !key.slice(prefix.length + 1).includes('/'))
+    .map(([key, data]) => ({ id: key.slice(prefix.length + 1), data: () => data })) });
+  const emit = prefix => listeners.get(prefix)?.forEach(listener => listener(snapshot(prefix)));
+  const firestore = {
+    collection: (_, ...segments) => segments.join('/'),
+    doc: (base, ...segments) => [typeof base === 'string' ? base : '', ...segments].filter(Boolean).join('/'),
+    query: (source, ...filters) => ({ source, filters }), where: (field, operator, value) => ({ field, value }), orderBy() {}, limit() {}, setDoc: async () => {}, getDocs: async () => ({ docs: [] }),
+    onSnapshot(ref, callback, onError) {
+      const source = typeof ref === 'string' ? ref : ref.source;
+      const filtered = value => callback({ docs: value.docs.filter(entry => (ref.filters || []).every(filter => entry.data()[filter.field] === filter.value)) });
+      if (!listeners.has(source)) listeners.set(source, new Set());
+      if (listenErrors.has(source)) { onError?.(listenErrors.get(source)); return () => {}; }
+      listeners.get(source).add(filtered); filtered(snapshot(source));
+      return () => listeners.get(source).delete(filtered);
+    },
+    async runTransaction(_, callback) {
+      let staged;
+      const run = async () => {
+        staged = [];
+        await callback({
+          get: async ref => {
+            assert.equal(staged.length, 0, 'all reads precede writes');
+            if (failDeletes || failures.has(ref)) throw new Error('Permission denied or offline');
+            return { exists: () => records.has(ref), data: () => records.get(ref) };
+          },
+          set: (ref, value) => staged.push({ ref, value }), delete: ref => staged.push({ ref, deleted: true }),
+        });
+      };
+      await run();
+      if (beforeCommit) { const retry = beforeCommit; beforeCommit = undefined; retry(); await run(); }
+      staged.forEach(write => { writes.push(write); if (write.deleted) records.delete(write.ref); else records.set(write.ref, write.value); });
+      new Set(staged.map(write => write.ref.slice(0, write.ref.lastIndexOf('/')))).forEach(emit);
+    },
+  };
+  const actions = load('utils/notificationActions.ts', {
+    '@/utils/firebase': { db: {} }, './notificationPreferences': storageFixture(), 'firebase/firestore': firestore,
+  });
+  return { records, writes, failures, listenErrors, firestore, actions, emit,
+    failDeletes: value => { failDeletes = value; }, retryBeforeCommit: callback => { beforeCommit = callback; } };
+}
+
+test('Firestore deletion removes the alert and atomically saves every merged-source dismissal', async () => {
+  const cloud = cloudFixture();
+  const result = await cloud.actions.deleteNotificationSources('1', [
+    { id: 'app_27', timestampMs: 100 }, { id: 'firestore_invite', firestoreDocId: 'invite', timestampMs: 100 },
+    { id: 'chat_conversation', timestampMs: 200 },
+  ]);
+  assert.equal(result.failedIds.length, 0);
+  assert.equal(cloud.records.has('app_notifications/invite'), false);
+  assert.equal(cloud.records.get('app_notifications/dismissal:1:app_27').through, 100);
+  assert.equal(cloud.records.get('app_notifications/dismissal:1:chat_conversation').through, 200);
+  assert.equal(cloud.records.has('chats/conversation'), true, 'dismissing a chat alert never clears the conversation');
+  assert.ok(cloud.writes.every(write => write.ref.startsWith('app_notifications/dismissal:1:') || write.ref === 'app_notifications/invite'));
+});
+
+test('a retried transaction preserves a newer alert and never moves a dismissal cutoff backwards', async () => {
+  const cloud = cloudFixture();
+  cloud.retryBeforeCommit(() => {
+    cloud.records.set('app_notifications/invite', { recipient_id: '1', created_at: 300 });
+    cloud.records.set('app_notifications/dismissal:1:firestore_invite', { type: 'notification_dismissal', recipient_id: '1', source_id: 'firestore_invite', through: 250 });
+  });
+  const result = await cloud.actions.deleteNotificationSources('1', [{ id: 'firestore_invite', firestoreDocId: 'invite', timestampMs: 100 }]);
+  assert.equal(result.failedIds.length, 0);
+  assert.equal(cloud.records.get('app_notifications/invite').created_at, 300);
+  assert.equal(cloud.records.get('app_notifications/dismissal:1:firestore_invite').through, 250);
+});
+
+test('live-only application deletion dismisses the later API fallback without mistaking a legacy job ID for an application', async () => {
+  const cloud = cloudFixture();
+  await cloud.actions.deleteNotificationSources('1', [{ id: 'firestore_invite', firestoreDocId: 'invite', type: 'application_status', targetId: 27, timestampMs: 100 }]);
+  assert.equal(cloud.records.get('app_notifications/dismissal:1:app_27').through, 100);
+  cloud.records.set('app_notifications/legacy', { recipient_id: '1', created_at: 100 });
+  await cloud.actions.deleteNotificationSources('1', [{ id: 'firestore_legacy', firestoreDocId: 'legacy', type: 'application', targetId: 99, timestampMs: 100 }]);
+  assert.equal(cloud.records.has('app_notifications/dismissal:1:app_99'), false);
+});
+
+test('wrong-recipient and offline deletes roll back the entire chunk without hiding API summaries', async () => {
+  const cloud = cloudFixture();
+  const targets = [{ id: 'app_27', timestampMs: 100 }, { id: 'firestore_invite', firestoreDocId: 'invite', timestampMs: 100 }];
+  const outsider = await cloud.actions.deleteNotificationSources('2', targets);
+  assert.equal(outsider.failedIds.length, 2);
+  assert.equal(cloud.writes.length, 0);
+  cloud.failDeletes(true);
+  assert.equal((await cloud.actions.deleteNotificationSources('1', targets)).failedIds.length, 2);
+  assert.equal(cloud.writes.length, 0);
+  cloud.failDeletes(false);
+  assert.equal((await cloud.actions.deleteNotificationSources('1', targets)).deletedIds.length, 2);
+  assert.equal((await cloud.actions.deleteNotificationSources('1', targets)).failedIds.length, 0, 'retrying an already deleted alert succeeds');
+});
+
+test('Select all bounds transaction size, deduplicates sources, and validates paths before writing', async () => {
+  const cloud = cloudFixture();
+  const targets = Array.from({ length: 250 }, (_, index) => ({ id: `app_${index}`, timestampMs: 100 }));
+  const result = await cloud.actions.deleteNotificationSources('1', [...targets, targets[0]]);
+  assert.equal(result.deletedIds.length, 250); assert.equal(cloud.writes.length, 250);
+  await assert.rejects(cloud.actions.deleteNotificationSources('bad/user', targets));
+  await assert.rejects(cloud.actions.deleteNotificationSources('1', [{ id: 'firestore_bad', firestoreDocId: '../bad' }]));
+  assert.equal(cloud.writes.length, 250);
+});
+
+test('large bulk deletion reports partial failures and only retries the remaining sources', async () => {
+  const cloud = cloudFixture();
+  const targets = Array.from({ length: 250 }, (_, index) => ({ id: `app_${index}`, timestampMs: 100 }));
+  cloud.failures.add('app_notifications/dismissal:1:app_120');
+  const result = await cloud.actions.deleteNotificationSources('1', targets);
+  assert.equal(result.deletedIds.length, 150); assert.equal(result.failedIds.length, 100);
+  assert.equal(cloud.records.has('app_notifications/dismissal:1:app_120'), false);
+  assert.equal(cloud.records.has('app_notifications/dismissal:1:app_100'), false, 'the failed chunk rolls back atomically');
+  cloud.failures.clear();
+  assert.equal((await cloud.actions.deleteNotificationSources('1', targets.filter(item => result.failedIds.includes(item.id)))).deletedIds.length, 100);
+});
+
+test('dismissals are scoped to the recipient account', async () => {
+  const cloud = cloudFixture();
+  await cloud.actions.deleteNotificationSources('1', [{ id: 'app_27', timestampMs: 100 }]);
+  const received = [];
+  const stop = cloud.actions.subscribeNotificationDismissals('2', value => received.push(value), error => { throw error; });
+  assert.deepEqual(received, [{}]);
+  stop();
+});
+
+function screenFixture({ badge = false, role = 'student', cloud = cloudFixture(role) } = {}) {
   const storage = storageFixture();
   storage.data.set('userData', JSON.stringify({ id: 1, role }));
   const slots = [], effects = [], toasts = [], routes = [], chatReads = [];
-  const snapshots = new Map();
   let cursor = 0, tree, failWrites = false;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
   const react = {
@@ -124,6 +251,7 @@ function screenFixture({ badge = false, role = 'student' } = {}) {
     '@/hooks/useDarkMode': { useDarkMode: () => ({ colors: { text: '#111', textSecondary: '#666', border: '#ccc', accent: '#c00', background: '#fff', surface: '#fff' } }) },
     '@/hooks/useToast': { useToast: () => ({ showToast }) },
     '@/utils/notificationPreferences': storage,
+    '@/utils/notificationActions': cloud.actions,
     '@/utils/notificationFeed': load('utils/notificationFeed.ts'),
     '@/utils/notifications': { APP_NOTIFICATIONS_COLLECTION: 'app_notifications', CHATS_COLLECTION: 'chats' },
     '@/utils/firebase': { db: {} },
@@ -134,17 +262,7 @@ function screenFixture({ badge = false, role = 'student' } = {}) {
       ? { applications: [{ id: 27, status: 'interview', updated_at: 100, job: { title: 'Tutor' } }] }
       : url === '/employer/applicants' ? { status: 'success', applicants: [{ id: 27, status: 'pending', created_at: 100, student: { student_name: 'Juan' }, job: { title: 'Tutor' } }] }
       : { profile: { isVerified: true, updated_at: 50 } } }) },
-    'firebase/firestore': {
-      collection: (_, name) => name, query: value => value, where() {}, orderBy() {}, limit() {}, doc() {}, setDoc: async () => {}, getDocs: async () => ({ docs: [] }),
-      onSnapshot(source, callback) {
-        snapshots.set(source, callback);
-        const data = source === 'app_notifications'
-          ? [{ id: 'invite', type: role === 'student' ? 'application_status' : 'application', title: role === 'student' ? 'Interview Invitation' : 'New Applicant', target_id: 27, created_at: 100, read: false }]
-          : [{ id: 'conversation', sender_id: '2', receiver_id: '1', last_sender_id: '2', last_message: 'Hello', last_message_at: 200 }];
-        callback({ docs: data.map(item => ({ id: item.id, data: () => item })) });
-        return () => {};
-      },
-    },
+    'firebase/firestore': cloud.firestore,
   };
   for (const name of ['NotificationCard', 'SafeStatusBar']) dependencies[`@/components/ui/${name}`] = name;
   dependencies['@/components/ui/modals/NotificationModal'] = 'NotificationModal';
@@ -158,7 +276,7 @@ function screenFixture({ badge = false, role = 'student' } = {}) {
     return predicate(node) ? node : find(node.props?.children, predicate);
   }
   const app = {
-    toasts, routes, chatReads, storage,
+    toasts, routes, chatReads, storage, cloud,
     render() { cursor = 0; tree = Screen(); effects.splice(0).forEach(effect => effect()); return app; },
     async settle() { for (let i = 0; i < 15; i++) { app.render(); await new Promise(setImmediate); } return app; },
     list() { app.render(); return find(tree, node => node.type === 'FlatList').props; },
@@ -166,8 +284,9 @@ function screenFixture({ badge = false, role = 'student' } = {}) {
     action(label) { app.render(); return find(tree, node => node.props?.accessibilityLabel === label)?.props; },
     dialog() { app.render(); return find(tree, node => node.type === 'NotificationModal').props; },
     failWrites(value) { failWrites = value; },
+    failDeletes: cloud.failDeletes,
     badge() { app.render(); return tree; },
-    emitChat(timestamp) { snapshots.get('chats')({ docs: [{ id: 'conversation', data: () => ({ sender_id: '2', receiver_id: '1', last_sender_id: '2', last_message: 'New message', last_message_at: timestamp }) }] }); },
+    emitChat(timestamp) { cloud.records.set('chats/conversation', { sender_id: '2', receiver_id: '1', last_sender_id: '2', last_message: 'New message', last_message_at: timestamp }); cloud.emit('chats'); },
     stop() { slots.forEach(slot => slot?.cleanup?.()); },
   };
   return app;
@@ -196,9 +315,9 @@ test('confirmed delete hides all merged source records without deleting applicat
   app.action('Delete 1 selected notifications').onPress();
   app.dialog().onPrimaryPress(); await app.settle();
   assert.equal(app.list().data.some(item => item.id === 'app_27'), false);
-  const saved = await app.storage.readNotificationPreferences('1');
-  assert.equal(saved.deleted.app_27, 100);
-  assert.equal(saved.deleted.firestore_invite, 100);
+  assert.equal(app.cloud.records.get('app_notifications/dismissal:1:app_27').through, 100);
+  assert.equal(app.cloud.records.get('app_notifications/dismissal:1:firestore_invite').through, 100);
+  assert.equal(app.cloud.records.has('app_notifications/invite'), false);
   assert.equal(app.chatReads.length, 0);
   assert.equal(app.routes.length, 0);
   assert.equal(app.toasts.at(-1).type, 'success');
@@ -207,16 +326,56 @@ test('confirmed delete hides all merged source records without deleting applicat
 
 test('failed deletion retains selection and cards, and a retry can succeed', async () => {
   const app = await screenFixture().settle();
-  app.card('app_27').onLongPress(); app.failWrites(true);
+  app.card('app_27').onLongPress(); app.failDeletes(true);
   app.action('Delete 1 selected notifications').onPress(); app.dialog().onPrimaryPress();
   const log = console.error; console.error = () => {};
   try { await app.settle(); } finally { console.error = log; }
   assert.equal(app.card('app_27').selected, true);
   assert.equal(app.toasts.at(-1).type, 'error');
-  app.failWrites(false);
+  app.failDeletes(false);
   app.action('Delete 1 selected notifications').onPress(); app.dialog().onPrimaryPress(); await app.settle();
   assert.equal(app.list().data.some(item => item.id === 'app_27'), false);
   app.stop();
+});
+
+test('cloud permission errors do not show the reopen toast or block local Mark all read', async () => {
+  const cloud = cloudFixture();
+  cloud.listenErrors.set('app_notifications', Object.assign(new Error('Missing or insufficient permissions'), { code: 'permission-denied' }));
+  const warn = console.warn, error = console.error;
+  console.warn = () => {}; console.error = () => {};
+  let app;
+  try {
+    app = await screenFixture({ cloud }).settle();
+    assert.equal(app.toasts.length, 0, 'an optional cloud sync failure must not produce a misleading reopen message');
+    assert.equal(app.action('Mark all notifications as read').disabled, false);
+    app.action('Mark all notifications as read').onPress(); await app.settle();
+    assert.equal(app.toasts.at(-1).type, 'success');
+    assert.equal(app.list().data.every(item => item.read), true);
+    app.card('app_27').onLongPress(); app.failDeletes(true);
+    app.action('Delete 1 selected notifications').onPress(); app.dialog().onPrimaryPress(); await app.settle();
+    assert.equal(app.toasts.at(-1).type, 'error', 'an actual failed cloud delete must still report failure');
+    assert.equal(app.card('app_27').selected, true);
+  } finally { app?.stop(); console.warn = warn; console.error = error; }
+});
+
+test('a second device and fresh install observe permanent deletion without local preferences; newer alerts survive', async () => {
+  const cloud = cloudFixture();
+  const first = await screenFixture({ cloud }).settle();
+  const second = await screenFixture({ cloud }).settle();
+  const badge = await screenFixture({ cloud, badge: true }).settle();
+  first.card('app_27').onLongPress();
+  first.action('Delete 1 selected notifications').onPress(); first.dialog().onPrimaryPress();
+  await first.settle(); await second.settle(); await badge.settle();
+  assert.equal(second.list().data.some(item => item.id === 'app_27'), false, 'the API fallback is also dismissed on the other phone');
+  assert.equal(second.list().data.length, 2, 'dismissal metadata must never become a notification card');
+  assert.deepEqual((await second.storage.readNotificationPreferences('1')).deleted, {});
+  assert.equal(badge.badge().unreadCount, 1, 'only the chat alert remains');
+  const installedAgain = await screenFixture({ cloud }).settle();
+  assert.equal(installedAgain.list().data.some(item => item.id === 'app_27'), false);
+  cloud.records.set('app_notifications/invite', { recipient_id: '1', type: 'application_status', title: 'Interview Invitation', target_id: 27, created_at: 300, read: false });
+  cloud.emit('app_notifications'); await second.settle();
+  assert.equal(second.list().data.find(item => item.id === 'firestore_invite').timestampMs, 300);
+  [first, second, badge, installedAgain].forEach(app => app.stop());
 });
 
 test('mark all read persists all sources, updates the displayed unread state, and keeps conversations untouched', async () => {

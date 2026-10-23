@@ -5,9 +5,12 @@ import NotificationModal from '@/components/ui/modals/NotificationModal';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useJobPosting } from '@/hooks/useJobPosting';
+import { useJobPostingKeyboard } from '@/hooks/useJobPostingKeyboard';
 import { jobQuotaAvailability, jobQuotaUsage } from '@/utils/jobQuota';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import { Keyboard, Platform, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -16,21 +19,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function JobPostingScreen() {
   const params = useLocalSearchParams<{ jobId?: string; type?: string }>();
   const form = useJobPosting(params);
+  const { inputNavigation, formScrollRef } = useJobPostingKeyboard();
   const { isEditing, isHousehold, loading, jobQuota, notificationConfig, handleSubmit } = form;
   const { colors, isDark } = useDarkMode();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const accentBackground = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FEF2F2';
   const accentColor = isDark ? colors.accent : '#B91C1C';
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [activeSuggestionField, setActiveSuggestionField] = useState<'requirements' | 'skills' | null>(null);
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
 
   return (
-    <View className="flex-1" style={{ backgroundColor: colors.background }}>
+    <View className="flex-1" style={{ backgroundColor: colors.background, paddingTop: insets.top }}>
+      {isFocused && <StatusBar style={isDark ? 'light' : 'dark'} />}
       <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setIsCategoryOpen(false); setActiveSuggestionField(null); }}>
         <KeyboardAwareScrollView
+          ref={formScrollRef}
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 36 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: insets.bottom + 36 }}
           enableOnAndroid
           enableAutomaticScroll
           extraScrollHeight={Platform.OS === 'ios' ? 0 : 100}
@@ -49,7 +55,7 @@ export default function JobPostingScreen() {
             >
               <MaterialIcons name="arrow-back" size={22} color={colors.text} />
             </TouchableOpacity>
-            <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: accentBackground }}>
+            <View className="flex-row items-center gap-1.5 px-3 py-1.5">
               <MaterialIcons name={isHousehold ? 'home-work' : 'business-center'} size={18} color={accentColor} />
             </View>
           </View>
@@ -72,6 +78,7 @@ export default function JobPostingScreen() {
 
           <JobDetailsFields
             form={form.details}
+            inputNavigation={inputNavigation}
             isHousehold={form.isHousehold}
             isCategoryOpen={isCategoryOpen}
             setIsCategoryOpen={setIsCategoryOpen}
@@ -80,6 +87,7 @@ export default function JobPostingScreen() {
           <JobScheduleFields form={form.schedule} />
           <CandidateProfileFields
             form={form.candidate}
+            inputNavigation={inputNavigation}
             activeSuggestionField={activeSuggestionField}
             setActiveSuggestionField={setActiveSuggestionField}
           />

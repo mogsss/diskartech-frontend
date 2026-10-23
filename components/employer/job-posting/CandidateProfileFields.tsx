@@ -3,6 +3,7 @@ import { REQUIREMENT_SUGGESTIONS } from '@/data/jobRequirements';
 import { SKILL_SUGGESTIONS } from '@/data/skills';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import type { JobPostingForm } from '@/hooks/useJobPosting';
+import type { JobPostingInputNavigation, JobPostingInputProps } from '@/hooks/useJobPostingKeyboard';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useRef } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -12,16 +13,18 @@ type SuggestionField = 'requirements' | 'skills' | null;
 
 interface CandidateProfileFieldsProps {
   form: JobPostingForm['candidate'];
+  inputNavigation: JobPostingInputNavigation;
   activeSuggestionField: SuggestionField;
   setActiveSuggestionField: (field: SuggestionField) => void;
 }
 
-export default function CandidateProfileFields({ form, activeSuggestionField, setActiveSuggestionField }: CandidateProfileFieldsProps) {
+export default function CandidateProfileFields({ form, inputNavigation, activeSuggestionField, setActiveSuggestionField }: CandidateProfileFieldsProps) {
   const { colors } = useDarkMode();
   return (
     <JobFormSection number="03" title="Candidate profile" subtitle="Help students see if they are a good fit." icon="person-outline">
       <View className="mb-5">
         <CandidateListInput
+          navigation={inputNavigation('requirements', 'skills')}
           label="Requirements"
           placeholder="e.g. Valid ID, Resume"
           value={form.requirementInput}
@@ -38,6 +41,7 @@ export default function CandidateProfileFields({ form, activeSuggestionField, se
       </View>
       <View className="border-t pt-4" style={{ borderTopColor: colors.border }}>
         <CandidateListInput
+          navigation={inputNavigation('skills')}
           label="Skills Needed"
           placeholder="e.g. Driving, Delivery"
           value={form.skillInput}
@@ -60,6 +64,7 @@ export default function CandidateProfileFields({ form, activeSuggestionField, se
 }
 
 interface CandidateListInputProps {
+  navigation: JobPostingInputProps;
   label: string;
   placeholder: string;
   value: string;
@@ -74,12 +79,12 @@ interface CandidateListInputProps {
   onFocus: () => void;
 }
 
-function CandidateListInput({ label, placeholder, value, onChangeText, items, onAdd, onRemove, suggestions, suggestionsLabel, addLabel, showSuggestions, onFocus }: CandidateListInputProps) {
+function CandidateListInput({ navigation, label, placeholder, value, onChangeText, items, onAdd, onRemove, suggestions, suggestionsLabel, addLabel, showSuggestions, onFocus }: CandidateListInputProps) {
   const { colors, isDark } = useDarkMode();
   const inputRef = useRef<TextInput>(null);
   const fieldBackground = isDark ? colors.background : '#F8FAFC';
-  const accentBackground = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FEF2F2';
   const accentColor = isDark ? colors.accent : '#B91C1C';
+  const { inputRef: registerInput, ...navigationProps } = navigation;
 
   return (
     <>
@@ -89,19 +94,19 @@ function CandidateListInput({ label, placeholder, value, onChangeText, items, on
       </View>
       <View className="flex-row items-center gap-2 mb-2">
         <TextInput
-          ref={inputRef}
+          {...navigationProps}
+          ref={input => { inputRef.current = input; registerInput(input); }}
           className="flex-1 border rounded-xl px-3.5 text-sm"
           style={{ height: 48, paddingVertical: 0, backgroundColor: fieldBackground, borderColor: colors.border, color: colors.text }}
           placeholder={placeholder}
           placeholderTextColor={colors.textSecondary}
           value={value}
           onChangeText={onChangeText}
-          onFocus={onFocus}
-          onSubmitEditing={onAdd}
-          returnKeyType="done"
+          onFocus={() => { navigation.onFocus(); onFocus(); }}
+          onSubmitEditing={() => { onAdd(); navigation.onSubmitEditing(); }}
           accessibilityLabel={label}
         />
-        <TouchableOpacity onPress={onAdd} accessibilityRole="button" accessibilityLabel={addLabel} className="w-12 h-12 rounded-xl items-center justify-center" style={{ backgroundColor: accentBackground }}>
+        <TouchableOpacity onPress={onAdd} accessibilityRole="button" accessibilityLabel={addLabel} className="w-12 h-12 items-center justify-center">
           <MaterialIcons name="add" size={23} color={accentColor} />
         </TouchableOpacity>
       </View>

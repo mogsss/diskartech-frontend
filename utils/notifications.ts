@@ -653,6 +653,8 @@ export function subscribeToAppNotifications(
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added') {
           const raw = change.doc.data();
+          // Internal account dismissal records are never user-facing alerts.
+          if (raw.type === 'notification_dismissal') return;
           if (onNotificationTriggered) {
             onNotificationTriggered(raw);
           }

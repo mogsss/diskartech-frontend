@@ -2,6 +2,7 @@ import InputField from '@/components/ui/InputField';
 import { CATEGORY_OPTIONS } from '@/data/jobCategories';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import type { JobPostingForm } from '@/hooks/useJobPosting';
+import type { JobPostingInputNavigation } from '@/hooks/useJobPostingKeyboard';
 import { getSalaryUnit } from '@/utils/jobRate';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
@@ -10,13 +11,14 @@ import JobFormSection from './JobFormSection';
 
 interface JobDetailsFieldsProps {
   form: JobPostingForm['details'];
+  inputNavigation: JobPostingInputNavigation;
   isHousehold?: boolean;
   isCategoryOpen: boolean;
   setIsCategoryOpen: (open: boolean) => void;
   onScrollEnabledChange: (enabled: boolean) => void;
 }
 
-export default function JobDetailsFields({ form, isHousehold = false, isCategoryOpen, setIsCategoryOpen, onScrollEnabledChange }: JobDetailsFieldsProps) {
+export default function JobDetailsFields({ form, inputNavigation, isHousehold = false, isCategoryOpen, setIsCategoryOpen, onScrollEnabledChange }: JobDetailsFieldsProps) {
   const { colors, isDark } = useDarkMode();
   const fieldBackground = isDark ? colors.background : '#F8FAFC';
   const accentBackground = isDark ? 'rgba(220, 38, 38, 0.12)' : '#FEF2F2';
@@ -32,6 +34,8 @@ export default function JobDetailsFields({ form, isHousehold = false, isCategory
   const descriptionHeightRef = useRef(120);
   const dragStartHeightRef = useRef(120);
   const isDraggingRef = useRef(false);
+  const { inputRef: descriptionRef, ...descriptionNavigation } = inputNavigation('description', 'salary');
+  const { inputRef: salaryRef, ...salaryNavigation } = inputNavigation('salary', selectedCategory === 'Other' ? 'category' : 'requirements');
 
   const cornerResizePanResponder = useRef(
     PanResponder.create({
@@ -68,6 +72,7 @@ export default function JobDetailsFields({ form, isHousehold = false, isCategory
   return (
     <JobFormSection number="01" title="Job details" subtitle="Tell applicants about the role." icon="work-outline">
       <InputField
+        {...inputNavigation('title', 'description')}
         label="Job Title *"
         placeholder="e.g. Service Crew, Barista"
         value={jobTitle}
@@ -82,6 +87,8 @@ export default function JobDetailsFields({ form, isHousehold = false, isCategory
           className="border rounded-xl relative overflow-hidden"
         >
           <TextInput
+            {...descriptionNavigation}
+            ref={descriptionRef}
             style={{ flex: 1, padding: 14, paddingBottom: 24, paddingRight: 28, color: colors.text }}
             className="text-sm"
             placeholder="What will the student do? Describe the tasks and expectations."
@@ -105,6 +112,8 @@ export default function JobDetailsFields({ form, isHousehold = false, isCategory
         <View className="flex-row items-center border rounded-xl px-3.5 h-[52px]" style={{ backgroundColor: fieldBackground, borderColor: colors.border }}>
           <Text className="text-lg font-semibold mr-2" style={{ color: colors.textSecondary }}>{'\u20B1'}</Text>
           <TextInput
+            {...salaryNavigation}
+            ref={salaryRef}
             className="flex-1 text-base p-0"
             style={{ color: colors.text }}
             placeholder="e.g. 500"
@@ -113,7 +122,7 @@ export default function JobDetailsFields({ form, isHousehold = false, isCategory
             onChangeText={handleSalaryChange}
             keyboardType="decimal-pad"
             accessibilityLabel={salaryType === 'hour' ? 'Hourly rate in pesos' : 'Daily rate in pesos'}
-            onFocus={() => setIsSalaryTypeOpen(false)}
+            onFocus={() => { salaryNavigation.onFocus(); setIsSalaryTypeOpen(false); }}
           />
           <TouchableOpacity
             onPress={() => { Keyboard.dismiss(); setIsSalaryTypeOpen(!isSalaryTypeOpen); }}
@@ -191,6 +200,7 @@ export default function JobDetailsFields({ form, isHousehold = false, isCategory
         {selectedCategory === 'Other' && (
           <View className="mt-3">
             <InputField
+              {...inputNavigation('category', 'requirements')}
               label="Category name *"
               placeholder={isHousehold ? 'e.g. Laundry, Gardening, Quick errands' : 'e.g. Photography, Warehouse'}
               value={customCategory}

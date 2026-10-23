@@ -14,7 +14,7 @@ export default function JobFormSection({ number, title, subtitle, icon, children
   return (
     <View className="mb-6">
       <View className="flex-row items-center gap-3 px-1 mb-3">
-        <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.12)' : '#FEF2F2' }}>
+        <View className="w-10 h-10 items-center justify-center">
           <MaterialIcons name={icon} size={20} color={isDark ? colors.accent : '#B91C1C'} />
         </View>
         <View className="flex-1">

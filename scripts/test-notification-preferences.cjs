@@ -15,7 +15,7 @@ function fixture(options = {}) {
   const records = new Map();
   const calls = { prompts: 0, tokens: 0, writes: 0, cancelled: 0, scheduled: 0, pushes: 0, appRecords: 0 };
   const state = { permission: { status: 'granted', granted: true }, token: 'ExponentPushToken[fake-device]', executionEnvironment: 'standalone', failWrites: false, failToken: false, ticket: { status: 'ok' }, platform: 'android', ...options };
-  let foregroundHandler;
+  let foregroundHandler, snapshotListener;
   const Notifications = {
     IosAuthorizationStatus: { PROVISIONAL: 3 }, AndroidImportance: { MAX: 5 },
     setNotificationHandler: handler => { foregroundHandler = handler; },
@@ -36,7 +36,7 @@ function fixture(options = {}) {
     getDocs: async () => ({ docs: [] }),
     addDoc: async () => { calls.appRecords++; },
     query: (...args) => args, where: (...args) => args,
-    onSnapshot: () => () => {}, serverTimestamp: () => 'test-time',
+    onSnapshot: (_query, callback) => { snapshotListener = callback; return () => {}; }, serverTimestamp: () => 'test-time',
   };
   const mocks = {
     'expo-notifications': Notifications,
@@ -52,10 +52,24 @@ function fixture(options = {}) {
     fetch: async () => { calls.pushes++; return { ok: state.httpOk !== false, json: async () => ({ data: state.ticket }) }; },
     Date, Map, Promise,
   });
-  return { api: module.exports, storage, records, calls, state, handler: () => foregroundHandler };
+  return { api: module.exports, storage, records, calls, state, handler: () => foregroundHandler, emitSnapshot: value => snapshotListener(value) };
 }
 
 const notification = { request: { content: { data: { chatId: 'chat-a' } } } };
+
+test('account dismissal records never trigger foreground notifications', () => {
+  const f = fixture();
+  const received = [];
+  const stop = f.api.subscribeToAppNotifications('7', value => received.push(value));
+  f.emitSnapshot({ docChanges: () => [] }); // Initial collection load is suppressed.
+  f.emitSnapshot({ docChanges: () => [
+    { type: 'added', doc: { data: () => ({ type: 'notification_dismissal', recipient_id: '7', source_id: 'app_27', through: 100 }) } },
+    { type: 'added', doc: { data: () => ({ type: 'application_status', title: 'Interview Invitation' }) } },
+  ] });
+  assert.equal(received.length, 1);
+  assert.equal(received[0].title, 'Interview Invitation');
+  stop();
+});
 
 test('OFF suppresses foreground banners, sounds, badges, local alerts, and registration', async () => {
   const f = fixture(); f.storage.set('notifications_enabled', 'false');
