@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useToast } from '@/hooks/useToast';
+import { useRegistrationKeyboard } from '@/hooks/useRegistrationKeyboard';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import LocationPickerModal from '@/components/ui/modals/LocationPickerModal';
@@ -25,9 +26,12 @@ import StudentProfileForm from '@/components/student/StudentProfileForm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditProfileScreen() {
-  const { colors, isDark } = useDarkMode();
+  const { colors } = useDarkMode();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
+  const { formScrollRef, formScrollProps, inputNavigation, resetKeyboard } = useRegistrationKeyboard<
+    'companyName' | 'firstName' | 'middleName' | 'lastName' | 'phone' | 'school' | 'detailedAddress'
+  >();
 
   const [role, setRole] = useState<'student' | 'employer' | 'household'>('student');
   const [loading, setLoading] = useState(true);
@@ -311,22 +315,29 @@ export default function EditProfileScreen() {
 
       <View className="border-b" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
         <View className="w-full max-w-2xl self-center px-5 pt-1 pb-3 flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => router.back()} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Go back to profile" accessibilityState={{ disabled: saving }} className="w-11 h-11 items-center justify-center" style={{ opacity: saving ? 0.5 : 1 }}><MaterialIcons name="arrow-back" size={23} color={isDark ? colors.text : '#000000'} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Go back to profile" accessibilityState={{ disabled: saving }} className="w-11 h-11 items-center justify-center" style={{ opacity: saving ? 0.5 : 1 }}><MaterialIcons name="arrow-back" size={23} color={colors.text} /></TouchableOpacity>
           <View className="flex-1"><Text className="text-lg font-bold leading-7" style={{ color: colors.text }}>Edit profile</Text><Text className="text-xs leading-5" style={{ color: colors.textSecondary }}>{role === 'student' ? 'Student account' : role === 'employer' ? 'Business account' : 'Household account'}</Text></View>
         </View>
       </View>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          {...formScrollProps}
+          ref={formScrollRef}
+          style={{ flex: 1 }}
+          automaticallyAdjustContentInsets={false}
+          automaticallyAdjustKeyboardInsets={false}
           showsVerticalScrollIndicator={false}
           contentContainerClassName="w-full max-w-2xl self-center px-5 pt-5 pb-6"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {role === 'student' ? (
             <StudentProfileForm
+              inputNavigation={inputNavigation}
               values={{ firstName, middleName, lastName, school, course, yearLevel, phone, email, location, detailedAddress }}
               saving={saving}
               onChange={(field, value) => ({
@@ -337,12 +348,13 @@ export default function EditProfileScreen() {
                 phone: setPhone,
                 detailedAddress: setDetailedAddress,
               })[field](value)}
-              onChooseCourse={() => setCourseModalVisible(true)}
-              onChooseYearLevel={() => setYearModalVisible(true)}
-              onChooseLocation={() => setLocationPickerVisible(true)}
+              onChooseCourse={() => { resetKeyboard(); setCourseModalVisible(true); }}
+              onChooseYearLevel={() => { resetKeyboard(); setYearModalVisible(true); }}
+              onChooseLocation={() => { resetKeyboard(); setLocationPickerVisible(true); }}
             />
           ) : (
             <HirerProfileForm
+              inputNavigation={inputNavigation}
               role={role}
               values={{ companyName, firstName, middleName, lastName, phone, email, businessType, location, detailedAddress }}
               saving={saving}
@@ -354,8 +366,8 @@ export default function EditProfileScreen() {
                 phone: setPhone,
                 detailedAddress: setDetailedAddress,
               })[field](value)}
-              onChooseBusinessType={() => setBusinessTypeModalVisible(true)}
-              onChooseLocation={() => setLocationPickerVisible(true)}
+              onChooseBusinessType={() => { resetKeyboard(); setBusinessTypeModalVisible(true); }}
+              onChooseLocation={() => { resetKeyboard(); setLocationPickerVisible(true); }}
             />
           )}
         </ScrollView>

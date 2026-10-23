@@ -567,7 +567,7 @@ export default function EmployerProfileScreen() {
     return (
       <View key={field} className={field === 'valid_id_path' ? 'rounded-2xl border p-4' : 'rounded-2xl border p-4 mt-3'} style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
         <View className="flex-row items-start gap-3">
-          <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
+          <View className="w-10 h-10 items-center justify-center"><MaterialIcons name={icon} size={20} color={accentText} /></View>
           <View className="flex-1">
             <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
             <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
@@ -580,7 +580,7 @@ export default function EmployerProfileScreen() {
           </View>
           <View className="flex-row items-center gap-2">
             {rawPath && <TouchableOpacity onPress={() => handleViewDocument(field, title, rawPath)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View ${title}`} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
-            {(!isVerified || !rawPath) && <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDoc ? 0.5 : 1 }}>
+            {(!isVerified || !rawPath) && <TouchableOpacity onPress={() => handleUploadDocument(field, title)} disabled={uploadingDoc} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${rawPath ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDoc }} className="min-h-12 flex-row items-center gap-1.5 px-3" style={{ opacity: uploadingDoc ? 0.5 : 1 }}>
               <MaterialIcons name={rawPath ? 'refresh' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{rawPath ? 'Change' : 'Upload'}</Text>
             </TouchableOpacity>}
           </View>
@@ -617,7 +617,7 @@ export default function EmployerProfileScreen() {
           <View className="flex-row items-center gap-4">
             <View className="relative">
               <Avatar uri={avatarUri || ''} name={profileData.avatarInitials} size={72} />
-              <TouchableOpacity onPress={handlePickImage} disabled={uploadingProfilePicture || uploadingDoc} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDoc }} className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
+              <TouchableOpacity onPress={handlePickImage} disabled={uploadingProfilePicture || uploadingDoc} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDoc }} className="absolute bottom-0 right-0 w-9 h-9 items-center justify-center"><MaterialIcons name="camera-alt" size={20} color={accentText} /></TouchableOpacity>
             </View>
             <View className="flex-1">
               {isHousehold && <Text className="text-[10px] font-semibold tracking-wide mb-1" style={{ color: colors.textSecondary }}>HOUSEHOLD ACCOUNT</Text>}
@@ -661,7 +661,7 @@ export default function EmployerProfileScreen() {
         <View className="mx-6 mb-5">
           <View className="flex-row items-center justify-between gap-3 mb-2 px-1">
             <View className="flex-1"><Text accessibilityRole="header" className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{isHousehold ? 'Household information' : 'Business information'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Your location and contact details.</Text></View>
-            <TouchableOpacity onPress={() => router.push('/edit-profile')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Edit profile information" className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="edit" size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Edit</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/edit-profile')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Edit profile information" className="min-h-12 flex-row items-center gap-1.5 px-3"><MaterialIcons name="edit" size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>Edit</Text></TouchableOpacity>
           </View>
           <View className="rounded-3xl border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
             {!isHousehold && <>
@@ -677,7 +677,7 @@ export default function EmployerProfileScreen() {
         {!isHousehold && <View className="mx-6 mb-5">
           <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Subscription plans</Text>
           <TouchableOpacity onPress={() => router.push('/employer/subscription')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Manage subscription plans" className="rounded-3xl border p-5 flex-row items-center gap-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-            <View className="w-11 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="workspace-premium" size={23} color={accentText} /></View>
+            <View className="w-11 h-11 items-center justify-center"><MaterialIcons name="workspace-premium" size={23} color={accentText} /></View>
             <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: colors.text }}>View plans</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>View available plans and options.</Text></View>
             <MaterialIcons name="chevron-right" size={22} color={accentText} />
           </TouchableOpacity>
@@ -687,7 +687,7 @@ export default function EmployerProfileScreen() {
           <Text accessibilityRole="header" className="text-sm font-semibold mb-2 px-1" style={{ color: colors.text }}>Account & support</Text>
           <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
             {menuItems.map((item, index) => <TouchableOpacity key={item.label} onPress={() => handleMenuPress(item.route)} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
-              <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
+              <View className="w-10 h-10 items-center justify-center"><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
               <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
               <MaterialIcons name="chevron-right" size={20} color={accentText} />
             </TouchableOpacity>)}
@@ -766,10 +766,10 @@ export default function EmployerProfileScreen() {
 }
 
 function InfoRow({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
-  const { colors, isDark } = useDarkMode();
+  const { colors } = useDarkMode();
   return (
     <View className="flex-row items-start gap-3 py-3">
-      <View className="w-9 h-9 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220, 38, 38, 0.12)' : '#FFF1F2' }}><MaterialIcons name={icon} size={18} color={isDark ? colors.accent : colors.accent} /></View>
+      <View className="w-9 h-9 items-center justify-center"><MaterialIcons name={icon} size={18} color={colors.accent} /></View>
       <View className="flex-1">
         <Text className="text-[11px]" style={{ color: colors.textSecondary }}>{label}</Text>
         <Text className="text-sm font-medium leading-5 mt-1" style={{ color: colors.text }}>{value || 'Not provided'}</Text>

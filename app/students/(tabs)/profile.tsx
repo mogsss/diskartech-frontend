@@ -114,7 +114,7 @@ export default function ProfileScreen() {
         <Text accessibilityRole="header" className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
         <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{description}</Text>
       </View>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${action} ${title}`} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface }}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`${action} ${title}`} className="min-h-12 flex-row items-center gap-1.5 px-3">
         <MaterialIcons name={icon} size={16} color={accentText} />
         <Text className="text-xs font-semibold" style={{ color: accentText }}>{action}</Text>
       </TouchableOpacity>
@@ -123,7 +123,7 @@ export default function ProfileScreen() {
 
   const renderInfoRow = (icon: keyof typeof MaterialIcons.glyphMap, label: string, value: string) => (
     <View className="flex-row items-start gap-3 py-3">
-      <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={19} color={accentText} /></View>
+      <View className="w-10 h-10 items-center justify-center"><MaterialIcons name={icon} size={19} color={accentText} /></View>
       <View className="flex-1">
         <Text className="text-xs leading-5" style={{ color: colors.textSecondary }}>{label}</Text>
         <Text className="text-sm font-medium leading-6 mt-0.5" style={{ color: colors.text }}>{String(value || 'Not specified')}</Text>
@@ -142,7 +142,7 @@ export default function ProfileScreen() {
     return (
       <View className={type === 'student_resume' ? 'rounded-2xl border p-4' : 'rounded-2xl border p-4 mt-3'} style={{ borderColor: colors.border }}>
         <View className="flex-row items-start gap-3">
-          <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={icon} size={20} color={accentText} /></View>
+          <View className="w-10 h-10 items-center justify-center"><MaterialIcons name={icon} size={20} color={accentText} /></View>
           <View className="flex-1">
             <Text className="text-sm font-semibold leading-5" style={{ color: colors.text }}>{title}</Text>
             <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }} numberOfLines={1}>{filename || 'No file uploaded'}</Text>
@@ -155,7 +155,7 @@ export default function ProfileScreen() {
           </View>
           <View className="flex-row items-center gap-2">
             {uploaded && <TouchableOpacity onPress={() => handleViewDocument(type, title, rawPath)} accessibilityRole="button" accessibilityLabel={`View ${title}`} activeOpacity={0.75} className="w-12 h-12 rounded-xl border items-center justify-center" style={{ borderColor: colors.border }}><MaterialIcons name="visibility" size={19} color={accentText} /></TouchableOpacity>}
-            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR/COE' : title)} disabled={uploadingDocument !== null} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDocument !== null }} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 rounded-xl px-3" style={{ backgroundColor: accentSurface, opacity: uploadingDocument !== null ? 0.5 : 1 }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
+            {!verified && <TouchableOpacity onPress={() => handleUploadDocument(type, type === 'coe' ? 'COR/COE' : title)} disabled={uploadingDocument !== null} accessibilityRole="button" accessibilityLabel={`${uploaded ? 'Replace' : 'Upload'} ${title}`} accessibilityState={{ disabled: uploadingDocument !== null }} activeOpacity={0.75} className="min-h-12 flex-row items-center gap-1.5 px-3" style={{ opacity: uploadingDocument !== null ? 0.5 : 1 }}><MaterialIcons name={uploaded ? 'sync' : 'file-upload'} size={16} color={accentText} /><Text className="text-xs font-semibold" style={{ color: accentText }}>{uploaded ? 'Replace' : 'Upload'}</Text></TouchableOpacity>}
           </View>
         </View>
       </View>
@@ -174,7 +174,7 @@ export default function ProfileScreen() {
           <View className="flex-row items-center gap-4">
             <View className="relative">
               <Avatar uri={profilePicUri} name={String(studentName || 'Student')} size={72} />
-              <TouchableOpacity onPress={handleUploadProfilePic} disabled={uploadingProfilePicture || uploadingDocument !== null} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDocument !== null }} className="absolute bottom-0 right-0 w-9 h-9 rounded-full border-2 items-center justify-center" style={{ backgroundColor: colors.primary, borderColor: colors.surface }}><MaterialIcons name="camera-alt" size={17} color="#FFFFFF" /></TouchableOpacity>
+              <TouchableOpacity onPress={handleUploadProfilePic} disabled={uploadingProfilePicture || uploadingDocument !== null} activeOpacity={0.75} hitSlop={6} accessibilityRole="button" accessibilityLabel="Change profile photo" accessibilityState={{ disabled: uploadingProfilePicture || uploadingDocument !== null }} className="absolute bottom-0 right-0 w-9 h-9 items-center justify-center"><MaterialIcons name="camera-alt" size={20} color={accentText} /></TouchableOpacity>
             </View>
             <View className="flex-1">
               <View className="flex-row items-center gap-1.5">
@@ -230,7 +230,7 @@ export default function ProfileScreen() {
             {validSkills.length > 0 ? <View className="flex-row flex-wrap gap-2">{skills.map((skill, index) => {
               if (typeof skill !== 'string' || !skill.trim()) return null;
               return <View key={`${skill}-${index}`} className="max-w-full flex-row items-center gap-1 rounded-xl pl-3 pr-1 py-1" style={{ backgroundColor: subtle }}><Text className="text-xs font-medium shrink" style={{ color: colors.text }}>{skill}</Text><TouchableOpacity onPress={() => handleSaveSkills(skills.filter((_, i) => i !== index))} activeOpacity={0.75} hitSlop={4} accessibilityRole="button" accessibilityLabel={`Remove ${skill} skill`} className="w-9 h-9 items-center justify-center rounded-lg"><MaterialIcons name="close" size={16} color={accentText} /></TouchableOpacity></View>;
-            })}</View> : <View className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: subtle }}><MaterialIcons name="auto-awesome" size={20} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>No skills yet. Add your strengths to help employers find you.</Text></View>}
+            })}</View> : <View className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: subtle }}><Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }}>No skills yet. Add your strengths to help employers find you.</Text></View>}
           </View>
         </View>
 
@@ -247,7 +247,7 @@ export default function ProfileScreen() {
           <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
             {menuItems.map((item, index) => (
               <TouchableOpacity key={item.label} onPress={() => { if (item.danger) setLogoutModalVisible(true); else router.push(item.route as any); }} activeOpacity={0.75} accessibilityRole="button" className={index === menuItems.length - 1 ? 'flex-row items-center gap-3 px-5 py-4' : 'flex-row items-center gap-3 px-5 py-4 border-b'} style={{ borderColor: colors.border }}>
-                <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
+                <View className="w-10 h-10 items-center justify-center"><MaterialIcons name={item.icon as keyof typeof MaterialIcons.glyphMap} size={20} color={accentText} /></View>
                 <Text className="flex-1 text-sm font-medium" style={{ color: item.danger ? accentText : colors.text }}>{item.label}</Text>
                 <MaterialIcons name="chevron-right" size={20} color={accentText} />
               </TouchableOpacity>

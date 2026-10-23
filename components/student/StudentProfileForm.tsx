@@ -3,10 +3,12 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { FormSection, ProfileField } from '@/components/ui/profile/ProfileFormFields';
+import type { ProfileInputNavigation } from '@/components/ui/profile/ProfileFormFields';
 
 type EditableField = 'firstName' | 'middleName' | 'lastName' | 'school' | 'phone' | 'detailedAddress';
 
 interface StudentProfileFormProps {
+  inputNavigation: ProfileInputNavigation;
   values: Record<EditableField, string> & { email: string; course: string; yearLevel: string; location: string };
   saving: boolean;
   onChange: (field: EditableField, value: string) => void;
@@ -15,17 +17,16 @@ interface StudentProfileFormProps {
   onChooseLocation: () => void;
 }
 
-export default function StudentProfileForm({ values, saving, onChange, onChooseCourse, onChooseYearLevel, onChooseLocation }: StudentProfileFormProps) {
+export default function StudentProfileForm({ inputNavigation, values, saving, onChange, onChooseCourse, onChooseYearLevel, onChooseLocation }: StudentProfileFormProps) {
   const { colors, isDark } = useDarkMode();
   const accentText = isDark ? colors.accent : colors.primary;
-  const accentSurface = isDark ? 'rgba(220,38,38,0.12)' : '#FFF1F2';
   const fieldBackground = isDark ? colors.background : '#F8FAFC';
   const fullName = [values.firstName, values.middleName, values.lastName].map(part => part.trim()).filter(Boolean).join(' ');
 
   return (
     <View className="gap-5">
       <View className="flex-row items-center gap-4 pt-2 pb-1">
-        <View className="h-14 w-14 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}>
+        <View className="h-14 w-14 items-center justify-center">
           <MaterialIcons name="school" size={27} color={accentText} />
         </View>
         <View className="flex-1 min-w-0">
@@ -38,13 +39,13 @@ export default function StudentProfileForm({ values, saving, onChange, onChooseC
       </Text>
 
       <FormSection title="Personal information" description="The name employers and household hirers see." icon="person-outline">
-        <ProfileField label="First name" required placeholder="Enter your first name" value={values.firstName} onChangeText={value => onChange('firstName', value)} editable={!saving} autoCapitalize="words" autoComplete="given-name" maxLength={255} />
-        <ProfileField label="Middle name (optional)" placeholder="Enter your middle name" value={values.middleName} onChangeText={value => onChange('middleName', value)} editable={!saving} autoCapitalize="words" autoComplete="additional-name" maxLength={255} />
-        <ProfileField label="Last name" required placeholder="Enter your last name" value={values.lastName} onChangeText={value => onChange('lastName', value)} editable={!saving} autoCapitalize="words" autoComplete="family-name" maxLength={255} />
+        <ProfileField {...inputNavigation('firstName', 'middleName')} label="First name" required placeholder="Enter your first name" value={values.firstName} onChangeText={value => onChange('firstName', value)} editable={!saving} autoCapitalize="words" autoComplete="given-name" maxLength={255} />
+        <ProfileField {...inputNavigation('middleName', 'lastName')} label="Middle name (optional)" placeholder="Enter your middle name" value={values.middleName} onChangeText={value => onChange('middleName', value)} editable={!saving} autoCapitalize="words" autoComplete="additional-name" maxLength={255} />
+        <ProfileField {...inputNavigation('lastName', 'school')} label="Last name" required placeholder="Enter your last name" value={values.lastName} onChangeText={value => onChange('lastName', value)} editable={!saving} autoCapitalize="words" autoComplete="family-name" maxLength={255} />
       </FormSection>
 
       <FormSection title="Academic information" description="Your current school, course and year level." icon="school">
-        <ProfileField label="College / university" placeholder="Enter your school name" value={values.school} onChangeText={value => onChange('school', value)} editable={!saving} autoCapitalize="words" maxLength={255} />
+        <ProfileField {...inputNavigation('school', onChooseCourse)} label="College / university" placeholder="Enter your school name" value={values.school} onChangeText={value => onChange('school', value)} editable={!saving} autoCapitalize="words" maxLength={255} />
         {[
           { label: 'Course / program', value: values.course, placeholder: 'Select course', onPress: onChooseCourse },
           { label: 'Year level', value: values.yearLevel, placeholder: 'Select year level', onPress: onChooseYearLevel },
@@ -60,7 +61,7 @@ export default function StudentProfileForm({ values, saving, onChange, onChooseC
       </FormSection>
 
       <FormSection title="Contact details" description="Your contact number and registered email." icon="contact-phone">
-        <ProfileField label="Contact number" placeholder="09XX XXX XXXX" value={values.phone} onChangeText={value => onChange('phone', value)} editable={!saving} keyboardType="phone-pad" autoComplete="tel" />
+        <ProfileField {...inputNavigation('phone', 'detailedAddress')} label="Contact number" placeholder="09XX XXX XXXX" value={values.phone} onChangeText={value => onChange('phone', value)} editable={!saving} keyboardType="phone-pad" autoComplete="tel" />
         <View className="gap-2">
           <View className="flex-row items-center justify-between gap-2">
             <Text className="text-xs font-semibold leading-5" style={{ color: colors.text }}>Email address</Text>
@@ -81,7 +82,7 @@ export default function StudentProfileForm({ values, saving, onChange, onChooseC
           <Text className="text-xs font-semibold leading-5" style={{ color: colors.text }}>Pinned location</Text>
           <TouchableOpacity onPress={onChooseLocation} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={values.location ? 'Change pinned location' : 'Choose location on map'} accessibilityState={{ disabled: saving }} className="rounded-2xl border p-4" style={{ backgroundColor: fieldBackground, borderColor: colors.border, opacity: saving ? 0.65 : 1 }}>
             <View className="flex-row items-start gap-3">
-              <View className="h-9 w-9 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="map" size={20} color={accentText} /></View>
+              <View className="h-9 w-9 items-center justify-center"><MaterialIcons name="map" size={20} color={accentText} /></View>
               <View className="flex-1 min-w-0">
                 <Text className="text-sm font-medium leading-6" style={{ color: colors.text }}>{values.location || 'Choose a location'}</Text>
                 {!values.location && <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Pinamalayan, Oriental Mindoro</Text>}
@@ -93,7 +94,7 @@ export default function StudentProfileForm({ values, saving, onChange, onChooseC
             </View>
           </TouchableOpacity>
         </View>
-        <ProfileField label="Street address / landmark" placeholder="House number, street or nearby landmark" value={values.detailedAddress} onChangeText={value => onChange('detailedAddress', value)} editable={!saving} autoCapitalize="sentences" multiline numberOfLines={3} maxLength={500} />
+        <ProfileField {...inputNavigation('detailedAddress')} label="Street address / landmark" placeholder="House number, street or nearby landmark" value={values.detailedAddress} onChangeText={value => onChange('detailedAddress', value)} editable={!saving} autoCapitalize="sentences" multiline numberOfLines={3} maxLength={500} />
       </FormSection>
     </View>
   );

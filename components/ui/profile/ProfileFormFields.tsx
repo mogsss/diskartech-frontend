@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { Text, TextInput, TextInputProps, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import type { useRegistrationKeyboard } from '@/hooks/useRegistrationKeyboard';
 
-export function ProfileField({ label, required, ...input }: TextInputProps & { label: string; required?: boolean }) {
+export type ProfileInput = 'companyName' | 'firstName' | 'middleName' | 'lastName' | 'phone' | 'school' | 'detailedAddress';
+export type ProfileInputNavigation = ReturnType<typeof useRegistrationKeyboard<ProfileInput>>['inputNavigation'];
+
+export function ProfileField({ label, required, inputRef, onFocus, onBlur, ...input }: TextInputProps & { label: string; required?: boolean; inputRef?: (input: TextInput | null) => void }) {
   const { colors, isDark } = useDarkMode();
   const accentText = isDark ? colors.accent : colors.primary;
   const [focused, setFocused] = useState(false);
@@ -13,12 +17,13 @@ export function ProfileField({ label, required, ...input }: TextInputProps & { l
         {label}{required && <Text style={{ color: accentText }}> *</Text>}
       </Text>
       <TextInput
+        ref={inputRef}
         {...input}
         accessibilityLabel={`${label}${required ? ', required' : ''}`}
         autoCorrect={false}
         placeholderTextColor={colors.textSecondary}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={event => { setFocused(true); onFocus?.(event); }}
+        onBlur={event => { setFocused(false); onBlur?.(event); }}
         className={`rounded-xl border px-4 text-sm ${input.multiline ? 'min-h-24 py-3 leading-6' : 'h-14 py-3'}`}
         style={{
           color: colors.text,
@@ -43,7 +48,7 @@ export function FormSection({ title, description, icon, children }: {
   return (
     <View className="rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
       <View className="flex-row items-start gap-3 px-5 py-4 border-b" style={{ borderColor: colors.border }}>
-        <View className="h-9 w-9 rounded-xl items-center justify-center" style={{ backgroundColor: isDark ? 'rgba(220,38,38,0.12)' : '#FFF1F2' }}>
+        <View className="h-9 w-9 items-center justify-center">
           <MaterialIcons name={icon} size={19} color={accentText} />
         </View>
         <View className="flex-1 min-w-0">

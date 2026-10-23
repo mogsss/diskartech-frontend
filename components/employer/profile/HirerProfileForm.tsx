@@ -3,10 +3,12 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { FormSection, ProfileField } from '@/components/ui/profile/ProfileFormFields';
+import type { ProfileInputNavigation } from '@/components/ui/profile/ProfileFormFields';
 
 type EditableField = 'companyName' | 'firstName' | 'middleName' | 'lastName' | 'phone' | 'detailedAddress';
 
 interface HirerProfileFormProps {
+  inputNavigation: ProfileInputNavigation;
   role: 'employer' | 'household';
   values: Record<EditableField, string> & { email: string; businessType: string; location: string };
   saving: boolean;
@@ -15,18 +17,17 @@ interface HirerProfileFormProps {
   onChooseLocation: () => void;
 }
 
-export default function HirerProfileForm({ role, values, saving, onChange, onChooseBusinessType, onChooseLocation }: HirerProfileFormProps) {
+export default function HirerProfileForm({ inputNavigation, role, values, saving, onChange, onChooseBusinessType, onChooseLocation }: HirerProfileFormProps) {
   const { colors, isDark } = useDarkMode();
   const accentText = isDark ? colors.accent : colors.primary;
   const isBusiness = role === 'employer';
-  const accentSurface = isDark ? 'rgba(220,38,38,0.12)' : '#FFF1F2';
   const representativeName = [values.firstName, values.middleName, values.lastName].map(part => part.trim()).filter(Boolean).join(' ');
   const displayName = (isBusiness ? values.companyName.trim() : representativeName) || (isBusiness ? 'Your business' : 'Your household');
 
   return (
     <View className="gap-5">
       <View className="flex-row items-center gap-4 pt-2 pb-1">
-        <View className="h-14 w-14 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}>
+        <View className="h-14 w-14 items-center justify-center">
           <MaterialIcons name={isBusiness ? 'storefront' : 'home-work'} size={27} color={accentText} />
         </View>
         <View className="flex-1 min-w-0">
@@ -40,7 +41,7 @@ export default function HirerProfileForm({ role, values, saving, onChange, onCho
 
       {isBusiness && (
         <FormSection title="Business details" description="The name and type of your business." icon="business">
-          <ProfileField label="Business / company name" required placeholder="Enter your business name" value={values.companyName} onChangeText={value => onChange('companyName', value)} editable={!saving} autoCapitalize="words" maxLength={255} />
+          <ProfileField {...inputNavigation('companyName', 'firstName')} label="Business / company name" required placeholder="Enter your business name" value={values.companyName} onChangeText={value => onChange('companyName', value)} editable={!saving} autoCapitalize="words" maxLength={255} />
           <View className="gap-2">
             <Text className="text-xs font-semibold leading-5" style={{ color: colors.text }}>Business type</Text>
             <TouchableOpacity onPress={onChooseBusinessType} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Select business type" accessibilityState={{ disabled: saving }} className="min-h-14 flex-row items-center gap-3 rounded-xl border px-4 py-3" style={{ backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, opacity: saving ? 0.65 : 1 }}>
@@ -52,13 +53,13 @@ export default function HirerProfileForm({ role, values, saving, onChange, onCho
       )}
 
       <FormSection title={isBusiness ? 'Contact person' : 'Household representative'} description="The person students will coordinate with." icon="person-outline">
-        <ProfileField label="First name" required placeholder="Enter your first name" value={values.firstName} onChangeText={value => onChange('firstName', value)} editable={!saving} autoCapitalize="words" autoComplete="given-name" maxLength={255} />
-        <ProfileField label="Middle name (optional)" placeholder="Enter your middle name" value={values.middleName} onChangeText={value => onChange('middleName', value)} editable={!saving} autoCapitalize="words" autoComplete="additional-name" maxLength={255} />
-        <ProfileField label="Last name" required placeholder="Enter your last name" value={values.lastName} onChangeText={value => onChange('lastName', value)} editable={!saving} autoCapitalize="words" autoComplete="family-name" maxLength={255} />
+        <ProfileField {...inputNavigation('firstName', 'middleName')} label="First name" required placeholder="Enter your first name" value={values.firstName} onChangeText={value => onChange('firstName', value)} editable={!saving} autoCapitalize="words" autoComplete="given-name" maxLength={255} />
+        <ProfileField {...inputNavigation('middleName', 'lastName')} label="Middle name (optional)" placeholder="Enter your middle name" value={values.middleName} onChangeText={value => onChange('middleName', value)} editable={!saving} autoCapitalize="words" autoComplete="additional-name" maxLength={255} />
+        <ProfileField {...inputNavigation('lastName', 'phone')} label="Last name" required placeholder="Enter your last name" value={values.lastName} onChangeText={value => onChange('lastName', value)} editable={!saving} autoCapitalize="words" autoComplete="family-name" maxLength={255} />
       </FormSection>
 
       <FormSection title="Contact details" description="Your contact number and registered email." icon="contact-phone">
-        <ProfileField label="Contact number" placeholder="09XX XXX XXXX" value={values.phone} onChangeText={value => onChange('phone', value)} editable={!saving} keyboardType="phone-pad" autoComplete="tel" />
+        <ProfileField {...inputNavigation('phone', 'detailedAddress')} label="Contact number" placeholder="09XX XXX XXXX" value={values.phone} onChangeText={value => onChange('phone', value)} editable={!saving} keyboardType="phone-pad" autoComplete="tel" />
         <View className="gap-2">
           <View className="flex-row items-center justify-between gap-2">
             <Text className="text-xs font-semibold leading-5" style={{ color: colors.text }}>Email address</Text>
@@ -79,7 +80,7 @@ export default function HirerProfileForm({ role, values, saving, onChange, onCho
           <Text className="text-xs font-semibold leading-5" style={{ color: colors.text }}>Pinned location</Text>
           <TouchableOpacity onPress={onChooseLocation} disabled={saving} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={values.location ? 'Change pinned location' : 'Choose location on map'} accessibilityState={{ disabled: saving }} className="rounded-2xl border p-4" style={{ backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, opacity: saving ? 0.65 : 1 }}>
             <View className="flex-row items-start gap-3">
-              <View className="h-9 w-9 rounded-xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name="map" size={20} color={accentText} /></View>
+              <View className="h-9 w-9 items-center justify-center"><MaterialIcons name="map" size={20} color={accentText} /></View>
               <View className="flex-1 min-w-0">
                 <Text className="text-sm font-medium leading-6" style={{ color: colors.text }}>{values.location || 'Choose a location'}</Text>
                 {!values.location && <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Pinamalayan, Oriental Mindoro</Text>}
@@ -91,7 +92,7 @@ export default function HirerProfileForm({ role, values, saving, onChange, onCho
             </View>
           </TouchableOpacity>
         </View>
-        <ProfileField label="Street address / landmark" placeholder="House number, street or nearby landmark" value={values.detailedAddress} onChangeText={value => onChange('detailedAddress', value)} editable={!saving} autoCapitalize="sentences" multiline numberOfLines={3} maxLength={500} />
+        <ProfileField {...inputNavigation('detailedAddress')} label="Street address / landmark" placeholder="House number, street or nearby landmark" value={values.detailedAddress} onChangeText={value => onChange('detailedAddress', value)} editable={!saving} autoCapitalize="sentences" multiline numberOfLines={3} maxLength={500} />
       </FormSection>
     </View>
   );
