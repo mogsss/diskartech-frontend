@@ -16,6 +16,13 @@ import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const getAgeError = (value: string) => {
+  if (!value.trim()) return 'Age is required.';
+  if (!/^\d+$/.test(value)) return 'Please enter a valid age in whole years.';
+  if (Number(value) < 18) return 'You must be at least 18 years old to register.';
+  return '';
+};
+
 export default function RegisterStudentScreen() {
   const [step, setStep] = useState(1);
 
@@ -28,6 +35,7 @@ export default function RegisterStudentScreen() {
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
+  const [ageError, setAgeError] = useState('');
   const [gender, setGender] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedAddress, setSelectedAddress] = useState('');
@@ -79,8 +87,15 @@ export default function RegisterStudentScreen() {
   const [courseModalVisible, setCourseModalVisible] = useState(false);
   const [yearModalVisible, setYearModalVisible] = useState(false);
 
+  const validateAge = () => {
+    const error = getAgeError(age);
+    setAgeError(error);
+    return !error;
+  };
+
   const handleNext = () => {
     if (step === 1) {
+      if (!validateAge()) return;
       if (!firstName || !lastName || !age || !gender || !phone || !selectedAddress) {
         Alert.alert('Error', 'Please fill in all personal information and pinpoint your location.');
         return;
@@ -96,6 +111,10 @@ export default function RegisterStudentScreen() {
   };
 
   const handleRegister = async () => {
+    if (!validateAge()) {
+      setStep(1);
+      return;
+    }
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
@@ -171,6 +190,10 @@ export default function RegisterStudentScreen() {
     } catch (error: any) {
       if (error.response && error.response.status === 422) {
         const errors: Record<string, string[]> = error.response.data?.errors ?? {};
+        if (errors.age) {
+          setAgeError(errors.age[0]);
+          setStep(1);
+        }
         if (errors.email) setEmailError(errors.email[0]);
         if (errors.password) setPasswordError(errors.password[0]);
         setRegistrationError(
@@ -227,7 +250,19 @@ export default function RegisterStudentScreen() {
             </>
           )}
 
-          <InputField label="Age" placeholder="Enter your age" keyboardType="number-pad" maxLength={2} icon="cake" value={age} onChangeText={setAge} />
+          <InputField
+            label="Age"
+            placeholder="Enter your age (18 or older)"
+            keyboardType="number-pad"
+            maxLength={2}
+            icon="cake"
+            value={age}
+            error={ageError}
+            onChangeText={(value) => {
+              setAge(value);
+              if (ageError) setAgeError(getAgeError(value));
+            }}
+          />
 
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Gender</Text>
