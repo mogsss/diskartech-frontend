@@ -508,10 +508,7 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
             <Text className="flex-1 text-xs leading-5" style={{ color: colors.textSecondary }} accessibilityRole="alert">{locationMessage}</Text>
           </View>}
           <View className="flex-row items-center justify-between mb-2">
-            <View className="flex-row items-center gap-1.5">
-              <MaterialIcons name="place" size={16} color={ACCENT_RED} />
-              <Text className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.textSecondary }}>SELECTED ADDRESS</Text>
-            </View>
+            <Text className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Your Address</Text>
             {loadingAddress && (
               <View className="flex-row items-center gap-1">
                 <ActivityIndicator size="small" color={ACCENT_RED} />
@@ -520,23 +517,11 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
             )}
           </View>
 
-          <Text className="text-sm font-semibold mb-2 leading-5" numberOfLines={2} style={{ color: colors.text }}>
-            {formattedAddress || 'Finding your selected address...'}
-          </Text>
-
-          {/* Coordinates Chip */}
-          <View className="flex-row items-center mb-4">
-            <View 
-              className="px-2.5 py-1 rounded-md border"
-              style={{ 
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9',
-                borderColor: colors.border
-              }}
-            >
-              <Text className="text-[11px] font-mono" style={{ color: colors.textSecondary }}>
-                {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
-              </Text>
-            </View>
+          <View className="flex-row items-start gap-2 mb-2">
+            <MaterialIcons name="place" size={24} color={ACCENT_RED} accessible={false} />
+            <Text className="flex-1 text-sm font-semibold leading-5" numberOfLines={2} style={{ color: colors.text }}>
+              {formattedAddress || 'Finding your selected address...'}
+            </Text>
           </View>
 
           {/* Confirm Button */}

@@ -17,6 +17,7 @@ interface InputFieldProps extends TextInputProps {
   iconColor?: string;
   isPassword?: boolean;
   containerStyle?: ViewStyle;
+  inputRef?: (input: TextInput | null) => void;
 }
 
 export default function InputField({
@@ -26,6 +27,9 @@ export default function InputField({
   iconColor,
   isPassword = false,
   containerStyle,
+  inputRef: onInputRef,
+  onFocus,
+  onBlur,
   ...props
 }: InputFieldProps) {
   const { colors, isDark } = useDarkMode();
@@ -65,12 +69,12 @@ export default function InputField({
         )}
         
         <TextInput
-          ref={inputRef}
+          ref={(input) => { inputRef.current = input; onInputRef?.(input); }}
           className="flex-1 text-base h-full p-0"
           style={[{ color: colors.text }, props.style]}
           placeholderTextColor={colors.textSecondary}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={(event) => { setIsFocused(true); onFocus?.(event); }}
+          onBlur={(event) => { setIsFocused(false); onBlur?.(event); }}
           secureTextEntry={isPassword && !showPassword}
           autoCorrect={false}
           {...props}

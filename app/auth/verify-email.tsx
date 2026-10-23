@@ -8,9 +8,11 @@ import { registerAndSyncPushToken } from '@/utils/notifications';
 import { MaterialIcons } from '@expo/vector-icons';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useToast } from '@/hooks/useToast';
 
 export default function VerifyEmailScreen() {
   const { isDark, colors } = useDarkMode();
+  const { showToast } = useToast();
   const { email, role: paramRole } = useLocalSearchParams<{ email: string; role?: string }>();
   const router = useRouter();
   
@@ -63,31 +65,23 @@ export default function VerifyEmailScreen() {
         throw new Error('The verification email could not be sent. Please try again later.');
       }
       startCooldown(response.data.retry_after || 60);
-      showModal({
+      showToast({
+        type: 'success',
         title,
         message: response.data.message || 'Verification email sent. Please check your inbox and spam folder.',
-        iconName: 'mark-email-read',
-        iconColor: '#16a34a',
-        iconBgColor: 'bg-green-50',
-        primaryButtonText: 'Got it',
-        onPrimaryPress: () => setModalVisible(false),
       });
     } catch (error: any) {
       startCooldown(error.response?.data?.retry_after || error.response?.headers?.['retry-after']);
-      showModal({
+      showToast({
+        type: 'error',
         title: error.response?.status === 429 ? 'Please Wait' : 'Sending Failed',
         message: error.response?.data?.message || error.message || 'Failed to send OTP. Please try again.',
-        iconName: 'error-outline',
-        iconColor: '#ef4444',
-        iconBgColor: 'bg-red-50',
-        primaryButtonText: 'OK',
-        onPrimaryPress: () => setModalVisible(false),
       });
     } finally {
       sendingRef.current = false;
       setSending(false);
     }
-  }, [showModal, startCooldown]);
+  }, [showToast, startCooldown]);
 
   useEffect(() => {
     let active = true;

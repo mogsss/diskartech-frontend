@@ -6,10 +6,10 @@ import { AccessibilityInfo, Animated, Dimensions, PanResponder, Platform, StyleS
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const variants = {
-  success: { icon: 'check-circle', title: 'Success', light: '#047857', dark: '#6EE7B7', lightBg: '#ECFDF5', darkBg: '#14352A' },
-  error: { icon: 'error-outline', title: 'Something went wrong', light: '#DC2626', dark: '#F87171', lightBg: '#FEF2F2', darkBg: '#3F222A' },
-  warning: { icon: 'warning-amber', title: 'Please check', light: '#92400E', dark: '#FCD34D', lightBg: '#FFFBEB', darkBg: '#3B321D' },
-  info: { icon: 'info-outline', title: 'Notice', light: '#1D4ED8', dark: '#93C5FD', lightBg: '#EFF6FF', darkBg: '#1E3351' },
+  success: { icon: 'check-circle', title: 'Success', light: '#047857', dark: '#6EE7B7' },
+  error: { icon: 'error-outline', title: 'Something went wrong', light: '#DC2626', dark: '#F87171' },
+  warning: { icon: 'warning-amber', title: 'Please check', light: '#92400E', dark: '#FCD34D' },
+  info: { icon: 'info-outline', title: 'Notice', light: '#1D4ED8', dark: '#93C5FD' },
 } as const;
 
 export default function Toast({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: number) => void }) {
@@ -110,8 +110,8 @@ export default function Toast({ toast, onDismiss }: { toast: ToastMessage; onDis
         { translateY: Animated.add(dragY, progress.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] })) },
       ],
     }]}>
-      <View style={[styles.icon, { backgroundColor: isDark ? variant.darkBg : variant.lightBg }]}>
-        <MaterialIcons name={variant.icon} size={23} color={accent} accessible={false} />
+      <View style={styles.icon}>
+        <MaterialIcons name={toast.iconName ?? variant.icon} size={23} color={accent} accessible={false} />
       </View>
       <View style={styles.copy} accessible accessibilityRole="alert" accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${toast.message}`}
         accessibilityActions={[{ name: 'dismiss', label: 'Dismiss notification' }]}
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     borderRadius: 18, borderWidth: 1, padding: 12,
     shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 8,
   },
-  icon: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, gap: 2 },
   title: { fontFamily: 'Poppins-SemiBold', fontSize: 13, lineHeight: 20 },
   message: { fontFamily: 'Poppins', fontSize: 12, lineHeight: 18 },

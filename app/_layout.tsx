@@ -32,6 +32,7 @@ import {
 import * as Notifications from 'expo-notifications';
 import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as SystemUI from 'expo-system-ui';
 import React, { useEffect } from 'react';
 import { Platform, Text, TextInput } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -176,16 +177,20 @@ function AppNotificationListeners() {
 }
 
 function RootLayoutNav() {
-  const { isDark } = useDarkMode();
+  const { isDark, colors } = useDarkMode();
+
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [colors.background]);
 
   return (
     <SafeAreaProvider>
       <StartupConsentGate>
       <AppNotificationListeners />
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <OfflineBanner>
       <ToastProvider>
-      <Stack screenOptions={stackScreenOptions}>
+      <OfflineBanner>
+      <Stack screenOptions={{ ...stackScreenOptions, contentStyle: { backgroundColor: colors.background } }}>
         {/* Splash & onboarding */}
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
@@ -227,8 +232,8 @@ function RootLayoutNav() {
         <Stack.Screen name="help-center" />
         <Stack.Screen name="about-diskartech" />
       </Stack>
-      </ToastProvider>
       </OfflineBanner>
+      </ToastProvider>
       </StartupConsentGate>
     </SafeAreaProvider>
   );

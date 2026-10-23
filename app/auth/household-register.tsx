@@ -6,8 +6,9 @@ import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
 import { GoogleAuthProfile } from '@/utils/googleAuth';
-import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { useToast } from '@/hooks/useToast';
+import { useRegistrationKeyboard } from '@/hooks/useRegistrationKeyboard';
 import { isValidMobileNumber, MOBILE_NUMBER_ERROR } from '@/utils/phoneNumber';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -16,9 +17,15 @@ import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+type HouseholdField = 'firstName' | 'lastName' | 'age' | 'gender' | 'phone' | 'location'
+  | 'email' | 'password' | 'confirmPassword';
+type HouseholdInput = Exclude<HouseholdField, 'gender' | 'location'> | 'middleName' | 'detailedAddress';
+
 export default function RegisterHouseholdScreen() {
   const { showToast } = useToast();
+  const { colors } = useDarkMode();
   const [step, setStep] = useState(1); // 1: Personal Info, 2: Address & Contact, 3: Account Security
+  const { formScrollRef, formScrollProps, inputNavigation, resetKeyboard } = useRegistrationKeyboard<HouseholdInput>();
 
   // Google OAuth Link State
   const [isGoogleLinked, setIsGoogleLinked] = useState(false);
@@ -48,6 +55,10 @@ export default function RegisterHouseholdScreen() {
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
+  const [touched, setTouched] = useState<Partial<Record<HouseholdField, boolean>>>({});
+  const touchFields = (...fields: HouseholdField[]) => {
+    setTouched(previous => ({ ...previous, ...Object.fromEntries(fields.map(field => [field, true])) }));
+  };
 
   const handleGoogleProfile = (profile: GoogleAuthProfile) => {
     setFirstName(profile.firstName);
@@ -71,6 +82,22 @@ export default function RegisterHouseholdScreen() {
   const hasNumber = /\d/.test(password);
   const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
 
+  const fieldErrors: Record<HouseholdField, string> = {
+    firstName: firstName.trim() ? '' : 'First name is required.',
+    lastName: lastName.trim() ? '' : 'Last name is required.',
+    age: !age.trim() ? 'Age is required.' : !/^[0-9]+$/.test(age) || Number(age) < 1 ? 'Please enter a valid age in whole years.' : '',
+    gender: gender ? '' : 'Please select your gender.',
+    phone: isValidMobileNumber(phone) ? '' : MOBILE_NUMBER_ERROR,
+    location: address ? '' : 'Please pinpoint your home location on the map.',
+    email: emailError || (!email.trim() ? 'Email address is required.'
+      : email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? 'Enter a valid email address.' : ''),
+    password: passwordError || (!password ? 'Password is required.'
+      : !hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar ? 'Please meet all password requirements.' : ''),
+    confirmPassword: confirmPasswordError || (!confirmPassword ? 'Please confirm your password.'
+      : password !== confirmPassword ? 'Passwords do not match.' : ''),
+  };
+  const visibleError = (field: HouseholdField) => touched[field] ? fieldErrors[field] : undefined;
+
   // Modal Visibility
   const [genderModalVisible, setGenderModalVisible] = useState(false);
 
@@ -83,22 +110,33 @@ export default function RegisterHouseholdScreen() {
   // Validation per step
   const handleNext = () => {
     if (step === 1) {
-      if (!firstName || !lastName || !age || !gender) {
+      touchFields('firstName', 'lastName', 'age', 'gender');
+      if (!firstName.trim() || !lastName.trim() || !age || !gender) {
         showToast({ type: 'error', message: 'Please fill in all personal information fields.' });
         return;
       }
+      if (fieldErrors.age) return;
+      resetKeyboard();
       setStep(2);
     } else if (step === 2) {
+      touchFields('phone', 'location');
       if (!address || !phone) {
         showToast({ type: 'error', message: 'Please complete your home address location and phone number.' });
         return;
       }
       if (!validatePhone()) return;
+      resetKeyboard();
       setStep(3);
     }
   };
 
   const handleRegister = async () => {
+    touchFields('age', 'phone', 'email', 'password', 'confirmPassword');
+    if (fieldErrors.age) {
+      resetKeyboard();
+      setStep(1);
+      return;
+    }
     if (!validatePhone()) {
       setStep(2);
       return;
@@ -109,8 +147,8 @@ export default function RegisterHouseholdScreen() {
 
     let hasError = false;
 
-    if (!email) {
-      setEmailError('Email address is required.');
+    if (!email.trim() || email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError(!email.trim() ? 'Email address is required.' : 'Enter a valid email address.');
       hasError = true;
     }
 
@@ -144,7 +182,7 @@ export default function RegisterHouseholdScreen() {
         detailed_address: detailedAddress,
         latitude: latitude,
         longitude: longitude,
-        email: email,
+        email: email.trim(),
         password: password,
         avatar: avatarUrl || null,
       });
@@ -198,6 +236,7 @@ export default function RegisterHouseholdScreen() {
   };
 
   const handleBack = () => {
+    resetKeyboard();
     if (step > 1) setStep(step - 1);
     else router.back();
   };
@@ -205,11 +244,15 @@ export default function RegisterHouseholdScreen() {
   return (
     <BaseRegisterScreen
       activeTab="household"
+      hasUnsavedChanges={step > 1 || isGoogleLinked || latitude !== null || longitude !== null || [firstName, middleName, lastName, age, gender, address, detailedAddress, phone, email, password, confirmPassword].some(Boolean)}
+      submitting={loading}
       step={step}
       stepTitles={['Personal', 'Address', 'Security']}
       title="Create Household Account"
       subtitle="Register your home to hire kasambahay, drivers, or helpers"
       onBack={handleBack}
+      scrollViewRef={formScrollRef}
+      scrollViewProps={formScrollProps}
     >
       {/* --- STEP 1: PERSONAL INFORMATION --- */}
       {step === 1 && (
@@ -230,26 +273,28 @@ export default function RegisterHouseholdScreen() {
 
           {!isGoogleLinked && (
             <>
-              <InputField label="First Name" placeholder="John" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-              <InputField label="Middle Name (Optional)" placeholder="Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-              <InputField label="Last Name" placeholder="Cruz" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+              <InputField {...inputNavigation('firstName', 'middleName')} label="First Name" placeholder="John" keyboardType="default" icon="person" value={firstName} error={visibleError('firstName')} onBlur={() => touchFields('firstName')} onChangeText={(value) => { setFirstName(value); touchFields('firstName'); }} />
+              <InputField {...inputNavigation('middleName', 'lastName')} label="Middle Name (Optional)" placeholder="Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField {...inputNavigation('lastName', 'age')} label="Last Name" placeholder="Cruz" keyboardType="default" icon="person" value={lastName} error={visibleError('lastName')} onBlur={() => touchFields('lastName')} onChangeText={(value) => { setLastName(value); touchFields('lastName'); }} />
             </>
           )}
-          <InputField label="Age" placeholder="Enter your age" keyboardType="number-pad" maxLength={2} icon="cake" value={age} onChangeText={setAge} />
+          <InputField {...inputNavigation('age', () => setGenderModalVisible(true))} label="Age" placeholder="Enter your age" keyboardType="number-pad" maxLength={2} icon="cake" value={age} error={visibleError('age')} onBlur={() => touchFields('age')} onChangeText={(value) => { setAge(value); touchFields('age'); }} />
 
           {/* GENDER DROPDOWN */}
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-slate-700 mb-1.5">Gender</Text>
+            <Text className="text-sm font-semibold mb-1.5" style={{ color: colors.text }}>Gender</Text>
             <TouchableOpacity
               onPress={() => setGenderModalVisible(true)}
-              className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
+              className="flex-row items-center border rounded-2xl px-4 py-3.5"
+              style={{ backgroundColor: colors.surface, borderColor: visibleError('gender') ? '#EF4444' : colors.border }}
             >
-              <MaterialIcons name="wc" size={20} color={Colors.gray500} style={{ marginRight: 12 }} />
-              <Text className={`flex-1 text-base ${gender ? 'text-slate-900' : 'text-slate-400'}`}>
+              <MaterialIcons name="wc" size={20} color={colors.textSecondary} style={{ marginRight: 12 }} />
+              <Text className="flex-1 text-base" style={{ color: gender ? colors.text : colors.textSecondary }}>
                 {gender || 'Select Gender'}
               </Text>
-              <MaterialIcons name="arrow-drop-down" size={24} color={Colors.gray500} />
+              <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
+            {!!visibleError('gender') && <Text className="text-xs text-red-500 mt-1">{visibleError('gender')}</Text>}
           </View>
 
           <TouchableOpacity
@@ -266,21 +311,24 @@ export default function RegisterHouseholdScreen() {
         <View>
           {/* MAP LOCATION PICKER FIELD */}
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-slate-700 mb-1.5">Home Location</Text>
+            <Text className="text-sm font-semibold mb-1.5" style={{ color: colors.text }}>Home Location</Text>
             <TouchableOpacity
               onPress={() => setMapModalVisible(true)}
-              className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
+              className="flex-row items-center border rounded-2xl px-4 py-3.5"
+              style={{ backgroundColor: colors.surface, borderColor: visibleError('location') ? '#EF4444' : colors.border }}
             >
-              <MaterialIcons name="map" size={20} color={Colors.gray500} style={{ marginRight: 12 }} />
-              <Text className={`flex-1 text-base ${address ? 'text-slate-900' : 'text-slate-400'}`} numberOfLines={1}>
+              <MaterialIcons name="map" size={20} color={colors.textSecondary} style={{ marginRight: 12 }} />
+              <Text className="flex-1 text-base" style={{ color: address ? colors.text : colors.textSecondary }} numberOfLines={1}>
                 {address || 'Pinpoint home location on map'}
               </Text>
-              <MaterialIcons name="chevron-right" size={24} color={Colors.gray500} />
+              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
+            {!!visibleError('location') && <Text className="text-xs text-red-500 mt-1">{visibleError('location')}</Text>}
           </View>
 
           {/* DETAILED ADDRESS FIELD (House No., Street, Landmark) */}
           <InputField
+            {...inputNavigation('detailedAddress', 'phone')}
             label="Street, Baranggay"
             placeholder="e.g., Sitio Abada, Marfransico"
             icon="home"
@@ -288,7 +336,7 @@ export default function RegisterHouseholdScreen() {
             onChangeText={setDetailedAddress}
           />
 
-          <InputField label="Phone Number" placeholder="09123456789" keyboardType="phone-pad" maxLength={11} icon="phone" value={phone} onChangeText={(value) => setPhone(value.replace(/[^0-9]/g, '').slice(0, 11))} />
+          <InputField {...inputNavigation('phone', handleNext)} label="Phone Number" placeholder="09123456789" keyboardType="number-pad" maxLength={11} icon="phone" value={phone} error={visibleError('phone')} onBlur={() => touchFields('phone')} onChangeText={(value) => { setPhone(value.replace(/[^0-9]/g, '').slice(0, 11)); touchFields('phone'); }} />
 
           <TouchableOpacity
             onPress={handleNext}
@@ -313,24 +361,28 @@ export default function RegisterHouseholdScreen() {
           ) : (
             <>
               <InputField
+                {...inputNavigation('email', 'password')}
                 label="Email Address"
                 placeholder="juandelacruz@gmail.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon="email"
                 value={email}
-                onChangeText={(text) => { setEmail(text); setEmailError(''); }}
-                error={emailError}
+                onChangeText={(text) => { setEmail(text); setEmailError(''); touchFields('email'); }}
+                onBlur={() => touchFields('email')}
+                error={visibleError('email')}
               />
 
               <InputField
+                {...inputNavigation('password', 'confirmPassword')}
                 label="Password"
                 placeholder="********"
                 isPassword
                 icon="lock"
                 value={password}
-                onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
-                error={passwordError}
+                onChangeText={(text) => { setPassword(text); setPasswordError(''); setConfirmPasswordError(''); touchFields('password'); }}
+                onBlur={() => touchFields('password')}
+                error={visibleError('password')}
               />
 
               {/* Live requirement checklist */}
@@ -381,13 +433,15 @@ export default function RegisterHouseholdScreen() {
               </View>
 
               <InputField
+                {...inputNavigation('confirmPassword')}
                 label="Confirm Password"
                 placeholder="Confirm your password"
                 isPassword
                 icon="lock"
                 value={confirmPassword}
-                onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
-                error={confirmPasswordError}
+                onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); touchFields('confirmPassword'); }}
+                onBlur={() => touchFields('confirmPassword')}
+                error={visibleError('confirmPassword')}
               />
             </>
           )}
@@ -405,7 +459,7 @@ export default function RegisterHouseholdScreen() {
       {/* GENDER MODAL */}
       <GenderModal
         visible={genderModalVisible}
-        onClose={() => setGenderModalVisible(false)}
+        onClose={() => { setGenderModalVisible(false); touchFields('gender'); }}
         onSelect={setGender}
         selectedGender={gender}
       />
@@ -413,7 +467,7 @@ export default function RegisterHouseholdScreen() {
       {/* MAP LOCATION PICKER MODAL */}
       <LocationPickerModal
         visible={mapModalVisible}
-        onClose={() => setMapModalVisible(false)}
+        onClose={() => { setMapModalVisible(false); touchFields('location'); }}
         onSelectLocation={(data) => {
           setAddress(data.address);
           setLatitude(data.latitude);

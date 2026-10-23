@@ -1,44 +1,69 @@
 import { Colors } from '@/constants/colors';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { StatusBar } from 'expo-status-bar';
+import React, { useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import type { ScrollViewProps } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+type RegistrationRole = 'student' | 'employer' | 'household';
+
+const registrationRoutes = {
+  student: '/auth/student-register',
+  employer: '/auth/employer-register',
+  household: '/auth/household-register',
+} as const;
 
 interface BaseRegisterScreenProps {
-  activeTab: 'student' | 'employer' | 'household';
+  activeTab: RegistrationRole;
+  hasUnsavedChanges: boolean;
+  submitting?: boolean;
   step: number;
   stepTitles: string[];
   title: string;
   subtitle: string;
   onBack: () => void;
   children: React.ReactNode;
+  scrollViewRef?: React.RefObject<ScrollView | null>;
+  scrollViewProps?: Pick<ScrollViewProps, 'onScroll' | 'onLayout' | 'onContentSizeChange' | 'scrollEventThrottle'>;
 }
 
 export default function BaseRegisterScreen({
   activeTab,
+  hasUnsavedChanges,
+  submitting = false,
   step,
   stepTitles,
   title,
   subtitle,
   onBack,
   children,
+  scrollViewRef,
+  scrollViewProps,
 }: BaseRegisterScreenProps) {
   const { isDark, colors } = useDarkMode();
+  const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const [pendingRole, setPendingRole] = useState<RegistrationRole | null>(null);
+  const stayOnForm = () => setPendingRole(null);
+  const switchRole = (role: RegistrationRole) => {
+    if (role === activeTab || submitting) return;
+    Keyboard.dismiss();
+    if (hasUnsavedChanges) {
+      setPendingRole(role);
+      return;
+    }
+    router.replace(registrationRoutes[role]);
+  };
 
-  return (
-    <KeyboardAwareScrollView
-      className="flex-1"
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 24, paddingTop: 48, paddingBottom: 100 }}
-      enableOnAndroid={true}
-      extraScrollHeight={50}
-      extraHeight={100}
-      showsVerticalScrollIndicator={false}
-      bounces={false}
-      keyboardShouldPersistTaps="handled"
-    >
+  const content = (
+    <>
+      {isFocused && <StatusBar style={isDark ? 'light' : 'dark'} />}
       {/* Back button */}
       <TouchableOpacity 
         onPress={onBack}
@@ -56,19 +81,19 @@ export default function BaseRegisterScreen({
           label="Student" 
           icon="school" 
           isActive={activeTab === 'student'} 
-          onPress={() => router.replace('/auth/student-register')} 
+          onPress={() => switchRole('student')}
         />
         <TabButton 
           label="Employer" 
           icon="business" 
           isActive={activeTab === 'employer'} 
-          onPress={() => router.replace('/auth/employer-register')} 
+          onPress={() => switchRole('employer')}
         />
         <TabButton 
           label="Household" 
           icon="home" 
           isActive={activeTab === 'household'} 
-          onPress={() => router.replace('/auth/household-register')} 
+          onPress={() => switchRole('household')}
         />
       </View>
 
@@ -123,7 +148,48 @@ export default function BaseRegisterScreen({
           Login
         </Text>
       </Text>
-    </KeyboardAwareScrollView>
+    </>
+  );
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          {...scrollViewProps}
+          ref={scrollViewRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: width < 380 ? 16 : 24,
+            paddingTop: 16, paddingBottom: Math.max(insets.bottom, 16) + 24 }}
+          automaticallyAdjustContentInsets={false}
+          automaticallyAdjustKeyboardInsets={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {content}
+        </ScrollView>
+      </KeyboardAvoidingView>
+      <NotificationModal
+        visible={pendingRole !== null}
+        title="Switch account type?"
+        message="Your entered information will be cleared if you switch account type."
+        iconName="swap-horiz"
+        primaryButtonText="Stay"
+        onPrimaryPress={stayOnForm}
+        secondaryButtonText="Switch account type"
+        onSecondaryPress={() => {
+          if (!pendingRole || submitting) return;
+          const role = pendingRole;
+          stayOnForm();
+          router.replace(registrationRoutes[role]);
+        }}
+        onRequestClose={stayOnForm}
+        onBackdropPress={stayOnForm}
+      />
+    </View>
   );
 }
 

@@ -188,7 +188,7 @@ test('only the most recently opened modal viewport displays the active toast', (
   assert.equal(app.toast().id, id);
 });
 
-function toastViewFixture({ isDark = false, type = 'success', reducedMotion = false } = {}) {
+function toastViewFixture({ isDark = false, type = 'success', reducedMotion = false, iconName } = {}) {
   const dismissals = [], animations = [], finishes = [], cleanups = [];
   const jsx = (kind, props) => ({ type: kind, props });
   const animation = (value, options, kind) => ({ start(callback) {
@@ -223,7 +223,7 @@ function toastViewFixture({ isDark = false, type = 'success', reducedMotion = fa
         },
       },
     }).default;
-  const tree = Toast({ toast: { id: 7, type, message: 'Your changes were saved.' }, onDismiss: id => dismissals.push(id) });
+  const tree = Toast({ toast: { id: 7, type, iconName, message: 'Your changes were saved.' }, onDismiss: id => dismissals.push(id) });
   const card = find(tree, node => node.type === 'AnimatedView');
   return {
     tree, card, animations, dismissals,
@@ -241,6 +241,21 @@ function toastViewFixture({ isDark = false, type = 'success', reducedMotion = fa
     },
   };
 }
+
+test('connection icons pass through the provider while other toasts retain their default icons', () => {
+  const app = fixture();
+  app.api().showToast({ message: 'Check your internet connection.', iconName: 'wifi-off' }); app.render();
+  assert.equal(app.toast().iconName, 'wifi-off');
+  for (const isDark of [false, true]) {
+    const connection = toastViewFixture({ isDark, iconName: 'wifi-off', type: 'warning' });
+    assert.equal(find(connection.tree, node => node.type === 'Icon').props.name, 'wifi-off');
+    connection.stop();
+    const regular = toastViewFixture({ isDark });
+    assert.equal(find(regular.tree, node => node.type === 'Icon').props.name, 'check-circle');
+    regular.stop();
+  }
+  app.stop();
+});
 
 test('light and dark toasts expose readable announcements and an accessible dismiss action', () => {
   for (const isDark of [false, true]) for (const type of ['success', 'error', 'warning', 'info']) {

@@ -6,8 +6,9 @@ import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
 import { GoogleAuthProfile } from '@/utils/googleAuth';
-import { Colors } from '@/constants/colors';
+import { useDarkMode } from '@/hooks/useDarkMode';
 import { useToast } from '@/hooks/useToast';
+import { useRegistrationKeyboard } from '@/hooks/useRegistrationKeyboard';
 import { isValidMobileNumber, MOBILE_NUMBER_ERROR } from '@/utils/phoneNumber';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -16,9 +17,15 @@ import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import api from '@/api/axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+type EmployerField = 'businessName' | 'businessType' | 'firstName' | 'lastName' | 'phone'
+  | 'location' | 'email' | 'password' | 'confirmPassword';
+type EmployerInput = Exclude<EmployerField, 'businessType' | 'location'> | 'middleName' | 'detailedAddress';
+
 export default function RegisterEmployerScreen() {
   const { showToast } = useToast();
+  const { colors } = useDarkMode();
   const [step, setStep] = useState(1);
+  const { formScrollRef, formScrollProps, inputNavigation, resetKeyboard } = useRegistrationKeyboard<EmployerInput>();
 
   // Google OAuth Link State
   const [isGoogleLinked, setIsGoogleLinked] = useState(false);
@@ -48,6 +55,10 @@ export default function RegisterEmployerScreen() {
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
+  const [touched, setTouched] = useState<Partial<Record<EmployerField, boolean>>>({});
+  const touchFields = (...fields: EmployerField[]) => {
+    setTouched(previous => ({ ...previous, ...Object.fromEntries(fields.map(field => [field, true])) }));
+  };
 
   const handleGoogleProfile = (profile: GoogleAuthProfile) => {
     setFirstName(profile.firstName);
@@ -70,6 +81,22 @@ export default function RegisterEmployerScreen() {
   const hasNumber = /\d/.test(password);
   const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
 
+  const fieldErrors: Record<EmployerField, string> = {
+    businessName: businessName.trim() ? '' : 'Business name is required.',
+    businessType: businessType ? '' : 'Please select your business type.',
+    firstName: firstName.trim() ? '' : 'First name is required.',
+    lastName: lastName.trim() ? '' : 'Last name is required.',
+    phone: isValidMobileNumber(phone) ? '' : MOBILE_NUMBER_ERROR,
+    location: address ? '' : 'Please pinpoint your business location on the map.',
+    email: emailError || (!email.trim() ? 'Email address is required.'
+      : email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? 'Enter a valid email address.' : ''),
+    password: passwordError || (!password ? 'Password is required.'
+      : !hasMinLength || !hasNumber || !hasUpper || !hasSpecialChar ? 'Please meet all password requirements.' : ''),
+    confirmPassword: confirmPasswordError || (!confirmPassword ? 'Please confirm your password.'
+      : password !== confirmPassword ? 'Passwords do not match.' : ''),
+  };
+  const visibleError = (field: EmployerField) => touched[field] ? fieldErrors[field] : undefined;
+
   // Modal Visibility
   const [businessTypeModalVisible, setBusinessTypeModalVisible] = useState(false);
 
@@ -81,22 +108,27 @@ export default function RegisterEmployerScreen() {
 
   const handleNext = () => {
     if (step === 1) {
-      if (!businessName || !businessType || !firstName || !lastName) {
+      touchFields('businessName', 'businessType', 'firstName', 'lastName');
+      if (!businessName.trim() || !businessType || !firstName.trim() || !lastName.trim()) {
         showToast({ type: 'error', message: 'Please fill in all required business and personal name fields.' });
         return;
       }
+      resetKeyboard();
       setStep(2);
     } else if (step === 2) {
+      touchFields('phone', 'location');
       if (!phone || !address) {
         showToast({ type: 'error', message: 'Please complete your phone number and business location.' });
         return;
       }
       if (!validatePhone()) return;
+      resetKeyboard();
       setStep(3);
     }
   };
 
   const handleRegister = async () => {
+    touchFields('phone', 'email', 'password', 'confirmPassword');
     if (!validatePhone()) {
       setStep(2);
       return;
@@ -107,8 +139,8 @@ export default function RegisterEmployerScreen() {
 
     let hasError = false;
 
-    if (!email) {
-      setEmailError('Email address is required.');
+    if (!email.trim() || email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError(!email.trim() ? 'Email address is required.' : 'Enter a valid email address.');
       hasError = true;
     }
 
@@ -142,7 +174,7 @@ export default function RegisterEmployerScreen() {
         detailed_address: detailedAddress,
         latitude: latitude,
         longitude: longitude,
-        email: email,
+        email: email.trim(),
         password: password,
         avatar: avatarUrl || null,
       });
@@ -195,6 +227,7 @@ export default function RegisterEmployerScreen() {
   };
 
   const handleBack = () => {
+    resetKeyboard();
     if (step > 1) setStep(step - 1);
     else router.back();
   };
@@ -202,11 +235,15 @@ export default function RegisterEmployerScreen() {
   return (
     <BaseRegisterScreen
       activeTab="employer"
+      hasUnsavedChanges={step > 1 || isGoogleLinked || latitude !== null || longitude !== null || [businessName, businessType, firstName, middleName, lastName, phone, address, detailedAddress, email, password, confirmPassword].some(Boolean)}
+      submitting={loading}
       step={step}
       stepTitles={['Business', 'Location', 'Security']}
       title="Create Employer Account"
       subtitle="Provide your company or business details"
       onBack={handleBack}
+      scrollViewRef={formScrollRef}
+      scrollViewProps={formScrollProps}
     >
       {/* --- STEP 1: BUSINESS & OWNER DETAILS --- */}
       {step === 1 && (
@@ -225,28 +262,30 @@ export default function RegisterEmployerScreen() {
             }}
           />
 
-          <InputField label="Business Name" placeholder="Enter business name" icon="business" value={businessName} onChangeText={setBusinessName} />
+          <InputField {...inputNavigation('businessName', () => setBusinessTypeModalVisible(true))} label="Business Name" placeholder="Enter business name" icon="business" value={businessName} error={visibleError('businessName')} onBlur={() => touchFields('businessName')} onChangeText={(value) => { setBusinessName(value); touchFields('businessName'); }} />
 
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-slate-700 mb-1.5">Business Type</Text>
+            <Text className="text-sm font-semibold mb-1.5" style={{ color: colors.text }}>Business Type</Text>
             <TouchableOpacity
               onPress={() => setBusinessTypeModalVisible(true)}
-              className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
+              className="flex-row items-center border rounded-2xl px-4 py-3.5"
+              style={{ backgroundColor: colors.surface, borderColor: visibleError('businessType') ? '#EF4444' : colors.border }}
             >
-              <MaterialIcons name="category" size={20} color={Colors.gray500} style={{ marginRight: 12 }} />
-              <Text className={`flex-1 text-base ${businessType ? 'text-slate-900' : 'text-slate-400'}`}>
+              <MaterialIcons name="category" size={20} color={colors.textSecondary} style={{ marginRight: 12 }} />
+              <Text className="flex-1 text-base" style={{ color: businessType ? colors.text : colors.textSecondary }}>
                 {businessType || 'Select business type'}
               </Text>
-              <MaterialIcons name="arrow-drop-down" size={24} color={Colors.gray500} />
+              <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
+            {!!visibleError('businessType') && <Text className="text-xs text-red-500 mt-1">{visibleError('businessType')}</Text>}
           </View>
 
           {!isGoogleLinked && (
             <>
-              <Text className="text-base font-bold text-slate-900 mt-5 mb-3">Contact Person / HR</Text>
-              <InputField label="First Name" placeholder="Juan" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-              <InputField label="Middle Name (Optional)" placeholder="Dela Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-              <InputField label="Last Name" placeholder="Santos" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+              <Text className="text-base font-bold mt-5 mb-3" style={{ color: colors.text }}>Contact Person / HR</Text>
+              <InputField {...inputNavigation('firstName', 'middleName')} label="First Name" placeholder="Juan" keyboardType="default" icon="person" value={firstName} error={visibleError('firstName')} onBlur={() => touchFields('firstName')} onChangeText={(value) => { setFirstName(value); touchFields('firstName'); }} />
+              <InputField {...inputNavigation('middleName', 'lastName')} label="Middle Name (Optional)" placeholder="Dela Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField {...inputNavigation('lastName', handleNext)} label="Last Name" placeholder="Santos" keyboardType="default" icon="person" value={lastName} error={visibleError('lastName')} onBlur={() => touchFields('lastName')} onChangeText={(value) => { setLastName(value); touchFields('lastName'); }} />
             </>
           )}
 
@@ -259,23 +298,26 @@ export default function RegisterEmployerScreen() {
       {/* --- STEP 2: CONTACT & LOCATION DETAILS --- */}
       {step === 2 && (
         <View>
-          <InputField label="Phone Number" placeholder="09123456789" keyboardType="phone-pad" maxLength={11} icon="phone" value={phone} onChangeText={(value) => setPhone(value.replace(/[^0-9]/g, '').slice(0, 11))} />
+          <InputField {...inputNavigation('phone', 'detailedAddress')} label="Phone Number" placeholder="09123456789" keyboardType="number-pad" maxLength={11} icon="phone" value={phone} error={visibleError('phone')} onBlur={() => touchFields('phone')} onChangeText={(value) => { setPhone(value.replace(/[^0-9]/g, '').slice(0, 11)); touchFields('phone'); }} />
 
           <View className="mb-4">
-            <Text className="text-sm font-semibold text-slate-700 mb-1.5">Business Location</Text>
+            <Text className="text-sm font-semibold mb-1.5" style={{ color: colors.text }}>Business Location</Text>
             <TouchableOpacity
               onPress={() => setMapModalVisible(true)}
-              className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5"
+              className="flex-row items-center border rounded-2xl px-4 py-3.5"
+              style={{ backgroundColor: colors.surface, borderColor: visibleError('location') ? '#EF4444' : colors.border }}
             >
-              <MaterialIcons name="map" size={20} color={Colors.gray500} style={{ marginRight: 12 }} />
-              <Text className={`flex-1 text-base ${address ? 'text-slate-900' : 'text-slate-400'}`} numberOfLines={1}>
+              <MaterialIcons name="map" size={20} color={colors.textSecondary} style={{ marginRight: 12 }} />
+              <Text className="flex-1 text-base" style={{ color: address ? colors.text : colors.textSecondary }} numberOfLines={1}>
                 {address || 'Pinpoint business location on map'}
               </Text>
-              <MaterialIcons name="chevron-right" size={24} color={Colors.gray500} />
+              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
+            {!!visibleError('location') && <Text className="text-xs text-red-500 mt-1">{visibleError('location')}</Text>}
           </View>
 
           <InputField
+            {...inputNavigation('detailedAddress', handleNext)}
             label="House No., Street, Landmark (Optional)"
             placeholder="e.g., Bldg 2, Quezon St., near plaza"
             icon="home"
@@ -303,24 +345,28 @@ export default function RegisterEmployerScreen() {
           ) : (
             <>
               <InputField
+                {...inputNavigation('email', 'password')}
                 label="Email Address"
                 placeholder="examplebusiness@gmail.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon="email"
                 value={email}
-                onChangeText={(text) => { setEmail(text); setEmailError(''); }}
-                error={emailError}
+                onChangeText={(text) => { setEmail(text); setEmailError(''); touchFields('email'); }}
+                onBlur={() => touchFields('email')}
+                error={visibleError('email')}
               />
 
               <InputField
+                {...inputNavigation('password', 'confirmPassword')}
                 label="Password"
                 placeholder="********"
                 isPassword
                 icon="lock"
                 value={password}
-                onChangeText={(text) => { setPassword(text); setPasswordError(''); }}
-                error={passwordError}
+                onChangeText={(text) => { setPassword(text); setPasswordError(''); setConfirmPasswordError(''); touchFields('password'); }}
+                onBlur={() => touchFields('password')}
+                error={visibleError('password')}
               />
 
               {/* Live requirement checklist */}
@@ -371,13 +417,15 @@ export default function RegisterEmployerScreen() {
               </View>
 
               <InputField
+                {...inputNavigation('confirmPassword')}
                 label="Confirm Password"
                 placeholder="Confirm your password"
                 isPassword
                 icon="lock"
                 value={confirmPassword}
-                onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); }}
-                error={confirmPasswordError}
+                onChangeText={(text) => { setConfirmPassword(text); setConfirmPasswordError(''); touchFields('confirmPassword'); }}
+                onBlur={() => touchFields('confirmPassword')}
+                error={visibleError('confirmPassword')}
               />
             </>
           )}
@@ -395,14 +443,14 @@ export default function RegisterEmployerScreen() {
       {/* MODALS */}
       <BusinessTypeModal
         visible={businessTypeModalVisible}
-        onClose={() => setBusinessTypeModalVisible(false)}
+        onClose={() => { setBusinessTypeModalVisible(false); touchFields('businessType'); }}
         onSelect={setBusinessType}
         selectedType={businessType}
       />
 
       <LocationPickerModal
         visible={mapModalVisible}
-        onClose={() => setMapModalVisible(false)}
+        onClose={() => { setMapModalVisible(false); touchFields('location'); }}
         onSelectLocation={(data) => {
           setAddress(data.address);
           setLatitude(data.latitude);

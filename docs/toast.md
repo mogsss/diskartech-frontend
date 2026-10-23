@@ -16,10 +16,11 @@ const id = showToast({ message: 'Processing your request…', duration: 0 });
 if (id !== null) hideToast(id);
 ```
 
-- Types: `success`, `error`, `warning`, `info` (default).
+- Types: `success`, `error`, `warning`, `info` (default). Set `iconName` to override
+  the default MaterialIcons icon (for example, `wifi-off`). Icons have no background.
 - Default timeout: 3.5 seconds, or 5 seconds for errors. Android accessibility settings can extend it. `duration: 0` keeps the toast until dismissed.
 - A new message replaces the previous one. An older timer or dismiss callback cannot close the newer message.
-- Messages appear at the top, respect safe areas and the offline banner, and support light/dark mode. Swipe left, right, or up to dismiss; screen readers also expose a Dismiss action. A short or interrupted drag returns the toast to its original position.
+- Messages appear at the top, respect safe areas, and support light/dark mode. Connectivity notices use the same toast host. Swipe left, right, or up to dismiss; screen readers also expose a Dismiss action. A short or interrupted drag returns the toast to its original position.
 - Use toasts for short feedback. Keep confirmation dialogs for decisions such as continuing despite a schedule warning. Native modals have their own presentation layer: close them first, or mount `<ToastViewport active={visible} />` inside the modal using the same `@/hooks/useToast` import. The latest active viewport displays the toast without duplicating it behind the modal. The weekly schedule editor already includes this viewport.
 
 Used for saving and removing jobs on student Home (All jobs, Nearby, For you, and Saved) and Job details, and for success/error feedback after clearing a chat. Clearing a chat still requires confirmation. A successful clear returns to the user's Messages tab; a failed clear stays in the conversation. This uses existing React Native APIs and needs no new native dependency.

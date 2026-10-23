@@ -138,35 +138,34 @@ test('an older development APK without NetInfo keeps opening normally', () => {
   app.stop();
 });
 
-test('the banner reserves space, preserves its child position, and supports light/dark themes', () => {
-  let notice = null, isDark = false;
+test('connection changes emit one floating toast without shifting the screen or changing its safe area', () => {
+  let notice = null, previousDependencies;
+  const toasts = [];
+  const showToast = options => toasts.push(options);
   const jsx = (type, props) => ({ type, props });
   const Banner = load('components/common/OfflineBanner.tsx', {
-    react: {}, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    react: { useEffect(callback, dependencies) {
+      if (!previousDependencies || dependencies.some((value, index) => value !== previousDependencies[index])) callback();
+      previousDependencies = dependencies;
+    } },
+    'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
     '@/hooks/useConnectivityNotice': { useConnectivityNotice: () => notice },
-    '@/hooks/useDarkMode': { useDarkMode: () => ({ isDark, colors: { background: '#FFF' } }) },
-    '@expo/vector-icons': { MaterialIcons: 'Icon' },
-    'react-native': { View: 'View', Text: 'Text', StyleSheet: { create: value => value, hairlineWidth: 1 } },
-    'react-native-safe-area-context': {
-      SafeAreaInsetsContext: { Provider: 'InsetsProvider' },
-      useSafeAreaInsets: () => ({ top: 24, bottom: 16, left: 0, right: 0 }),
-    },
+    '@/hooks/useToast': { useToast: () => ({ showToast }) },
   }).default;
   const child = { draft: 'unsent message', route: 'chat' };
-  for (isDark of [false, true]) {
-    for (notice of [null, 'offline', 'restored', null]) {
-      const tree = Banner({ children: child });
-      const [banner, provider] = tree.props.children;
-      assert.equal(provider.type, 'InsetsProvider');
-      assert.equal(provider.props.children.props.children, child);
-      assert.equal(provider.props.value.bottom, 16);
-      assert.equal(provider.props.value.top, notice ? 0 : 24);
-      if (notice) {
-        assert.equal(banner.props.accessibilityLiveRegion, 'polite');
-        assert.match(banner.props.accessibilityLabel, notice === 'offline' ? /offline/ : /Back online/);
-        assert.equal(banner.props.style[1].paddingTop, 34);
-        assert.equal(banner.props.style[1].position, undefined, 'must not overlay screen controls');
-      }
-    }
+  for (notice of [null, 'offline', 'offline', 'restored', 'restored', null]) {
+    const tree = Banner({ children: child });
+    assert.equal(tree.type, 'Fragment');
+    assert.equal(tree.props.children, child, 'navigation and form drafts stay in the same position');
   }
+  assert.equal(toasts.length, 2, 'repeated network state and recovery timeout must not repeat toasts');
+  assert.equal(toasts[0].title, "You're offline");
+  assert.equal(toasts[0].message, 'Check your internet connection.');
+  assert.equal(toasts[0].iconName, 'wifi-off');
+  assert.equal(toasts[0].type, 'warning');
+  assert.equal(toasts[0].duration, 5000);
+  assert.equal(toasts[1].title, 'Back online');
+  assert.equal(toasts[1].iconName, 'wifi');
+  assert.equal(toasts[1].type, 'success');
+  assert.equal(toasts[1].duration, 3000);
 });

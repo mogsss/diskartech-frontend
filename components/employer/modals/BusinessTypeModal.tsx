@@ -5,7 +5,7 @@ import { BUSINESS_TYPES, BUSINESS_TYPE_SUGGESTIONS } from '@/data/businessTypes'
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BusinessTypeModalProps {
@@ -97,18 +97,24 @@ export default function BusinessTypeModal({ visible, onClose, onSelect, selected
         {/* Disable Android keyboard padding after hide to avoid a gap below the sheet. */}
         <KeyboardAvoidingView behavior="padding" enabled={Platform.OS !== 'android' || keyboardVisible} style={{ flex: 1 }}>
           <View style={{ flex: 1, justifyContent: 'flex-end', paddingTop: insets.top + 12 }} onLayout={({ nativeEvent }) => setAvailableHeight(nativeEvent.layout.height)}>
-            <View className="rounded-t-3xl" style={{ height: sheetHeight, backgroundColor: colors.surface, paddingBottom: bottomPadding }}>
-              <View className="flex-row items-center gap-3 px-6 pt-5 pb-4 border-b shrink-0" style={{ borderColor: colors.border }} onLayout={({ nativeEvent }) => setHeaderHeight(nativeEvent.layout.height)}>
-                {customMode && <TouchableOpacity onPress={() => { Keyboard.dismiss(); setCustomMode(false); setError(''); }} accessibilityRole="button" accessibilityLabel="Back to business types" className="w-10 h-10 items-center justify-center">
-                  <MaterialIcons name="arrow-back" size={22} color={colors.text} />
-                </TouchableOpacity>}
-                <View className="flex-1">
-                  <Text className="text-lg font-bold" style={{ color: colors.text }}>{customMode ? 'Specify business type' : 'Select business type'}</Text>
-                  <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{customMode ? 'Type your own or choose a suggestion.' : 'Choose the category that fits your business.'}</Text>
-                </View>
-                <TouchableOpacity onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close business type modal" className="w-10 h-10 items-center justify-center">
-                  <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+            <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close business type selection" />
+            <View className="rounded-t-3xl" style={{ height: sheetHeight, backgroundColor: colors.surface, paddingBottom: bottomPadding }} accessibilityViewIsModal onAccessibilityEscape={handleClose}>
+              <View className="border-b shrink-0" style={{ borderColor: colors.border }} onLayout={({ nativeEvent }) => setHeaderHeight(nativeEvent.layout.height)}>
+                <TouchableOpacity onPress={handleClose} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Close business type selection" className="items-center justify-center py-4">
+                  <View className="w-10 h-1 rounded-full" style={{ backgroundColor: colors.textSecondary }} />
                 </TouchableOpacity>
+                <View className="flex-row items-center gap-3 px-6 pb-4">
+                  {customMode && <TouchableOpacity onPress={() => { Keyboard.dismiss(); setCustomMode(false); setError(''); }} accessibilityRole="button" accessibilityLabel="Back to business types" className="w-10 h-10 items-center justify-center">
+                    <MaterialIcons name="arrow-back" size={22} color={colors.text} />
+                  </TouchableOpacity>}
+                  {!customMode && <View className="w-10 h-10 items-center justify-center">
+                    <MaterialIcons name="store" size={22} color={colors.accent} accessible={false} />
+                  </View>}
+                  <View className="flex-1">
+                    <Text className="text-lg font-bold" style={{ color: colors.text }}>{customMode ? 'Specify business type' : 'Select business type'}</Text>
+                    <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{customMode ? 'Type your own or choose a suggestion.' : 'Choose the category that fits your business.'}</Text>
+                  </View>
+                </View>
               </View>
 
               <ScrollView key={customMode ? 'custom-type' : 'business-types'} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16 }} onContentSizeChange={(_, height) => {

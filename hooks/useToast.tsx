@@ -1,4 +1,5 @@
 import Toast from '@/components/ui/Toast';
+import type { MaterialIcons } from '@expo/vector-icons';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform } from 'react-native';
 
@@ -7,6 +8,7 @@ export interface ToastOptions {
   message: string;
   title?: string;
   type?: ToastType;
+  iconName?: keyof typeof MaterialIcons.glyphMap;
   /** Milliseconds before dismissal; use 0 to keep it visible until dismissed. */
   duration?: number;
 }
@@ -15,6 +17,7 @@ export interface ToastMessage {
   message: string;
   title?: string;
   type: ToastType;
+  iconName?: keyof typeof MaterialIcons.glyphMap;
   duration: number;
 }
 interface ToastContextValue {
@@ -50,7 +53,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const fallback = type === 'error' ? 5000 : 3500;
     const duration = options.duration === 0 ? 0 : Number.isFinite(options.duration)
       ? Math.min(60000, Math.max(1000, options.duration!)) : fallback;
-    const next: ToastMessage = { id: ++nextId.current, message, title: options.title?.trim() || undefined, type, duration };
+    const next: ToastMessage = { id: ++nextId.current, message, title: options.title?.trim() || undefined, type, duration, iconName: options.iconName };
     currentToast.current = next;
     setToast(next);
     return next.id;

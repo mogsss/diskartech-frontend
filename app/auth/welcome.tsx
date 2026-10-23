@@ -1,6 +1,5 @@
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
-import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect } from 'react';
@@ -96,8 +95,8 @@ export default function WelcomeScreen() {
 
           {/* Brand Name */}
           <Text
-            className="text-4xl text-center"
-            style={{ color: '#FFFFFF', fontFamily: 'Poppins-Bold', letterSpacing: -0.8, lineHeight: 44 }}
+            className="text-[28px] text-center"
+            style={{ color: '#FFFFFF', fontFamily: 'Poppins-Bold', letterSpacing: -0.8, lineHeight: 36 }}
           >
             DiskarTech
           </Text>
@@ -131,10 +130,10 @@ export default function WelcomeScreen() {
           <View>
             {/* Header */}
             <View className="mb-6 items-center">
-              <Text className="text-2xl font-black text-center" style={{ color: colors.text }}>
+              <Text className="text-2xl font-bold text-center" style={{ color: colors.text }}>
                 Get Started
               </Text>
-              <Text className="text-xs text-center mt-1.5" style={{ color: colors.textSecondary }}>
+              <Text className="text-base text-center mt-1.5" style={{ color: colors.textSecondary }}>
                 Find student-friendly work or hire local talent today.
               </Text>
             </View>
@@ -169,7 +168,7 @@ export default function WelcomeScreen() {
                 className="w-full px-4 py-3.5 rounded-[20px] flex-row items-center justify-center gap-2.5 border"
               >
                 <Image source={require('../../assets/images/google-g.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                <Text className="text-sm font-semibold text-center " style={{ color: colors.text }}>
+                <Text className="text-base font-bold text-center" style={{ color: colors.text }}>
                   Continue with Google
                 </Text>
               </TouchableOpacity>
@@ -180,7 +179,7 @@ export default function WelcomeScreen() {
               <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
             </View>
             <View className="flex-row flex-wrap items-center justify-center">
-              <Text className="text-xs" style={{ color: colors.textSecondary }}>Don&apos;t have an account?</Text>
+              <Text className="text-base" style={{ color: colors.textSecondary }}>Don&apos;t have an account?</Text>
               <TouchableOpacity
                 onPress={() => router.push('/auth/student-register')}
                 accessibilityRole="button"
@@ -188,7 +187,7 @@ export default function WelcomeScreen() {
                 activeOpacity={0.7}
                 className="min-h-11 px-2 items-center justify-center"
               >
-                <Text className="text-xs font-semibold" style={{ color: isDark ? colors.accent : colors.primary }}>Create an account</Text>
+                <Text className="text-base font-semibold" style={{ color: isDark ? colors.accent : colors.primary }}>Create an account</Text>
               </TouchableOpacity>
             </View>
           </View>
