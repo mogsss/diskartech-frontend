@@ -3,12 +3,13 @@ import { View, Text } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDarkMode } from '@/hooks/useDarkMode';
 
-export default function ApplicationSection({ title, icon, children, badge, embedded = false }: {
+export default function ApplicationSection({ title, icon, children, badge, embedded = false, transparent = false }: {
   title: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   children: React.ReactNode;
   badge?: React.ReactNode;
   embedded?: boolean;
+  transparent?: boolean;
 }) {
   const { colors, isDark } = useDarkMode();
   return (
@@ -22,7 +23,7 @@ export default function ApplicationSection({ title, icon, children, badge, embed
         <Text accessibilityRole="header" className="flex-1 text-sm font-semibold" style={{ color: colors.text }}>{title}</Text>
         {badge}
       </View>
-      <View className={embedded ? undefined : 'rounded-2xl border p-4'} style={embedded ? undefined : { backgroundColor: colors.surface, borderColor: colors.border }}>
+      <View className={embedded ? undefined : 'rounded-2xl border p-4'} style={embedded ? undefined : { backgroundColor: transparent ? 'transparent' : colors.surface, borderColor: colors.border }}>
         {children}
       </View>
     </View>

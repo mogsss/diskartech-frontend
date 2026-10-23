@@ -1,5 +1,6 @@
 import api from '@/api/axios';
 import NotificationCard from '@/components/ui/NotificationCard';
+import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import {
   CHATS_COLLECTION,
@@ -11,6 +12,9 @@ import {
 import { db } from '@/utils/firebase';
 import { APP_NOTIFICATIONS_COLLECTION } from '@/utils/notifications';
 import { mergeNotificationSources } from '@/utils/notificationFeed';
+import { applyNotificationPreferences, getNotificationActionSources, saveNotificationAction } from '@/utils/notificationPreferences';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { useToast } from '@/hooks/useToast';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -26,7 +30,7 @@ import {
   where,
 } from 'firebase/firestore';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, BackHandler, FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -75,7 +79,8 @@ function formatNotificationTime(ms: number): string {
 const incomingMsgCache = new Map<string, { text: string; ms: number }>();
 
 export default function NotificationsScreen() {
-  const { colors, isDark } = useDarkMode();
+  const { colors } = useDarkMode();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [apiNotifications, setApiNotifications] = useState<any[]>([]);
   const [liveAppNotifications, setLiveAppNotifications] = useState<any[]>([]);
@@ -84,7 +89,30 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const readNotificationIds = useRef(new Set<string>());
+  const { preferences, ready: preferencesReady, error: preferencesError } = useNotificationPreferences(currentUserId);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set<string>());
+  const [working, setWorking] = useState(false);
+  const actionInProgress = useRef(false);
+  const [deleteTargets, setDeleteTargets] = useState<any[] | null>(null);
+
+  const exitSelection = () => { setSelectionMode(false); setSelectedIds(new Set()); };
+
+  useEffect(() => {
+    if (!selectionMode) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!actionInProgress.current) {
+        setSelectionMode(false);
+        setSelectedIds(new Set());
+      }
+      return true;
+    });
+    return () => subscription.remove();
+  }, [selectionMode]);
+
+  useEffect(() => {
+    if (preferencesError) showToast({ type: 'error', message: 'Could not load your saved notification settings. Please reopen this screen.' });
+  }, [preferencesError, showToast]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -92,12 +120,14 @@ export default function NotificationsScreen() {
         const storedUser = await AsyncStorage.getItem('userData');
         if (storedUser) {
           const user = JSON.parse(storedUser);
+          if (!user.id) { setLoading(false); return; }
           setCurrentUserId(user.id?.toString());
           const role = user.role || (user.student_school_name ? 'student' : user.household_name ? 'household' : 'employer');
           setUserRole(role);
-        }
+        } else setLoading(false);
       } catch (e) {
         console.error('Error fetching user data:', e);
+        setLoading(false);
       }
     };
     fetchUserData();
@@ -113,10 +143,6 @@ export default function NotificationsScreen() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const readNotifsString = await AsyncStorage.getItem('read_notifications');
-        const readNotifsIds: string[] = readNotifsString ? JSON.parse(readNotifsString) : [];
-        readNotificationIds.current = new Set(readNotifsIds);
-
         // 1. Fetch Backend API Notifications base sa user role
         if (userRole === 'student') {
           const studentNotifs: any[] = [];
@@ -131,8 +157,7 @@ export default function NotificationsScreen() {
               const hasUploadedDocs = !!profile.school_id || !!profile.coe;
 
               const notifId = 'student_verification_status';
-              const isLocallyRead = readNotifsIds.includes(notifId);
-              const ms = getTimestampMs(profile.updated_at || profile.created_at) || (Date.now() - 3600000);
+              const ms = getTimestampMs(profile.updated_at || profile.created_at);
 
               if (isVerified) {
                 studentNotifs.push({
@@ -151,7 +176,7 @@ export default function NotificationsScreen() {
                   message: `Reason: ${profile.rejection_reason}. Tap here to re-upload your documents.`,
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead,
+                  read: false,
                   type: 'verification',
                 });
               } else if (hasUploadedDocs) {
@@ -161,7 +186,7 @@ export default function NotificationsScreen() {
                   message: 'Your student documents are currently being reviewed by Admin/AI.',
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead,
+                  read: false,
                   type: 'verification',
                 });
               }
@@ -176,7 +201,6 @@ export default function NotificationsScreen() {
             if (isMounted && res.data && res.data.applications) {
               const list = res.data.applications.map((app: any) => {
                 const notifId = `app_${app.id}`;
-                const isLocallyRead = readNotifsIds.includes(notifId);
                 const ms = getTimestampMs(app.updated_at || app.created_at);
 
                 const statusText = app.status === 'interview'
@@ -219,7 +243,7 @@ export default function NotificationsScreen() {
                   message: messageText,
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead || app.status !== 'pending',
+                  read: app.status === 'pending',
                   type: 'application_status',
                   targetId: app.id,
                   rawApplication: app,
@@ -247,8 +271,7 @@ export default function NotificationsScreen() {
               const hasUploadedDocs = !!profile.valid_id_path || !!profile.employer_certificate_path;
 
               const notifId = 'verification_status';
-              const isLocallyRead = readNotifsIds.includes(notifId);
-              const ms = getTimestampMs(profile.updated_at || profile.created_at) || (Date.now() - 3600000);
+              const ms = getTimestampMs(profile.updated_at || profile.created_at);
 
               if (isVerified) {
                 empNotifs.push({
@@ -267,7 +290,7 @@ export default function NotificationsScreen() {
                   message: `Reason: ${profile.rejection_reason}.`,
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead,
+                  read: false,
                   type: 'verification',
                 });
               } else if (hasUploadedDocs) {
@@ -277,7 +300,7 @@ export default function NotificationsScreen() {
                   message: 'Your documents are being reviewed.',
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead,
+                  read: false,
                   type: 'verification',
                 });
               } else {
@@ -287,7 +310,7 @@ export default function NotificationsScreen() {
                   message: 'Not verified. Please upload required verification documents.',
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead,
+                  read: false,
                   type: 'verification',
                 });
               }
@@ -302,7 +325,6 @@ export default function NotificationsScreen() {
               const applicants = res.data.applicants || [];
               applicants.forEach((app: any) => {
                 const notifId = `app_${app.id}`;
-                const isLocallyRead = readNotifsIds.includes(notifId);
                 const ms = getTimestampMs(app.created_at || app.updated_at);
 
                 empNotifs.push({
@@ -311,7 +333,7 @@ export default function NotificationsScreen() {
                   message: `${app.student?.student_name || 'A student'} applied for "${app.job?.title || 'Job'}".`,
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead || app.status !== 'pending',
+                  read: app.status !== 'pending',
                   type: 'application',
                   targetId: app.id,
                   applicationId: app.id,
@@ -344,7 +366,6 @@ export default function NotificationsScreen() {
                 const data = docSnap.data();
                 const ms = getTimestampMs(data.created_at);
                 const notifId = `firestore_${docSnap.id}`;
-                const isLocallyRead = readNotificationIds.current.has(notifId) || data.read === true;
 
                 notifs.push({
                   id: notifId,
@@ -352,7 +373,7 @@ export default function NotificationsScreen() {
                   message: data.body || '',
                   timestamp: formatNotificationTime(ms),
                   timestampMs: ms,
-                  read: isLocallyRead,
+                  read: data.read === true,
                   type: data.type || 'application_status',
                   targetId: data.target_id,
                   applicationId: data.application_id,
@@ -507,8 +528,12 @@ export default function NotificationsScreen() {
   }, [currentUserId, userRole]);
 
   const combinedNotifications = useMemo(
-    () => mergeNotificationSources(apiNotifications, liveAppNotifications, chatNotifications),
-    [apiNotifications, liveAppNotifications, chatNotifications]
+    () => mergeNotificationSources(
+      applyNotificationPreferences(apiNotifications, preferences),
+      applyNotificationPreferences(liveAppNotifications, preferences),
+      applyNotificationPreferences(chatNotifications, preferences),
+    ),
+    [apiNotifications, liveAppNotifications, chatNotifications, preferences]
   );
 
   // Filtered list base sa piniling tab
@@ -535,36 +560,17 @@ export default function NotificationsScreen() {
   const updateCount = combinedNotifications.filter((n) => n.type === 'verification' || n.type === 'general' || n.type === 'new_job').length;
 
   const handleNotificationPress = async (notification: any) => {
-    const idsToMark: string[] = notification.mergedIds || [notification.id];
-    idsToMark.forEach((id) => readNotificationIds.current.add(id));
+    if (actionInProgress.current || !currentUserId) return;
+    if (selectionMode) {
+      toggleSelection(notification.id);
+      return;
+    }
     try {
-      const readNotifsString = await AsyncStorage.getItem('read_notifications');
-      const readNotifsIds: string[] = readNotifsString ? JSON.parse(readNotifsString) : [];
-
-      let changed = false;
-      idsToMark.forEach((id) => {
-        if (!readNotifsIds.includes(id)) {
-          readNotifsIds.push(id);
-          changed = true;
-        }
-      });
-
-      if (changed) {
-        await AsyncStorage.setItem('read_notifications', JSON.stringify(readNotifsIds));
-      }
+      await saveNotificationAction(currentUserId, 'read', getActionSources([notification]));
     } catch (e) {
       console.error('Error saving read notification status:', e);
+      showToast({ type: 'error', message: 'Could not mark the notification as read. Please try again.' });
     }
-
-    setApiNotifications((prev) =>
-      prev.map((n) => (idsToMark.includes(n.id) ? { ...n, read: true } : n))
-    );
-    setLiveAppNotifications((prev) =>
-      prev.map((n) => (idsToMark.includes(n.id) ? { ...n, read: true } : n))
-    );
-    setChatNotifications((prev) =>
-      prev.map((n) => (idsToMark.includes(n.id) ? { ...n, read: true } : n))
-    );
 
     if (notification.type === 'message') {
       if (currentUserId) {
@@ -601,24 +607,58 @@ export default function NotificationsScreen() {
   };
 
   const handleMarkAllRead = async () => {
+    if (!currentUserId || actionInProgress.current || preferencesError) return;
+    actionInProgress.current = true;
+    setWorking(true);
     try {
-      const allIds: string[] = [];
-      combinedNotifications.forEach((n) => {
-        if (Array.isArray(n.mergedIds)) {
-          allIds.push(...n.mergedIds);
-        } else if (n.id) {
-          allIds.push(n.id);
-        }
-      });
-      allIds.forEach((id) => readNotificationIds.current.add(id));
-      await AsyncStorage.setItem('read_notifications', JSON.stringify(Array.from(new Set(allIds))));
+      await saveNotificationAction(currentUserId, 'read', getActionSources(combinedNotifications));
+      showToast({ type: 'success', message: 'All notifications marked as read.' });
     } catch (e) {
       console.error('Error marking all as read:', e);
+      showToast({ type: 'error', message: 'Could not mark notifications as read. Please try again.' });
+    } finally {
+      actionInProgress.current = false;
+      setWorking(false);
     }
+  };
 
-    setApiNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setLiveAppNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setChatNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const getActionSources = (items: any[]) => getNotificationActionSources(items, [
+    ...apiNotifications, ...liveAppNotifications, ...chatNotifications,
+  ]);
+
+  const toggleSelection = (id: string) => {
+    if (actionInProgress.current) return;
+    setSelectedIds(previous => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedNotifications = combinedNotifications.filter(item => selectedIds.has(item.id));
+  const selectedCount = selectedNotifications.length;
+  const allVisibleSelected = filteredList.length > 0 && filteredList.every(item => selectedIds.has(item.id));
+  const screenLoading = loading || (!!currentUserId && !preferencesReady);
+  const actionsDisabled = screenLoading || working || !!preferencesError;
+
+  const handleDeleteSelected = async () => {
+    if (!currentUserId || !deleteTargets || actionInProgress.current || preferencesError) return;
+    const targets = deleteTargets;
+    setDeleteTargets(null);
+    actionInProgress.current = true;
+    setWorking(true);
+    try {
+      await saveNotificationAction(currentUserId, 'deleted', targets);
+      exitSelection();
+      showToast({ type: 'success', title: 'Notifications deleted', message: 'Selected notifications have been removed.' });
+    } catch (error) {
+      console.error('Error deleting notifications:', error);
+      showToast({ type: 'error', message: 'Could not delete notifications. Your selection has been kept. Please try again.' });
+    } finally {
+      actionInProgress.current = false;
+      setWorking(false);
+    }
   };
 
   const filterTabs: { key: FilterTab; label: string; count: number; icon: React.ComponentProps<typeof MaterialIcons>['name'] }[] = [
@@ -627,7 +667,6 @@ export default function NotificationsScreen() {
     { key: 'messages', label: 'Messages', count: msgCount, icon: 'chat-bubble-outline' },
     { key: 'updates', label: 'Updates', count: updateCount, icon: 'info-outline' },
   ];
-  const accentSurface = isDark ? colors.primary + '1F' : '#FEF2F2';
 
   return (
     <View style={{ backgroundColor: colors.background }} className="flex-1">
@@ -635,33 +674,48 @@ export default function NotificationsScreen() {
       <View className="w-full max-w-2xl self-center px-5 pb-3" style={{ paddingTop: insets.top + 8 }}>
         <View className="flex-row items-center gap-3">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => { if (!working) { if (selectionMode) exitSelection(); else router.back(); } }}
+            disabled={working}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={selectionMode ? 'Cancel selection' : 'Go back'}
             className="h-11 w-11 items-center justify-center"
           >
             <MaterialIcons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
-          <Text style={{ color: colors.text }} className="flex-1 text-xl font-bold">Notifications</Text>
+          <Text style={{ color: colors.text }} className="flex-1 text-xl font-bold">{selectionMode ? `${selectedCount} selected` : 'Notifications'}</Text>
+          {combinedNotifications.length > 0 && <TouchableOpacity
+            onPress={() => {
+              if (!selectionMode) { setSelectionMode(true); return; }
+              setSelectedIds(new Set(allVisibleSelected ? [] : filteredList.map(item => item.id)));
+            }}
+            disabled={actionsDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={selectionMode ? allVisibleSelected ? 'Deselect all notifications in this filter' : 'Select all notifications in this filter' : 'Select notifications'}
+            className="min-h-11 items-center justify-center px-2"
+          >
+            <Text className="text-xs font-semibold" style={{ color: actionsDisabled ? colors.textSecondary : colors.accent }}>{selectionMode ? allVisibleSelected ? 'Deselect all' : 'Select all' : 'Select'}</Text>
+          </TouchableOpacity>}
         </View>
         <View className="mt-4 flex-row items-center justify-between gap-3">
           <View className="flex-1 flex-row items-center gap-2">
             <View className="h-2 w-2 rounded-full" style={{ backgroundColor: unreadCount > 0 ? colors.accent : colors.textSecondary }} />
             <Text style={{ color: colors.textSecondary }} className="flex-1 text-xs">
-              {loading ? 'Loading your updates...' : unreadCount > 0 ? unreadCount + ' unread notification' + (unreadCount === 1 ? '' : 's') : "You're all caught up"}
+              {selectionMode ? 'Tap notifications to select.' : screenLoading ? 'Loading your updates...' : unreadCount > 0 ? unreadCount + ' unread notification' + (unreadCount === 1 ? '' : 's') : "You're all caught up"}
             </Text>
           </View>
           <TouchableOpacity
-            onPress={handleMarkAllRead}
-            disabled={loading || unreadCount === 0}
+            onPress={() => {
+              if (selectionMode) setDeleteTargets(getActionSources(selectedNotifications));
+              else void handleMarkAllRead();
+            }}
+            disabled={actionsDisabled || (selectionMode ? selectedCount === 0 : unreadCount === 0)}
             accessibilityRole="button"
-            accessibilityLabel="Mark all notifications as read"
-            accessibilityState={{ disabled: loading || unreadCount === 0 }}
+            accessibilityLabel={selectionMode ? `Delete ${selectedCount} selected notifications` : 'Mark all notifications as read'}
+            accessibilityState={{ disabled: actionsDisabled || (selectionMode ? selectedCount === 0 : unreadCount === 0), busy: working }}
             className="min-h-11 flex-row items-center gap-1.5 rounded-xl px-3"
-            style={{ backgroundColor: unreadCount > 0 ? accentSurface : 'transparent' }}
           >
-            <MaterialIcons name="done-all" size={17} color={unreadCount > 0 ? colors.accent : colors.textSecondary} />
-            <Text style={{ color: unreadCount > 0 ? colors.accent : colors.textSecondary }} className="text-xs font-semibold">Mark all read</Text>
+            {working ? <ActivityIndicator size="small" color={colors.accent} /> : <MaterialIcons name={selectionMode ? 'delete-outline' : 'done-all'} size={19} color={actionsDisabled || (selectionMode ? selectedCount === 0 : unreadCount === 0) ? colors.textSecondary : colors.accent} />}
+            <Text style={{ color: actionsDisabled || (selectionMode ? selectedCount === 0 : unreadCount === 0) ? colors.textSecondary : colors.accent }} className="text-xs font-semibold">{selectionMode ? 'Delete' : 'Mark all read'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -673,7 +727,8 @@ export default function NotificationsScreen() {
             return (
               <TouchableOpacity
                 key={tab.key}
-                onPress={() => setActiveTab(tab.key)}
+                onPress={() => { setActiveTab(tab.key); exitSelection(); }}
+                disabled={working}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
                 accessibilityLabel={tab.label + ', ' + tab.count + ' notifications'}
@@ -691,7 +746,7 @@ export default function NotificationsScreen() {
         </ScrollView>
       </View>
 
-      {loading ? (
+      {screenLoading ? (
         <View className="flex-1 items-center justify-center gap-3">
           <ActivityIndicator size="small" color={colors.accent} />
           <Text className="text-xs" style={{ color: colors.textSecondary }}>Getting your notifications...</Text>
@@ -700,13 +755,17 @@ export default function NotificationsScreen() {
         <FlatList
           className="flex-1"
           data={filteredList}
+          extraData={{ selectionMode, selectedIds, working }}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerClassName="w-full max-w-2xl self-center px-5 pt-5"
           contentContainerStyle={{ paddingBottom: insets.bottom + 24, flexGrow: 1 }}
           ListHeaderComponent={filteredList.length > 0 ? (
             <View className="mb-4 flex-row items-center justify-between gap-3">
-              <Text style={{ color: colors.text }} className="text-sm font-semibold">Latest activity</Text>
+              <View className="flex-1">
+                <Text style={{ color: colors.text }} className="text-sm font-semibold">Latest activity</Text>
+                {!selectionMode && <Text className="mt-1 text-[11px]" style={{ color: colors.textSecondary }}>Long press to select notifications</Text>}
+              </View>
               <View className="flex-row items-center gap-1">
                 <MaterialIcons name="arrow-downward" size={13} color={colors.textSecondary} />
                 <Text style={{ color: colors.textSecondary }} className="text-[11px]">Newest first</Text>
@@ -715,7 +774,7 @@ export default function NotificationsScreen() {
           ) : null}
           ListEmptyComponent={
             <View className="mt-8 items-center rounded-3xl border px-6 py-10" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-              <View className="h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: accentSurface }}>
+              <View className="h-16 w-16 items-center justify-center">
                 <MaterialIcons name="notifications-none" size={30} color={colors.accent} />
               </View>
               <Text style={{ color: colors.text }} className="mt-5 text-center text-base font-semibold">
@@ -728,9 +787,32 @@ export default function NotificationsScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => <NotificationCard notification={item} onPress={() => handleNotificationPress(item)} />}
+          renderItem={({ item }) => <NotificationCard
+            notification={item}
+            selectionMode={selectionMode}
+            selected={selectedIds.has(item.id)}
+            disabled={working}
+            onPress={() => { void handleNotificationPress(item); }}
+            onLongPress={() => {
+              if (working) return;
+              setSelectionMode(true);
+              setSelectedIds(previous => new Set(previous).add(item.id));
+            }}
+          />}
         />
       )}
+      <NotificationModal
+        visible={deleteTargets !== null}
+        title="Delete selected notifications?"
+        message="Remove these notifications from this device? Your applications and conversations will stay available."
+        iconName="delete-outline"
+        primaryButtonText="Delete"
+        onPrimaryPress={() => { void handleDeleteSelected(); }}
+        secondaryButtonText="Cancel"
+        onSecondaryPress={() => setDeleteTargets(null)}
+        onRequestClose={() => setDeleteTargets(null)}
+        onBackdropPress={() => setDeleteTargets(null)}
+      />
     </View>
   );
 }

@@ -108,7 +108,7 @@ test('light and dark cards retain the rating child, current-stage labels, and ho
     const rating = { type: 'Rating', props: {} };
     const tree = Card({ status: 'accepted', companyName: 'Cafe', applicationId: 83, appliedAt, hiredAt, updatedAt, children: rating });
     assert.equal(tree.props.title, 'Application trail');
-    assert.equal(tree.props.children.at(-1), rating);
+    assert.ok(tree.props.children.includes(rating));
     const nodes = [];
     const visit = node => {
       if (Array.isArray(node)) return node.forEach(visit);

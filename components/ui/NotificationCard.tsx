@@ -12,6 +12,10 @@ interface NotificationCardProps {
     read?: boolean;
   };
   onPress: () => void;
+  onLongPress?: () => void;
+  selectionMode?: boolean;
+  selected?: boolean;
+  disabled?: boolean;
 }
 
 type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
@@ -27,7 +31,7 @@ const typeConfig: Record<string, { icon: IconName; label: string }> = {
   general: { icon: 'notifications-none', label: 'Update' },
 };
 
-export default function NotificationCard({ notification, onPress }: NotificationCardProps) {
+export default function NotificationCard({ notification, onPress, onLongPress, selectionMode = false, selected = false, disabled = false }: NotificationCardProps) {
   const { colors, isDark } = useDarkMode();
   const title = notification.title || 'Notification';
   const normalizedTitle = title.toLowerCase();
@@ -53,14 +57,21 @@ export default function NotificationCard({ notification, onPress }: Notification
   return (
     <TouchableOpacity
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
+      disabled={disabled}
       activeOpacity={0.75}
-      accessibilityRole="button"
+      accessibilityRole={selectionMode ? 'checkbox' : 'button'}
+      accessibilityState={selectionMode ? { checked: selected, disabled } : { disabled }}
       accessibilityLabel={title + (unread ? ', unread' : '')}
+      accessibilityHint={selectionMode ? 'Tap to change selection.' : 'Long press to select this notification.'}
+      accessibilityActions={onLongPress && !selectionMode ? [{ name: 'select', label: 'Select notification' }] : undefined}
+      onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'select') onLongPress?.(); }}
       className="mb-3 flex-row items-start gap-3 rounded-2xl border p-4"
-      style={{ backgroundColor: colors.surface, borderColor: unread ? colors.accent + '40' : colors.border }}
+      style={{ backgroundColor: colors.surface, borderColor: selected ? colors.accent : unread ? colors.accent + '40' : colors.border }}
     >
-      <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: iconColor + (isDark ? '20' : '12') }}>
-        <MaterialIcons name={config.icon} size={21} color={iconColor} />
+      <View className="h-10 w-10 items-center justify-center">
+        <MaterialIcons name={selectionMode ? selected ? 'check-box' : 'check-box-outline-blank' : config.icon} size={selectionMode ? 24 : 21} color={selectionMode ? selected ? colors.accent : colors.textSecondary : iconColor} accessible={false} />
       </View>
       <View className="min-w-0 flex-1">
         <View className="mb-1.5 flex-row items-center justify-between gap-2">
@@ -76,7 +87,7 @@ export default function NotificationCard({ notification, onPress }: Notification
             <MaterialIcons name="access-time" size={12} color={colors.textSecondary} />
             <Text className="flex-1 text-[10px]" style={{ color: colors.textSecondary }}>{notification.timestamp || 'Recent'}</Text>
           </View>
-          {hasDestination && <MaterialIcons name="chevron-right" size={18} color={colors.textSecondary} />}
+          {hasDestination && !selectionMode && <MaterialIcons name="chevron-right" size={18} color={colors.textSecondary} />}
         </View>
       </View>
     </TouchableOpacity>

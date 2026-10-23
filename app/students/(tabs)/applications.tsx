@@ -304,19 +304,19 @@ export default function ApplicationsScreen() {
 
   const getStatusConfig = (statusRaw?: string) => {
     const status = String(statusRaw || '').toLowerCase();
-    const configs: Record<string, { label: string; icon: keyof typeof MaterialIcons.glyphMap; light: string; dark: string; fill: string; darkFill: string }> = {
-      pending: { label: 'Pending', icon: 'hourglass-empty', light: '#B45309', dark: '#FCD34D', fill: '#FFFBEB', darkFill: '#422F16' },
-      viewed: { label: 'Viewed', icon: 'visibility', light: '#1D4ED8', dark: '#93C5FD', fill: '#EFF6FF', darkFill: '#172F4D' },
-      shortlisted: { label: 'Shortlisted', icon: 'star-outline', light: '#4338CA', dark: '#C7D2FE', fill: '#EEF2FF', darkFill: '#2A2850' },
-      interview: { label: 'For interview', icon: 'event-available', light: '#B45309', dark: '#FCD34D', fill: '#FFFBEB', darkFill: '#422F16' },
-      accepted: { label: 'Accepted', icon: 'check-circle-outline', light: '#047857', dark: '#6EE7B7', fill: '#ECFDF5', darkFill: '#143B32' },
-      completed: { label: 'Completed', icon: 'task-alt', light: '#0F766E', dark: '#5EEAD4', fill: '#F0FDFA', darkFill: '#153C3D' },
-      rejected: { label: 'Declined', icon: 'cancel', light: '#BE123C', dark: '#FDA4AF', fill: '#FFF1F2', darkFill: '#43232F' },
-      terminated: { label: 'Terminated', icon: 'block', light: '#BE123C', dark: '#FDA4AF', fill: '#FFF1F2', darkFill: '#43232F' },
-      cancelled: { label: 'Cancelled', icon: 'remove-circle-outline', light: '#475569', dark: '#CBD5E1', fill: '#F1F5F9', darkFill: '#263449' },
+    const configs: Record<string, { label: string; icon: keyof typeof MaterialIcons.glyphMap; light: string; dark: string }> = {
+      pending: { label: 'Pending', icon: 'hourglass-empty', light: '#B45309', dark: '#FCD34D' },
+      viewed: { label: 'Viewed', icon: 'visibility', light: '#1D4ED8', dark: '#93C5FD' },
+      shortlisted: { label: 'Shortlisted', icon: 'star-outline', light: '#4338CA', dark: '#C7D2FE' },
+      interview: { label: 'For interview', icon: 'event-available', light: '#B45309', dark: '#FCD34D' },
+      accepted: { label: 'Accepted', icon: 'check-circle-outline', light: '#047857', dark: '#6EE7B7' },
+      completed: { label: 'Completed', icon: 'task-alt', light: '#0F766E', dark: '#5EEAD4' },
+      rejected: { label: 'Declined', icon: 'cancel', light: '#BE123C', dark: '#FDA4AF' },
+      terminated: { label: 'Terminated', icon: 'block', light: '#BE123C', dark: '#FDA4AF' },
+      cancelled: { label: 'Cancelled', icon: 'remove-circle-outline', light: '#475569', dark: '#CBD5E1' },
     };
-    const config = configs[status] || { label: statusRaw || 'Unknown status', icon: 'info-outline' as const, light: '#475569', dark: '#CBD5E1', fill: '#F1F5F9', darkFill: '#263449' };
-    return { label: config.label, icon: config.icon, color: isDark ? config.dark : config.light, background: isDark ? config.darkFill : config.fill };
+    const config = configs[status] || { label: statusRaw || 'Unknown status', icon: 'info-outline' as const, light: '#475569', dark: '#CBD5E1' };
+    return { label: config.label, icon: config.icon, color: isDark ? config.dark : config.light };
   };
 
   const renderApplication = ({ item: app }: { item: any }) => {
@@ -333,7 +333,7 @@ export default function ApplicationsScreen() {
       <View className="mx-6 mb-4 rounded-3xl border overflow-hidden" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
         <TouchableOpacity onPress={() => handleCardPress(app)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View application for ${job.title || 'Job Opening'} at ${companyName}`} className="p-5 pb-4">
           <View className="flex-row flex-wrap items-center justify-between gap-2 mb-4">
-            <View className="flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: statusConfig.background }}>
+            <View className="flex-row items-center gap-1.5 py-1.5">
               <MaterialIcons name={statusConfig.icon} size={14} color={statusConfig.color} />
               <Text className="text-xs font-semibold" style={{ color: statusConfig.color }}>{statusConfig.label}</Text>
             </View>
@@ -377,8 +377,8 @@ export default function ApplicationsScreen() {
   };
 
   const renderEmptyState = () => (
-    <View className="mx-6 rounded-3xl border px-6 py-8 items-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-      {loading ? <ActivityIndicator size="large" color={colors.primary} /> : <View className="w-16 h-16 rounded-3xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={loadError ? 'wifi-off' : activeTab === 'All' ? 'inbox' : 'filter-list'} size={30} color={accentText} /></View>}
+    <View className="mx-6 px-6 py-8 items-center">
+      {loading ? <ActivityIndicator size="large" color={colors.primary} /> : <View className="w-16 h-16 items-center justify-center"><MaterialIcons name={loadError ? 'wifi-off' : activeTab === 'All' ? 'assignment' : 'filter-list'} size={44} color={accentText} accessible={false} /></View>}
       <Text className="text-lg font-bold text-center mt-4" style={{ color: colors.text }}>{loading ? 'Loading applications' : loadError ? 'Unable to load applications' : activeTab === 'All' ? 'No applications yet' : `No ${activeTab.toLowerCase()} applications`}</Text>
       <Text className="text-sm leading-6 text-center mt-2" style={{ color: colors.textSecondary }}>{loading ? 'Your application updates will appear here shortly.' : loadError ? 'Check your connection and try again.' : activeTab === 'All' ? 'Explore available jobs and find a role that fits your schedule.' : 'Choose another status or view all your applications.'}</Text>
       {!loading && <TouchableOpacity onPress={() => { if (loadError) onRefresh(); else if (activeTab === 'All') router.push('/students/(tabs)/home'); else setActiveTab('All'); }} activeOpacity={0.8} accessibilityRole="button" className="min-h-12 flex-row items-center gap-2 px-4 rounded-xl mt-5" style={{ backgroundColor: accentSurface }}><Text className="text-sm font-semibold" style={{ color: accentText }}>{loadError ? 'Try again' : activeTab === 'All' ? 'Explore jobs' : 'View all applications'}</Text><MaterialIcons name={loadError ? 'refresh' : 'arrow-forward'} size={16} color={accentText} /></TouchableOpacity>}

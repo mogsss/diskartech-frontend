@@ -1,5 +1,8 @@
 import api, { STORAGE_URL } from '@/api/axios';
 import Avatar from '@/components/ui/Avatar';
+import ConversationSelectionActions from '@/components/chat/ConversationSelectionActions';
+import { useConversationSelection } from '@/hooks/useConversationSelection';
+import { mergeConversationThreads } from '@/utils/conversationActions';
 import EmployerTabBarSpacer from '@/components/employer/EmployerTabBarSpacer';
 import SearchBar from '@/components/ui/SearchBar';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
@@ -176,25 +179,7 @@ export default function EmployerMessagesScreen() {
           return timeB - timeA;
         });
 
-        // 1-on-1 thread deduplication: iisa lang ang card bawat kausap!
-        const seenIds = new Set<string>();
-        const seenNames = new Set<string>();
-
-        const uniqueConvs = firestoreConvs.filter((conv) => {
-          const id = conv.otherUserId ? String(conv.otherUserId).trim() : '';
-          const name = conv.senderName ? conv.senderName.trim().toLowerCase() : '';
-
-          const hasSeenId = Boolean(id && id !== 'unknown' && seenIds.has(id));
-          const hasSeenName = Boolean(name && seenNames.has(name));
-
-          if (hasSeenId || hasSeenName) {
-            return false;
-          }
-
-          if (id && id !== 'unknown') seenIds.add(id);
-          if (name) seenNames.add(name);
-          return true;
-        });
+        const uniqueConvs = mergeConversationThreads(firestoreConvs);
 
         setConversationsList(uniqueConvs);
         setLoading(false);
@@ -234,6 +219,12 @@ export default function EmployerMessagesScreen() {
   }, [currentOwnerId, retryVersion]);
 
   const handleConversationPress = (conversationId: string) => {
+    if (selection.busy) return;
+    if (selection.mode) {
+      const conversation = conversationsList.find(item => item.id === conversationId);
+      if (conversation) selection.toggle(conversation);
+      return;
+    }
     router.push(`/chat?id=${conversationId}` as any);
   };
 
@@ -258,18 +249,28 @@ export default function EmployerMessagesScreen() {
   });
   const resetFilters = () => { setSearchQuery(''); setActiveFilter('All'); };
   const retry = () => setRetryVersion((version) => version + 1);
+  const selection = useConversationSelection(currentOwnerId, conversationsList, filteredConversations);
 
   const renderConversation = ({ item: conversation }: { item: Conversation }) => {
     const profile = getDisplayProfile(conversation);
     return (
       <TouchableOpacity
         onPress={() => handleConversationPress(conversation.id)}
+        onLongPress={() => selection.enter(conversation)}
+        delayLongPress={350}
+        disabled={selection.busy}
         activeOpacity={0.75}
-        accessibilityRole="button"
+        accessibilityRole={selection.mode ? 'checkbox' : 'button'}
+        accessibilityState={selection.mode ? { checked: selection.isSelected(conversation), disabled: selection.busy } : { disabled: selection.busy }}
+        accessibilityHint={selection.mode ? 'Tap to change selection.' : 'Long press to select this conversation.'}
+        accessibilityActions={!selection.mode ? [{ name: 'select', label: 'Select conversation' }] : undefined}
+        onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'select') selection.enter(conversation); }}
         accessibilityLabel={`${profile.name}${conversation.unread ? ', unread message' : ''}: ${conversation.lastMessage}`}
         className="px-6 py-3 flex-row items-center gap-3"
+        style={{ backgroundColor: selection.isSelected(conversation) ? accentSurface : 'transparent' }}
       >
-        <Avatar uri={profile.avatar} name={profile.name} size={56} />
+        {selection.mode && <MaterialIcons name={selection.isSelected(conversation) ? 'check-box' : 'check-box-outline-blank'} size={24} color={selection.isSelected(conversation) ? accentText : colors.textSecondary} accessible={false} />}
+        <Avatar uri={profile.avatar} name={profile.name} size={selection.mode ? 40 : 56} />
         <View className="flex-1">
           <View className="flex-row items-start justify-between gap-2">
             <View className="flex-1 flex-row items-center gap-1.5">
@@ -304,18 +305,19 @@ export default function EmployerMessagesScreen() {
       <SafeStatusBar />
       <View className="w-full max-w-2xl self-center shrink-0 px-6 pt-2 pb-3">
         <View className="flex-row items-center gap-3">
-          <DrawerMenuButton onPress={() => setDrawerVisible(true)} />
+          {selection.mode ? <TouchableOpacity onPress={selection.exit} disabled={selection.busy} accessibilityRole="button" accessibilityLabel="Cancel conversation selection" className="w-12 h-12 items-center justify-center"><MaterialIcons name="arrow-back" size={23} color={colors.text} /></TouchableOpacity> : <DrawerMenuButton onPress={() => setDrawerVisible(true)} />}
           <View className="flex-1">
-            <Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }}>Messages</Text>
+            <Text className="text-xl font-bold tracking-tight" style={{ color: colors.text }} numberOfLines={1}>{selection.mode ? `${selection.selectedCount} selected` : 'Messages'}</Text>
           </View>
+          <ConversationSelectionActions selection={selection} disabled={loading || !filteredConversations.length} />
         </View>
-        <View className="mt-3"><SearchBar placeholder="Search conversations" value={searchQuery} onChangeText={(value) => { setSearchQuery(value); listRef.current?.scrollToOffset({ offset: 0, animated: false }); }} onSearch={() => Keyboard.dismiss()} /></View>
+        <View className="mt-3"><SearchBar placeholder="Search conversations" value={searchQuery} onChangeText={(value) => { if (selection.busy) return; selection.exit(); setSearchQuery(value); listRef.current?.scrollToOffset({ offset: 0, animated: false }); }} onSearch={() => Keyboard.dismiss()} /></View>
         <View className="flex-row items-center gap-2 mt-3">
           {(['All', 'Unread'] as const).map((filter) => {
             const selected = activeFilter === filter;
             const count = filter === 'All' ? conversationsList.length : unreadCount;
             return (
-              <TouchableOpacity key={filter} onPress={() => { setActiveFilter(filter); listRef.current?.scrollToOffset({ offset: 0, animated: true }); }} activeOpacity={0.75} accessibilityRole="button" accessibilityState={{ selected }} className="min-h-12 flex-row items-center gap-2 rounded-xl border px-4 py-2.5" style={{ backgroundColor: selected ? colors.primary : colors.surface, borderColor: selected ? colors.primary : colors.border }}>
+              <TouchableOpacity key={filter} onPress={() => { selection.exit(); setActiveFilter(filter); listRef.current?.scrollToOffset({ offset: 0, animated: true }); }} disabled={selection.busy} activeOpacity={0.75} accessibilityRole="button" accessibilityState={{ selected }} className="min-h-12 flex-row items-center gap-2 rounded-xl border px-4 py-2.5" style={{ backgroundColor: selected ? colors.primary : colors.surface, borderColor: selected ? colors.primary : colors.border }}>
                 <Text className="text-xs font-semibold" style={{ color: selected ? '#FFFFFF' : colors.textSecondary }}>{filter}</Text>
                 {!loading && <View className="min-w-5 rounded-full items-center justify-center px-1.5 py-0.5" style={{ backgroundColor: selected ? 'rgba(255, 255, 255, 0.2)' : subtle }}><Text className="text-xs font-medium" style={{ color: selected ? '#FFFFFF' : colors.textSecondary }}>{count}</Text></View>}
               </TouchableOpacity>
@@ -327,6 +329,7 @@ export default function EmployerMessagesScreen() {
         ref={listRef}
         className="flex-1"
         data={loading ? [] : filteredConversations}
+        extraData={selection}
         keyExtractor={(conversation) => conversation.id}
         renderItem={renderConversation}
         contentContainerClassName="w-full max-w-2xl self-center pt-2 pb-6"

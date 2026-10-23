@@ -69,21 +69,25 @@ export default function JobDetailsModal({ visible, onClose, job, onJobUpdated }:
         <View
           style={{ height: '90%', backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1 }}
           className="rounded-t-[28px] overflow-hidden"
+          accessibilityViewIsModal
+          onAccessibilityEscape={onClose}
         >
-          <View className="px-5 pt-3 pb-3 border-b" style={{ borderBottomColor: colors.border }}>
-            <View className="w-9 h-1 rounded-full self-center mb-3" style={{ backgroundColor: colors.border }} />
-            <View className="flex-row items-center justify-between">
-              <Text className="text-[11px] font-semibold tracking-widest" style={{ color: colors.textSecondary }}>JOB DETAILS</Text>
-              <TouchableOpacity
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss job details"
-                activeOpacity={0.7}
-                className="w-10 h-10 rounded-xl items-center justify-center"
-                style={{ backgroundColor: isDark ? colors.background : '#F1F5F9' }}
-              >
-                <MaterialIcons name="close" size={20} color={colors.text} />
-              </TouchableOpacity>
+          <View className="px-5 pb-4 border-b" style={{ borderBottomColor: colors.border }}>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close job details"
+              activeOpacity={0.7}
+              className="min-h-11 items-center justify-center py-4"
+            >
+              <View className="w-9 h-1 rounded-full" style={{ backgroundColor: colors.textSecondary }} />
+            </TouchableOpacity>
+            <View className="flex-row items-center justify-between gap-3">
+              <Text className="flex-1 text-[11px] font-semibold tracking-widest" style={{ color: colors.textSecondary }}>JOB DETAILS</Text>
+              <View className="flex-row items-center gap-1.5 py-1.5">
+                <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
+                <Text className="text-[10px] font-semibold" style={{ color: statusColor }}>{statusLabel}</Text>
+              </View>
             </View>
           </View>
 
@@ -94,12 +98,8 @@ export default function JobDetailsModal({ visible, onClose, job, onJobUpdated }:
           >
             <View className="mb-5">
               <View className="flex-row items-center gap-2 mb-3">
-                <View className="px-2.5 py-1.5 rounded-lg" style={{ maxWidth: '70%', backgroundColor: isDark ? colors.background : '#F1F5F9' }}>
+                <View className="py-1.5" style={{ maxWidth: '100%' }}>
                   <Text className="text-[11px] font-medium" style={{ color: colors.textSecondary }} numberOfLines={1}>{job.category || 'General'}</Text>
-                </View>
-                <View className="flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-full" style={{ backgroundColor: isActive ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5') : (isDark ? colors.background : '#F1F5F9') }}>
-                  <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
-                  <Text className="text-[10px] font-semibold" style={{ color: statusColor }}>{statusLabel}</Text>
                 </View>
               </View>
               <Text className="text-2xl font-bold tracking-tight leading-8" style={{ color: colors.text }}>{job.title}</Text>

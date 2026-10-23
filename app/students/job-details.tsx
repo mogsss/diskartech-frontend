@@ -507,8 +507,8 @@ export default function JobDetailsScreen() {
         contentContainerStyle={{ padding: 20, paddingBottom: 8 }}
       >
         <View className="rounded-2xl border p-4 mb-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="self-start px-2.5 py-1.5 rounded-lg mb-3" style={{ maxWidth: '100%', backgroundColor: isDark ? colors.background : '#F1F5F9' }}>
-            <Text className="text-[11px] font-medium" style={{ color: colors.textSecondary }}>{job.category || 'General'}</Text>
+          <View className="self-end px-2.5 py-1.5 rounded-lg mb-3" style={{ maxWidth: '100%', backgroundColor: isDark ? colors.background : '#F1F5F9' }}>
+            <Text className="text-[11px] font-medium text-right" style={{ color: colors.textSecondary }}>{job.category || 'General'}</Text>
           </View>
           <Text className="text-2xl font-bold tracking-tight leading-8 mb-4" style={{ color: colors.text }}>{job.title}</Text>
           <View className="flex-row items-center gap-3 mb-4">
