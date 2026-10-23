@@ -30,6 +30,7 @@ async function fixture({ initiallySaved = false, fail = false } = {}) {
       BackHandler: { addEventListener: () => ({ remove() {} }) },
     },
     '@expo/vector-icons': { MaterialIcons: 'Icon' },
+    'expo-linear-gradient': { LinearGradient: 'LinearGradient' },
     'expo-router': { router: { push() {} }, useFocusEffect: effect => focusEffects.push(effect) },
     '@react-native-async-storage/async-storage': { getItem: async () => null },
     '@/api/axios': {
@@ -53,6 +54,7 @@ async function fixture({ initiallySaved = false, fail = false } = {}) {
     '@/hooks/useToast': { useToast: () => ({ showToast: options => toasts.push(options) }) },
     '@/hooks/useUnreadNotifications': { useUnreadNotifications: () => ({ hasUnread: false }) },
     '@/components/student/HomeJobCard': 'HomeJobCard', '@/components/ui/SearchBar': 'SearchBar',
+    '@/components/student/StudentTabBarSpacer': 'StudentTabBarSpacer',
     '@/components/ui/SafeStatusBar': 'SafeStatusBar', '@/components/ui/modals/SideDrawerMenu': 'SideDrawerMenu',
   };
   const filename = path.join(__dirname, '..', 'app/students/(tabs)/home.tsx');

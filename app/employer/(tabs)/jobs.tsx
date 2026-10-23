@@ -1,5 +1,6 @@
 import api, { STORAGE_URL } from '@/api/axios';
 import JobDetailsModal from '@/components/employer/modals/JobDetailsModal';
+import EmployerTabBarSpacer from '@/components/employer/EmployerTabBarSpacer';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
 import DrawerMenuButton from '@/components/ui/DrawerMenuButton';
@@ -411,6 +412,7 @@ export default function EmployerJobsScreen() {
             )}
           </>
         )}
+        <EmployerTabBarSpacer />
       </ScrollView>
 
       <JobDetailsModal

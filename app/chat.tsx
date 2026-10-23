@@ -443,13 +443,17 @@ export default function ChatScreen() {
             scrollToBottom(!isInitialLoad.current);
           }}
         >
-          {messagesList.map((msg) => (
+          {messagesList.map((msg) => {
+            const isPhoto = msg.attachment?.kind === 'image';
+            const photoOnly = isPhoto && !msg.text;
+            return (
             <View
               key={msg.id}
               style={{
                 maxWidth: '80%',
-                padding: 16,
+                padding: isPhoto ? 0 : 16,
                 borderRadius: 16,
+                overflow: isPhoto ? 'hidden' : 'visible',
                 marginBottom: 10,
                 alignSelf: msg.sender === 'me' ? 'flex-end' : 'flex-start',
                 borderBottomRightRadius: msg.sender === 'me' ? 4 : 16,
@@ -464,6 +468,8 @@ export default function ChatScreen() {
                 style={{
                   fontSize: 14,
                   lineHeight: 20,
+                  paddingHorizontal: isPhoto ? 12 : 0,
+                  paddingTop: isPhoto ? 10 : 0,
                   color: msg.sender === 'me' ? '#FFFFFF' : colors.text,
                 }}
               >
@@ -474,13 +480,23 @@ export default function ChatScreen() {
                   fontSize: 11,
                   marginTop: 4,
                   textAlign: 'right',
-                  color: msg.sender === 'me' ? 'rgba(255, 255, 255, 0.75)' : colors.textSecondary,
+                  color: photoOnly ? '#FFFFFF' : msg.sender === 'me' ? 'rgba(255, 255, 255, 0.75)' : colors.textSecondary,
+                  ...(photoOnly ? {
+                    position: 'absolute',
+                    right: 8,
+                    bottom: 8,
+                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                    borderRadius: 8,
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                  } : isPhoto ? { paddingHorizontal: 12, paddingBottom: 10 } : {}),
                 }}
               >
                 {msg.timestamp}
               </Text>
             </View>
-          ))}
+            );
+          })}
         </ScrollView>
 
         {attachmentMenu && (

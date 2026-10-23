@@ -1,4 +1,5 @@
 import Avatar from '@/components/ui/Avatar';
+import EmployerTabBarSpacer from '@/components/employer/EmployerTabBarSpacer';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -692,6 +693,7 @@ export default function EmployerProfileScreen() {
             </TouchableOpacity>)}
           </View>
         </View>
+        <EmployerTabBarSpacer />
       </ScrollView>
 
       <LoadingModal visible={uploadingDoc || uploadingProfilePicture} message={uploadingProfilePicture ? 'Uploading profile picture...' : 'Uploading verification document...'} />

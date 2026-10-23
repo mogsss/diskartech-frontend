@@ -76,7 +76,7 @@ export default function WelcomeScreen() {
               overflow: 'hidden',
               backgroundColor: '#B91C1C',
               borderWidth: 2.5,
-              borderColor: '#FFFFFF',
+              borderColor: '#DC2626',
               marginBottom: 14,
               alignItems: 'center',
               justifyContent: 'center',
@@ -96,30 +96,20 @@ export default function WelcomeScreen() {
 
           {/* Brand Name */}
           <Text
-            className="text-4xl font-black tracking-wide text-center"
-            style={{ color: '#FFFFFF' }}
+            className="text-4xl text-center"
+            style={{ color: '#FFFFFF', fontFamily: 'Poppins-Bold', letterSpacing: -0.8, lineHeight: 44 }}
           >
             DiskarTech
           </Text>
 
           {/* Subtitle */}
           <Text
-            className="text-base font-semibold mt-1 text-center"
-            style={{ color: 'rgba(255, 255, 255, 0.95)' }}
+            className="text-base mt-1 text-center"
+            style={{ color: 'rgba(255, 255, 255, 0.95)', fontFamily: 'Poppins-Regular', lineHeight: 24 }}
           >
-            Smart Jobs for Working Studentss
+            Smart Jobs for Working Students
           </Text>
 
-          {/* Status Pill with Green Indicator Dot */}
-          <View className="flex-row items-center gap-1.5 mt-3 px-4 py-1.5 rounded-full bg-white/15 border border-white/25 shadow-xs">
-            <View className="w-2 h-2 rounded-full bg-emerald-400" />
-            <Text
-              className="text-[11px] font-bold tracking-wide"
-              style={{ color: '#FFFFFF' }}
-            >
-              Student Job-Matching Platform
-            </Text>
-          </View>
         </LinearGradient>
 
         {/* Action Center - Dark Curved Sheet with Bold Top Border Radius Over Red */}
@@ -151,19 +141,18 @@ export default function WelcomeScreen() {
 
             {/* Direct Action Buttons */}
             <View className="gap-3">
-              {/* Primary Action: Direct to Registration */}
+              {/* Primary Action: Direct to Login */}
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => router.push('/auth/student-register')}
+                onPress={() => router.push('/auth/login')}
                 accessibilityRole="button"
-                accessibilityLabel="Create an account"
+                accessibilityLabel="Log in to your account"
                 style={{ minHeight: 50, backgroundColor: colors.primary }}
-                className="w-full px-4 py-3.5 rounded-xl flex-row items-center justify-center gap-2"
+                className="w-full px-4 py-3.5 rounded-[20px] flex-row items-center justify-center gap-2"
               >
-                <Text className="text-sm font-semibold text-white text-center">
-                  Create an account
+                <Text className="text-lg font-semibold text-white text-center">
+                  Log in
                 </Text>
-                <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
               </TouchableOpacity>
 
               {/* Google sign-in through the existing login flow */}
@@ -177,24 +166,29 @@ export default function WelcomeScreen() {
                   backgroundColor: isDark ? colors.surface : '#FFFFFF',
                   borderColor: colors.border,
                 }}
-                className="w-full px-4 py-3.5 rounded-xl flex-row items-center justify-center gap-2.5 border"
+                className="w-full px-4 py-3.5 rounded-[20px] flex-row items-center justify-center gap-2.5 border"
               >
                 <Image source={require('../../assets/images/google-g.png')} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                <Text className="text-sm font-semibold text-center" style={{ color: colors.text }}>
+                <Text className="text-sm font-semibold text-center " style={{ color: colors.text }}>
                   Continue with Google
                 </Text>
               </TouchableOpacity>
             </View>
-            <View className="flex-row flex-wrap items-center justify-center mt-3">
-              <Text className="text-xs" style={{ color: colors.textSecondary }}>Already have an account?</Text>
+            <View className="flex-row items-center gap-4 mt-6 mb-3">
+              <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
+              <Text className="text-sm" style={{ color: colors.textSecondary }}>or</Text>
+              <View className="flex-1 h-px" style={{ backgroundColor: colors.border }} accessible={false} />
+            </View>
+            <View className="flex-row flex-wrap items-center justify-center">
+              <Text className="text-xs" style={{ color: colors.textSecondary }}>Don&apos;t have an account?</Text>
               <TouchableOpacity
-                onPress={() => router.push('/auth/login')}
+                onPress={() => router.push('/auth/student-register')}
                 accessibilityRole="button"
-                accessibilityLabel="Log in to your account"
+                accessibilityLabel="Create an account"
                 activeOpacity={0.7}
                 className="min-h-11 px-2 items-center justify-center"
               >
-                <Text className="text-xs font-semibold" style={{ color: isDark ? colors.accent : colors.primary }}>Log in</Text>
+                <Text className="text-xs font-semibold" style={{ color: isDark ? colors.accent : colors.primary }}>Create an account</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -12,6 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Avatar from '@/components/ui/Avatar';
+import StudentTabBarSpacer from '@/components/student/StudentTabBarSpacer';
 import { formatDate } from '@/utils/helpers';
 import api, { STORAGE_URL } from '@/api/axios';
 import NotificationModal from '@/components/ui/modals/NotificationModal';
@@ -412,6 +413,7 @@ export default function ApplicationsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         ListHeaderComponent={<View className="px-6 pt-4 pb-4"><Text className="text-lg font-bold" style={{ color: colors.text }}>{activeTab === 'All' ? 'Your applications' : `${activeTab} applications`}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Open an application to see updates and next steps.</Text>{loadError && applications.length > 0 && <TouchableOpacity onPress={onRefresh} accessibilityRole="button" activeOpacity={0.75} className="flex-row items-center gap-2 rounded-xl p-3 mt-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="refresh" size={18} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: accentText }}>Could not refresh applications. Tap to retry.</Text></TouchableOpacity>}</View>}
         ListEmptyComponent={renderEmptyState()}
+        ListFooterComponent={StudentTabBarSpacer}
       />
       <NotificationModal
         visible={notification.visible}

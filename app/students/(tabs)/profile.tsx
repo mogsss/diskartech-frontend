@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import Avatar from '@/components/ui/Avatar';
+import StudentTabBarSpacer from '@/components/student/StudentTabBarSpacer';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import AddSkillModal from '@/components/student/modals/AddSkillModal';
 import EditAvailabilityModal from '@/components/student/modals/EditAvailabilityModal';
@@ -253,6 +254,7 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+        <StudentTabBarSpacer />
       </ScrollView>
       <LoadingModal visible={uploadingProfilePicture || uploadingDocument !== null} message={uploadingProfilePicture ? 'Uploading profile picture...' : uploadingDocument === 'student_resume' ? 'Uploading resume...' : 'Uploading verification document...'} />
       <AddSkillModal

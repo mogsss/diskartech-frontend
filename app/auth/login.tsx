@@ -269,11 +269,11 @@ export default function LoginScreen() {
       } else if (status === 404 || responseData?.status === 'not_registered') {
         setModalConfig({
           title: 'Account Not Found',
-          message: 'Wala pang DiskarTech account na naka-link sa Google email na ito. Gusto mo bang mag-register muna?',
+          message: 'No DiskarTech account is linked to this Google email yet. Would you like to register first?',
           iconName: 'person-add',
           iconColor: Colors.primary,
           iconBgColor: '#FEF2F2',
-          primaryButtonText: 'Register as Student',
+          primaryButtonText: 'Register',
           onPrimaryPress: () => {
             setModalVisible(false);
             router.push('/auth/student-register');
@@ -283,14 +283,14 @@ export default function LoginScreen() {
         });
         setModalVisible(true);
       } else {
-        const errorMsg = responseData?.message || error.message || 'Hindi nakapasok gamit ang Google.';
+        const errorMsg = responseData?.message || error.message;
         setModalConfig({
           title: 'Google Login Failed',
           message: errorMsg,
           iconName: 'error',
           iconColor: '#DC2626',
           iconBgColor: '#FEF2F2',
-          primaryButtonText: 'Subukan Muli',
+          primaryButtonText: 'Try Again',
           onPrimaryPress: () => setModalVisible(false),
           secondaryButtonText: undefined,
           onSecondaryPress: undefined,
@@ -344,8 +344,8 @@ export default function LoginScreen() {
               <Text className="text-[28px] font-extrabold text-red-600">DiskarTech</Text>
             </View>
 
-            <Text style={{ color: colors.text }} className="text-2xl font-bold mb-1">Welcome Back!</Text>
-            <Text style={{ color: colors.textSecondary }} className="text-base mb-6">Login to your account</Text>
+            <Text style={{ color: colors.text }} className="text-2xl font-bold mb-1 text-center">Welcome Back!</Text>
+            <Text style={{ color: colors.textSecondary }} className="text-base mb-6 text-center">Login to your account</Text>
 
             {/* Form */}
             <View className="gap-2">

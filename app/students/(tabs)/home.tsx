@@ -10,8 +10,10 @@ import {
   BackHandler,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import HomeJobCard from '@/components/student/HomeJobCard';
+import StudentTabBarSpacer from '@/components/student/StudentTabBarSpacer';
 import SearchBar from '@/components/ui/SearchBar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/api/axios';
@@ -502,18 +504,29 @@ export default function HomeScreen() {
           {hasUnreadNotifs && <View className="absolute top-2.5 right-3 w-2 h-2 rounded-full border-2" style={{ backgroundColor: colors.primary, borderColor: colors.surface }} />}
         </TouchableOpacity>
       </View>
-      <FlatList
-        data={isCurrentLoading ? [] : currentJobsList}
-        keyExtractor={(job) => job.id.toString()}
-        renderItem={renderJob}
-        ListHeaderComponent={renderHeader()}
-        ListEmptyComponent={renderEmptyState()}
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-6 max-w-2xl w-full self-center"
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
-      />
+      <View className="flex-1">
+        <FlatList
+          data={isCurrentLoading ? [] : currentJobsList}
+          keyExtractor={(job) => job.id.toString()}
+          renderItem={renderJob}
+          ListHeaderComponent={renderHeader()}
+          ListEmptyComponent={renderEmptyState()}
+          ListFooterComponent={StudentTabBarSpacer}
+          showsVerticalScrollIndicator={false}
+          contentContainerClassName="pb-6 max-w-2xl w-full self-center"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+        />
+        <LinearGradient
+          accessible={false}
+          pointerEvents="none"
+          colors={[colors.background, `${colors.background}00`]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }}
+        />
+      </View>
       <SideDrawerMenu visible={isDrawerVisible} onClose={() => setDrawerVisible(false)} user={{ name: studentProfile.name, role: 'student', avatarUri: studentProfile.avatarUri, avatarInitials: studentProfile.avatarInitials, isVerified: studentProfile.isVerified, rejectionReason: studentProfile.rejectionReason }} />
     </View>
   );

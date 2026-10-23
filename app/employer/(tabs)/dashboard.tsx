@@ -1,4 +1,6 @@
 import Avatar from '@/components/ui/Avatar';
+import EmployerTabBarSpacer from '@/components/employer/EmployerTabBarSpacer';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getSalaryUnit } from '@/utils/jobRate';
 import JobDetailsModal from '@/components/employer/modals/JobDetailsModal';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -215,7 +217,7 @@ export default function SharedDashboardScreen() {
       <View className="w-full max-w-2xl self-center px-6 pt-2 pb-3 flex-row items-center gap-3">
         <DrawerMenuButton onPress={() => setDrawerVisible(true)} />
         <Text className="flex-1 text-xl font-bold tracking-tight" style={{ color: colors.text }}>DiskarTech<Text style={{ color: colors.primary }}>.</Text></Text>
-        <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 items-center justify-center">
+        <TouchableOpacity onPress={() => router.push('/notifications')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={hasUnreadNotifs ? 'Notifications, unread updates' : 'Notifications'} className="w-12 h-12 rounded-2xl border items-center justify-center" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
           <MaterialIcons name="notifications-none" size={23} color={colors.text} />
           {hasUnreadNotifs && <View className="absolute top-2 right-2 w-2 h-2 rounded-full border" style={{ backgroundColor: colors.primary, borderColor: colors.surface }} />}
         </TouchableOpacity>
@@ -224,88 +226,97 @@ export default function SharedDashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center px-6 pt-3 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={accent} />}>
-        <Text className="text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{greeting}</Text>
-        <View className="flex-row items-center gap-2">
-          <Text className="shrink text-2xl font-bold leading-8 tracking-tight" numberOfLines={2} style={{ color: colors.text }}>{displayName}</Text>
-          {isVerified && <TouchableOpacity onPress={() => router.push(verificationRoute)} accessibilityRole="button" accessibilityLabel="View verified account status" hitSlop={8}><MaterialIcons name="verified" size={21} color={success} /></TouchableOpacity>}
-        </View>
-        <Text className="text-sm leading-6 mt-2 mb-5" style={{ color: colors.textSecondary }}>{isHousehold ? 'Find student help for your home and manage your openings.' : 'Keep your job listings and student applications in one place.'}</Text>
-
-        {!isVerified && rejectionReason && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Review rejected verification documents" className="rounded-2xl border p-4 flex-row items-start gap-3 mb-5" style={{ backgroundColor: accentSurface, borderColor: isDark ? '#66303A' : '#FECDD3' }}>
-          <MaterialIcons name="error-outline" size={22} color={accent} />
-          <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: accent }}>Update verification documents</Text><Text className="text-xs leading-5 mt-1" numberOfLines={2} style={{ color: accent }}>{rejectionReason}</Text></View>
-          <MaterialIcons name="chevron-right" size={22} color={accent} />
-        </TouchableOpacity>}
-
-        <View className="rounded-3xl border p-5 mb-6" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="flex-row items-start gap-3 mb-4">
-            <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={isHousehold ? 'home-work' : 'work-outline'} size={24} color={accent} /></View>
-            <View className="flex-1"><Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>{isHousehold ? 'Need a helping hand?' : 'Find your next team member'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Share an opening with students looking for part-time work.</Text></View>
+      <View className="flex-1">
+        <ScrollView className="flex-1" contentContainerClassName="w-full max-w-2xl self-center px-6 pt-3 pb-6" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={accent} />}>
+          <Text className="text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{greeting}</Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="shrink text-2xl font-bold leading-8 tracking-tight" numberOfLines={2} style={{ color: colors.text }}>{displayName}</Text>
+            {isVerified && <TouchableOpacity onPress={() => router.push(verificationRoute)} accessibilityRole="button" accessibilityLabel="View verified account status" hitSlop={8}><MaterialIcons name="verified" size={21} color={success} /></TouchableOpacity>}
           </View>
-          <TouchableOpacity onPress={handlePost} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={isHousehold ? 'Post an opening' : 'Post a new job'} className="min-h-12 rounded-xl flex-row items-center justify-center gap-2 px-4 py-3" style={{ backgroundColor: colors.primary }}>
-            <MaterialIcons name="add" size={21} color="#FFFFFF" /><Text className="text-sm font-semibold text-white">{isHousehold ? 'Post an opening' : 'Post a new job'}</Text>
-          </TouchableOpacity>
-        </View>
+          <Text className="text-sm leading-6 mt-2 mb-5" style={{ color: colors.textSecondary }}>{isHousehold ? 'Find student help for your home and manage your openings.' : 'Keep your job listings and student applications in one place.'}</Text>
 
-        <Text className="text-lg font-bold mb-3" style={{ color: colors.text }}>Overview</Text>
-        <View className="gap-3 mb-6">
-          {[stats.slice(0, 2), stats.slice(2)].map((row, index) => <View key={index} className="flex-row gap-3">{row.map((stat) => <View key={stat.label} className="flex-1 rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-            <View className="w-10 h-10 rounded-xl items-center justify-center mb-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name={stat.icon} size={20} color={colors.accent} /></View>
-            <Text className="text-2xl font-bold" style={{ color: colors.text }}>{loadingJobs || jobsError ? '\u2014' : stat.value}</Text>
-            <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{stat.label}</Text>
-          </View>)}</View>)}
-        </View>
+          {!isVerified && rejectionReason && <TouchableOpacity onPress={() => router.push(verificationRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Review rejected verification documents" className="rounded-2xl border p-4 flex-row items-start gap-3 mb-5" style={{ backgroundColor: accentSurface, borderColor: isDark ? '#66303A' : '#FECDD3' }}>
+            <MaterialIcons name="error-outline" size={22} color={accent} />
+            <View className="flex-1"><Text className="text-sm font-semibold" style={{ color: accent }}>Update verification documents</Text><Text className="text-xs leading-5 mt-1" numberOfLines={2} style={{ color: accent }}>{rejectionReason}</Text></View>
+            <MaterialIcons name="chevron-right" size={22} color={accent} />
+          </TouchableOpacity>}
 
-        <Text className="text-lg font-bold mb-3" style={{ color: colors.text }}>Quick access</Text>
-        <View className="flex-row gap-2 mb-6">{shortcuts.map((item) => <TouchableOpacity key={item.label} onPress={() => router.push(item.route as any)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={item.label} className="flex-1 items-center rounded-2xl border px-1 py-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="w-10 h-10 rounded-xl items-center justify-center mb-2" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon} size={20} color={colors.accent} /></View>
-          <Text className="text-xs font-medium text-center" numberOfLines={2} style={{ color: colors.textSecondary }}>{item.label}</Text>
-        </TouchableOpacity>)}</View>
-
-        {jobsError && <TouchableOpacity onPress={onRefresh} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Retry dashboard update" className="flex-row items-center gap-2 rounded-xl p-3 mb-5" style={{ backgroundColor: accentSurface }}>
-          <MaterialIcons name="refresh" size={18} color={accent} /><Text className="flex-1 text-xs leading-5" style={{ color: accent }}>Could not update your dashboard. Tap to retry.</Text>
-        </TouchableOpacity>}
-
-        <View className="rounded-3xl border p-4 mb-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="flex-row items-center gap-2 mb-3">
-            <Text className="flex-1 text-lg font-bold" style={{ color: colors.text }}>Recent applicants</Text>
-            <TouchableOpacity onPress={() => router.push('/employer/applicants-list')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View all applicants" className="min-h-12 items-center justify-center px-1"><Text className="text-xs font-semibold" style={{ color: accent }}>View all</Text></TouchableOpacity>
+          <View className="rounded-3xl border p-5 mb-6" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <View className="flex-row items-start gap-3 mb-4">
+              <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: accentSurface }}><MaterialIcons name={isHousehold ? 'home-work' : 'work-outline'} size={24} color={accent} /></View>
+              <View className="flex-1"><Text className="text-lg font-bold leading-6" style={{ color: colors.text }}>{isHousehold ? 'Need a helping hand?' : 'Find your next team member'}</Text><Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>Share an opening with students looking for part-time work.</Text></View>
+            </View>
+            <TouchableOpacity onPress={handlePost} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={isHousehold ? 'Post an opening' : 'Post a new job'} className="min-h-12 rounded-xl flex-row items-center justify-center gap-2 px-4 py-3" style={{ backgroundColor: colors.primary }}>
+              <MaterialIcons name="add" size={21} color="#FFFFFF" /><Text className="text-sm font-semibold text-white">{isHousehold ? 'Post an opening' : 'Post a new job'}</Text>
+            </TouchableOpacity>
           </View>
-          {loadingJobs ? <ActivityIndicator color={colors.primary} className="my-5" /> : recentApplicants.length ? recentApplicants.slice(0, 3).map((app, index) => {
-            const status = applicationStatus(app.status);
-            return <TouchableOpacity key={app.id} onPress={() => router.push(`/employer/applicant-details?applicationId=${app.id}`)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View application from ${app.name}`} className={index ? 'flex-row items-center gap-3 py-4 border-t' : 'flex-row items-center gap-3 py-3'} style={{ borderTopColor: colors.border }}>
-              <Avatar uri={app.avatar} name={app.initials} size={40} />
-              <View className="flex-1"><Text className="text-sm font-semibold" numberOfLines={1} style={{ color: colors.text }}>{app.name}</Text><Text className="text-xs leading-5 mt-1" numberOfLines={1} style={{ color: colors.textSecondary }}>{app.position}</Text><View className="self-start rounded-lg px-2 py-1 mt-2" style={{ backgroundColor: status.background }}><Text className="text-xs font-medium" style={{ color: status.color }}>{status.label}</Text></View></View>
-              <MaterialIcons name="chevron-right" size={21} color={colors.textSecondary} />
-            </TouchableOpacity>;
-          }) : <View className="items-center py-5"><View className="w-12 h-12 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: subtle }}><MaterialIcons name={jobsError ? 'wifi-off' : 'people-outline'} size={24} color={colors.textSecondary} /></View><Text className="text-sm font-semibold text-center" style={{ color: colors.text }}>{jobsError ? 'Applicants unavailable' : 'No applicants yet'}</Text><Text className="text-xs leading-5 text-center mt-1" style={{ color: colors.textSecondary }}>{jobsError ? 'Pull down to refresh and try again.' : 'New applications will appear here.'}</Text></View>}
-        </View>
 
-        <View className="rounded-3xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-          <View className="flex-row items-center gap-2 mb-3">
-            <Text className="flex-1 text-lg font-bold" style={{ color: colors.text }}>{isHousehold ? 'Posted openings' : 'Posted jobs'}</Text>
-            <TouchableOpacity onPress={() => router.push(jobsRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View all job listings" className="min-h-12 items-center justify-center px-1"><Text className="text-xs font-semibold" style={{ color: accent }}>View all</Text></TouchableOpacity>
+          <Text className="text-lg font-bold mb-3" style={{ color: colors.text }}>Overview</Text>
+          <View className="gap-3 mb-6">
+            {[stats.slice(0, 2), stats.slice(2)].map((row, index) => <View key={index} className="flex-row gap-3">{row.map((stat) => <View key={stat.label} className="flex-1 rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+              <View className="w-10 h-10 rounded-xl items-center justify-center mb-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name={stat.icon} size={20} color={colors.accent} /></View>
+              <Text className="text-2xl font-bold" style={{ color: colors.text }}>{loadingJobs || jobsError ? '\u2014' : stat.value}</Text>
+              <Text className="text-xs leading-5 mt-1" style={{ color: colors.textSecondary }}>{stat.label}</Text>
+            </View>)}</View>)}
           </View>
-          {loadingJobs ? <ActivityIndicator color={colors.primary} className="my-5" /> : postedJobs.length ? postedJobs.slice(0, 3).map((job, index) => {
-            const active = jobIsActive(job);
-            const label = active ? 'Active' : String(job.status).toLowerCase() === 'archived' ? 'Archived' : String(job.status).toLowerCase() === 'inactive' ? 'Inactive' : 'Closed';
-            const rate = dailyRate(job.salary);
-            const count = applicantCount(job);
-            return <TouchableOpacity key={job.id} onPress={() => { setSelectedJob(job); setIsDetailsModalVisible(true); }} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View details for ${job.title}`} className={index ? 'py-4 border-t' : 'py-3'} style={{ borderTopColor: colors.border }}>
-              <View className="flex-row items-start gap-3">
-                <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: subtle }}><MaterialIcons name={isHousehold ? 'home-work' : 'work-outline'} size={20} color={colors.textSecondary} /></View>
-                <View className="flex-1"><Text className="text-sm font-semibold leading-5" numberOfLines={2} style={{ color: colors.text }}>{job.title}</Text><View className="flex-row flex-wrap gap-1 mt-1"><Text className="text-xs font-semibold" style={{ color: colors.text }}>{rate}</Text>{rate !== 'Rate not set' && <Text className="text-xs" style={{ color: colors.textSecondary }}>{getSalaryUnit(job.salary_type)}</Text>}</View></View>
+
+          <Text className="text-lg font-bold mb-3" style={{ color: colors.text }}>Quick access</Text>
+          <View className="flex-row gap-2 mb-6">{shortcuts.map((item) => <TouchableOpacity key={item.label} onPress={() => router.push(item.route as any)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={item.label} className="flex-1 items-center rounded-2xl border px-1 py-3" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <View className="w-10 h-10 rounded-xl items-center justify-center mb-2" style={{ backgroundColor: accentSurface }}><MaterialIcons name={item.icon} size={20} color={colors.accent} /></View>
+            <Text className="text-xs font-medium text-center" numberOfLines={2} style={{ color: colors.textSecondary }}>{item.label}</Text>
+          </TouchableOpacity>)}</View>
+
+          {jobsError && <TouchableOpacity onPress={onRefresh} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Retry dashboard update" className="flex-row items-center gap-2 rounded-xl p-3 mb-5" style={{ backgroundColor: accentSurface }}>
+            <MaterialIcons name="refresh" size={18} color={accent} /><Text className="flex-1 text-xs leading-5" style={{ color: accent }}>Could not update your dashboard. Tap to retry.</Text>
+          </TouchableOpacity>}
+
+          <View className="rounded-3xl border p-4 mb-5" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <View className="flex-row items-center gap-2 mb-3">
+              <Text className="flex-1 text-lg font-bold" style={{ color: colors.text }}>Recent applicants</Text>
+              <TouchableOpacity onPress={() => router.push('/employer/applicants-list')} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View all applicants" className="min-h-12 items-center justify-center px-1"><Text className="text-xs font-semibold" style={{ color: accent }}>View all</Text></TouchableOpacity>
+            </View>
+            {loadingJobs ? <ActivityIndicator color={colors.primary} className="my-5" /> : recentApplicants.length ? recentApplicants.slice(0, 3).map((app, index) => {
+              const status = applicationStatus(app.status);
+              return <TouchableOpacity key={app.id} onPress={() => router.push(`/employer/applicant-details?applicationId=${app.id}`)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View application from ${app.name}`} className={index ? 'flex-row items-center gap-3 py-4 border-t' : 'flex-row items-center gap-3 py-3'} style={{ borderTopColor: colors.border }}>
+                <Avatar uri={app.avatar} name={app.initials} size={40} />
+                <View className="flex-1"><Text className="text-sm font-semibold" numberOfLines={1} style={{ color: colors.text }}>{app.name}</Text><Text className="text-xs leading-5 mt-1" numberOfLines={1} style={{ color: colors.textSecondary }}>{app.position}</Text><View className="self-start rounded-lg px-2 py-1 mt-2" style={{ backgroundColor: status.background }}><Text className="text-xs font-medium" style={{ color: status.color }}>{status.label}</Text></View></View>
                 <MaterialIcons name="chevron-right" size={21} color={colors.textSecondary} />
-              </View>
-              <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
-                <View className="flex-row items-center gap-1.5 rounded-lg px-2 py-1" style={{ backgroundColor: active ? (isDark ? '#143B32' : '#F0FDF4') : subtle }}><View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: active ? success : colors.textSecondary }} /><Text className="text-xs font-medium" style={{ color: active ? success : colors.textSecondary }}>{label}</Text></View>
-                <Text className="text-xs" style={{ color: colors.textSecondary }}>{count} {count === 1 ? 'applicant' : 'applicants'}</Text>
-              </View>
-            </TouchableOpacity>;
-          }) : <View className="items-center py-5"><View className="w-12 h-12 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: subtle }}><MaterialIcons name={jobsError ? 'wifi-off' : 'work-outline'} size={24} color={colors.textSecondary} /></View><Text className="text-sm font-semibold text-center" style={{ color: colors.text }}>{jobsError ? 'Listings unavailable' : 'No openings yet'}</Text><Text className="text-xs leading-5 text-center mt-1" style={{ color: colors.textSecondary }}>{jobsError ? 'Pull down to refresh and try again.' : 'Post an opening to start receiving applications.'}</Text>{!jobsError && <TouchableOpacity onPress={handlePost} activeOpacity={0.75} accessibilityRole="button" className="min-h-12 flex-row items-center gap-1 rounded-xl px-3 mt-4" style={{ backgroundColor: accentSurface }}><MaterialIcons name="add" size={18} color={accent} /><Text className="text-xs font-semibold" style={{ color: accent }}>{isHousehold ? 'Post an opening' : 'Post a job'}</Text></TouchableOpacity>}</View>}
-        </View>
-      </ScrollView>
+              </TouchableOpacity>;
+            }) : <View className="items-center py-5"><View className="w-12 h-12 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: subtle }}><MaterialIcons name={jobsError ? 'wifi-off' : 'people-outline'} size={24} color={colors.textSecondary} /></View><Text className="text-sm font-semibold text-center" style={{ color: colors.text }}>{jobsError ? 'Applicants unavailable' : 'No applicants yet'}</Text><Text className="text-xs leading-5 text-center mt-1" style={{ color: colors.textSecondary }}>{jobsError ? 'Pull down to refresh and try again.' : 'New applications will appear here.'}</Text></View>}
+          </View>
+
+          <View className="rounded-3xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <View className="flex-row items-center gap-2 mb-3">
+              <Text className="flex-1 text-lg font-bold" style={{ color: colors.text }}>{isHousehold ? 'Posted openings' : 'Posted jobs'}</Text>
+              <TouchableOpacity onPress={() => router.push(jobsRoute)} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="View all job listings" className="min-h-12 items-center justify-center px-1"><Text className="text-xs font-semibold" style={{ color: accent }}>View all</Text></TouchableOpacity>
+            </View>
+            {loadingJobs ? <ActivityIndicator color={colors.primary} className="my-5" /> : postedJobs.length ? postedJobs.slice(0, 3).map((job, index) => {
+              const active = jobIsActive(job);
+              const label = active ? 'Active' : String(job.status).toLowerCase() === 'archived' ? 'Archived' : String(job.status).toLowerCase() === 'inactive' ? 'Inactive' : 'Closed';
+              const rate = dailyRate(job.salary);
+              const count = applicantCount(job);
+              return <TouchableOpacity key={job.id} onPress={() => { setSelectedJob(job); setIsDetailsModalVisible(true); }} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel={`View details for ${job.title}`} className={index ? 'py-4 border-t' : 'py-3'} style={{ borderTopColor: colors.border }}>
+                <View className="flex-row items-start gap-3">
+                  <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: subtle }}><MaterialIcons name={isHousehold ? 'home-work' : 'work-outline'} size={20} color={colors.textSecondary} /></View>
+                  <View className="flex-1"><Text className="text-sm font-semibold leading-5" numberOfLines={2} style={{ color: colors.text }}>{job.title}</Text><View className="flex-row flex-wrap gap-1 mt-1"><Text className="text-xs font-semibold" style={{ color: colors.text }}>{rate}</Text>{rate !== 'Rate not set' && <Text className="text-xs" style={{ color: colors.textSecondary }}>{getSalaryUnit(job.salary_type)}</Text>}</View></View>
+                  <MaterialIcons name="chevron-right" size={21} color={colors.textSecondary} />
+                </View>
+                <View className="flex-row flex-wrap items-center justify-between gap-2 mt-3">
+                  <View className="flex-row items-center gap-1.5 rounded-lg px-2 py-1" style={{ backgroundColor: active ? (isDark ? '#143B32' : '#F0FDF4') : subtle }}><View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: active ? success : colors.textSecondary }} /><Text className="text-xs font-medium" style={{ color: active ? success : colors.textSecondary }}>{label}</Text></View>
+                  <Text className="text-xs" style={{ color: colors.textSecondary }}>{count} {count === 1 ? 'applicant' : 'applicants'}</Text>
+                </View>
+              </TouchableOpacity>;
+            }) : <View className="items-center py-5"><View className="w-12 h-12 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: subtle }}><MaterialIcons name={jobsError ? 'wifi-off' : 'work-outline'} size={24} color={colors.textSecondary} /></View><Text className="text-sm font-semibold text-center" style={{ color: colors.text }}>{jobsError ? 'Listings unavailable' : 'No openings yet'}</Text><Text className="text-xs leading-5 text-center mt-1" style={{ color: colors.textSecondary }}>{jobsError ? 'Pull down to refresh and try again.' : 'Post an opening to start receiving applications.'}</Text>{!jobsError && <TouchableOpacity onPress={handlePost} activeOpacity={0.75} accessibilityRole="button" className="min-h-12 flex-row items-center gap-1 rounded-xl px-3 mt-4" style={{ backgroundColor: accentSurface }}><MaterialIcons name="add" size={18} color={accent} /><Text className="text-xs font-semibold" style={{ color: accent }}>{isHousehold ? 'Post an opening' : 'Post a job'}</Text></TouchableOpacity>}</View>}
+          </View>
+          <EmployerTabBarSpacer />
+        </ScrollView>
+        <LinearGradient
+          accessible={false}
+          pointerEvents="none"
+          colors={[colors.background, `${colors.background}00`]}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 20 }}
+        />
+      </View>
 
       <JobDetailsModal visible={isDetailsModalVisible} job={selectedJob} onClose={() => { setIsDetailsModalVisible(false); setSelectedJob(null); }} onJobUpdated={() => fetchDashboardData(true)} />
       <NotificationModal visible={notificationConfig.visible} title={notificationConfig.title} message={notificationConfig.message} iconName={notificationConfig.iconName} iconColor={notificationConfig.iconColor} iconBgColor={notificationConfig.iconBgColor} primaryButtonText={notificationConfig.primaryButtonText} onPrimaryPress={notificationConfig.onPrimaryPress} secondaryButtonText={notificationConfig.secondaryButtonText} onSecondaryPress={notificationConfig.onSecondaryPress} buttonLayout="row" />

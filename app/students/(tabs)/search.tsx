@@ -1,4 +1,5 @@
 import HomeJobCard from '@/components/student/HomeJobCard';
+import StudentTabBarSpacer from '@/components/student/StudentTabBarSpacer';
 import SearchBar from '@/components/ui/SearchBar';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import { useDarkMode } from '@/hooks/useDarkMode';
@@ -446,6 +447,7 @@ export default function SearchScreen() {
         renderItem={renderJob}
         ListHeaderComponent={renderListHeader()}
         ListEmptyComponent={renderEmptyState()}
+        ListFooterComponent={StudentTabBarSpacer}
         contentContainerClassName="pb-6 w-full max-w-2xl self-center"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

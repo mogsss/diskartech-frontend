@@ -1,5 +1,6 @@
 import api, { STORAGE_URL } from '@/api/axios';
 import Avatar from '@/components/ui/Avatar';
+import EmployerTabBarSpacer from '@/components/employer/EmployerTabBarSpacer';
 import SearchBar from '@/components/ui/SearchBar';
 import SafeStatusBar from '@/components/ui/SafeStatusBar';
 import SideDrawerMenu from '@/components/ui/modals/SideDrawerMenu';
@@ -334,6 +335,7 @@ export default function EmployerMessagesScreen() {
         keyboardDismissMode="on-drag"
         ListHeaderComponent={loadError && conversationsList.length > 0 ? <View className="px-6 pb-3"><TouchableOpacity onPress={retry} accessibilityRole="button" activeOpacity={0.75} className="flex-row items-center gap-2 rounded-xl p-3" style={{ backgroundColor: accentSurface }}><MaterialIcons name="refresh" size={18} color={accentText} /><Text className="flex-1 text-xs leading-5" style={{ color: accentText }}>Could not update messages. Tap to reconnect.</Text></TouchableOpacity></View> : null}
         ListEmptyComponent={renderEmptyState()}
+        ListFooterComponent={EmployerTabBarSpacer}
       />
       <SideDrawerMenu visible={isDrawerVisible} onClose={() => setDrawerVisible(false)} user={{ name: userProfile.name, role: userProfile.role || 'business', avatarUri: userProfile.avatarUri, avatarInitials: userProfile.avatarInitials, isVerified: userProfile.isVerified, rejectionReason: userProfile.rejectionReason }} />
     </View>

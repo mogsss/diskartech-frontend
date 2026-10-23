@@ -52,7 +52,15 @@ function fixture({ user = { id: 3, role: 'household', email: 'household@example.
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
     'react-native': native,
-    '@expo/vector-icons': { MaterialIcons: 'Icon' },
+    '@expo/vector-icons': { MaterialIcons: 'Icon', Ionicons: 'Icon' },
+    '@react-navigation/bottom-tabs': { BottomTabBar: 'BottomTabBar' },
+    'expo-linear-gradient': { LinearGradient: 'LinearGradient' },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
+    '@/components/employer/EmployerTabBarSpacer': {
+      default: 'EmployerTabBarSpacer', __esModule: true,
+      EMPLOYER_TAB_BAR_HEIGHT: 74, EMPLOYER_POST_TAB_LIFT: 22,
+      getEmployerTabBarHeight: bottom => 74 + 22 + Math.max(bottom, 12) + 8,
+    },
     '@react-navigation/native': { useFocusEffect(callback) { if (callback !== focusCallback) { focusCallback = callback; effects.push(callback); } } },
     '@react-native-async-storage/async-storage': {
       getItem: async key => storage.get(key) ?? null,

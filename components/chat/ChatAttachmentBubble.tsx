@@ -64,8 +64,8 @@ export default function ChatAttachmentBubble({ chatId, attachment, mine }: { cha
   const actual = media?.attachment || attachment;
 
   return (
-    <View style={{ marginBottom: 8 }}>
-      <TouchableOpacity onPress={() => void open()} disabled={loading} accessibilityRole="button" accessibilityLabel={`Open ${actual.kind === 'image' ? 'photo' : actual.filename}`} activeOpacity={0.8} style={{ borderRadius: 12, overflow: 'hidden', backgroundColor: mine ? '#FFFFFF1F' : colors.background }}>
+    <View style={{ marginBottom: actual.kind === 'image' ? 0 : 8 }}>
+      <TouchableOpacity onPress={() => void open()} disabled={loading} accessibilityRole="button" accessibilityLabel={`Open ${actual.kind === 'image' ? 'photo' : actual.filename}`} activeOpacity={0.8} style={{ borderRadius: actual.kind === 'image' ? 0 : 12, overflow: 'hidden', backgroundColor: mine ? '#FFFFFF1F' : colors.background }}>
         {actual.kind === 'image' && media && !failed ? (
           <Image source={{ uri: media.url }} style={{ width: 220, maxWidth: '100%', aspectRatio: 4 / 3 }} resizeMode="cover" onError={() => {
             if (!imageRetried.current) { imageRetried.current = true; setMedia(null); void refresh(); }
