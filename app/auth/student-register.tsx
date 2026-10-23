@@ -9,6 +9,8 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
 import { GoogleAuthProfile } from '@/utils/googleAuth';
 import { Colors } from '@/constants/colors';
+import { useToast } from '@/hooks/useToast';
+import { isValidMobileNumber, MOBILE_NUMBER_ERROR } from '@/utils/phoneNumber';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -24,6 +26,7 @@ const getAgeError = (value: string) => {
 };
 
 export default function RegisterStudentScreen() {
+  const { showToast } = useToast();
   const [step, setStep] = useState(1);
 
   // Google OAuth Link State
@@ -93,17 +96,24 @@ export default function RegisterStudentScreen() {
     return !error;
   };
 
+  const validatePhone = () => {
+    if (isValidMobileNumber(phone)) return true;
+    showToast({ type: 'error', message: MOBILE_NUMBER_ERROR });
+    return false;
+  };
+
   const handleNext = () => {
     if (step === 1) {
       if (!validateAge()) return;
       if (!firstName || !lastName || !age || !gender || !phone || !selectedAddress) {
-        Alert.alert('Error', 'Please fill in all personal information and pinpoint your location.');
+        showToast({ type: 'error', message: 'Please fill in all personal information and pinpoint your location.' });
         return;
       }
+      if (!validatePhone()) return;
       setStep(2);
     } else if (step === 2) {
       if (!school || !course || !yearLevel) {
-        Alert.alert('Error', 'Please complete your school information.');
+        showToast({ type: 'error', message: 'Please complete your school information.' });
         return;
       }
       setStep(3);
@@ -112,6 +122,10 @@ export default function RegisterStudentScreen() {
 
   const handleRegister = async () => {
     if (!validateAge()) {
+      setStep(1);
+      return;
+    }
+    if (!validatePhone()) {
       setStep(1);
       return;
     }
@@ -244,9 +258,9 @@ export default function RegisterStudentScreen() {
 
           {!isGoogleLinked && (
             <>
-              <InputField label="First Name" placeholder="Enter your first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-              <InputField label="Middle Name (Optional)" placeholder="Enter your middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-              <InputField label="Last Name" placeholder="Enter your last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+              <InputField label="First Name" placeholder="Juan" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
+              <InputField label="Middle Name (Optional)" placeholder="Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField label="Last Name" placeholder="Santos" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
             </>
           )}
 
@@ -278,7 +292,7 @@ export default function RegisterStudentScreen() {
             </TouchableOpacity>
           </View>
 
-          <InputField label="Phone Number" placeholder="Enter your phone number" keyboardType="phone-pad" icon="phone" value={phone} onChangeText={setPhone} />
+          <InputField label="Phone Number" placeholder="09123456789" keyboardType="phone-pad" maxLength={11} icon="phone" value={phone} onChangeText={(value) => setPhone(value.replace(/[^0-9]/g, '').slice(0, 11))} />
 
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Location</Text>
@@ -368,7 +382,7 @@ export default function RegisterStudentScreen() {
             <>
               <InputField
                 label="Email Address"
-                placeholder="Enter your email"
+                placeholder="example@gmail.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon="email"
@@ -379,7 +393,7 @@ export default function RegisterStudentScreen() {
 
               <InputField
                 label="Password"
-                placeholder="Create a password"
+                placeholder="********"
                 isPassword
                 icon="lock"
                 value={password}

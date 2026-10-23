@@ -7,6 +7,8 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
 import { GoogleAuthProfile } from '@/utils/googleAuth';
 import { Colors } from '@/constants/colors';
+import { useToast } from '@/hooks/useToast';
+import { isValidMobileNumber, MOBILE_NUMBER_ERROR } from '@/utils/phoneNumber';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -15,6 +17,7 @@ import api from '@/api/axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterEmployerScreen() {
+  const { showToast } = useToast();
   const [step, setStep] = useState(1);
 
   // Google OAuth Link State
@@ -70,23 +73,34 @@ export default function RegisterEmployerScreen() {
   // Modal Visibility
   const [businessTypeModalVisible, setBusinessTypeModalVisible] = useState(false);
 
+  const validatePhone = () => {
+    if (isValidMobileNumber(phone)) return true;
+    showToast({ type: 'error', message: MOBILE_NUMBER_ERROR });
+    return false;
+  };
+
   const handleNext = () => {
     if (step === 1) {
       if (!businessName || !businessType || !firstName || !lastName) {
-        Alert.alert('Error', 'Please fill in all required business and personal name fields.');
+        showToast({ type: 'error', message: 'Please fill in all required business and personal name fields.' });
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!phone || !address) {
-        Alert.alert('Error', 'Please complete your phone number and business location.');
+        showToast({ type: 'error', message: 'Please complete your phone number and business location.' });
         return;
       }
+      if (!validatePhone()) return;
       setStep(3);
     }
   };
 
   const handleRegister = async () => {
+    if (!validatePhone()) {
+      setStep(2);
+      return;
+    }
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
@@ -230,9 +244,9 @@ export default function RegisterEmployerScreen() {
           {!isGoogleLinked && (
             <>
               <Text className="text-base font-bold text-slate-900 mt-5 mb-3">Contact Person / HR</Text>
-              <InputField label="First Name" placeholder="Contact person first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-              <InputField label="Middle Name (Optional)" placeholder="Contact person middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-              <InputField label="Last Name" placeholder="Contact person last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+              <InputField label="First Name" placeholder="Juan" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
+              <InputField label="Middle Name (Optional)" placeholder="Dela Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField label="Last Name" placeholder="Santos" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
             </>
           )}
 
@@ -245,7 +259,7 @@ export default function RegisterEmployerScreen() {
       {/* --- STEP 2: CONTACT & LOCATION DETAILS --- */}
       {step === 2 && (
         <View>
-          <InputField label="Phone Number" placeholder="Enter mobile number" keyboardType="phone-pad" icon="phone" value={phone} onChangeText={setPhone} />
+          <InputField label="Phone Number" placeholder="09123456789" keyboardType="phone-pad" maxLength={11} icon="phone" value={phone} onChangeText={(value) => setPhone(value.replace(/[^0-9]/g, '').slice(0, 11))} />
 
           <View className="mb-4">
             <Text className="text-sm font-semibold text-slate-700 mb-1.5">Business Location</Text>
@@ -290,7 +304,7 @@ export default function RegisterEmployerScreen() {
             <>
               <InputField
                 label="Email Address"
-                placeholder="Enter business email"
+                placeholder="examplebusiness@gmail.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon="email"
@@ -301,7 +315,7 @@ export default function RegisterEmployerScreen() {
 
               <InputField
                 label="Password"
-                placeholder="Create a password"
+                placeholder="********"
                 isPassword
                 icon="lock"
                 value={password}

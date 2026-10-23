@@ -7,6 +7,8 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import GoogleRegisterButton from '@/components/auth/GoogleRegisterButton';
 import { GoogleAuthProfile } from '@/utils/googleAuth';
 import { Colors } from '@/constants/colors';
+import { useToast } from '@/hooks/useToast';
+import { isValidMobileNumber, MOBILE_NUMBER_ERROR } from '@/utils/phoneNumber';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -15,6 +17,7 @@ import api from '@/api/axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterHouseholdScreen() {
+  const { showToast } = useToast();
   const [step, setStep] = useState(1); // 1: Personal Info, 2: Address & Contact, 3: Account Security
 
   // Google OAuth Link State
@@ -71,24 +74,35 @@ export default function RegisterHouseholdScreen() {
   // Modal Visibility
   const [genderModalVisible, setGenderModalVisible] = useState(false);
 
+  const validatePhone = () => {
+    if (isValidMobileNumber(phone)) return true;
+    showToast({ type: 'error', message: MOBILE_NUMBER_ERROR });
+    return false;
+  };
+
   // Validation per step
   const handleNext = () => {
     if (step === 1) {
       if (!firstName || !lastName || !age || !gender) {
-        Alert.alert('Error', 'Please fill in all personal information fields.');
+        showToast({ type: 'error', message: 'Please fill in all personal information fields.' });
         return;
       }
       setStep(2);
     } else if (step === 2) {
       if (!address || !phone) {
-        Alert.alert('Error', 'Please complete your home address location and phone number.');
+        showToast({ type: 'error', message: 'Please complete your home address location and phone number.' });
         return;
       }
+      if (!validatePhone()) return;
       setStep(3);
     }
   };
 
   const handleRegister = async () => {
+    if (!validatePhone()) {
+      setStep(2);
+      return;
+    }
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
@@ -216,9 +230,9 @@ export default function RegisterHouseholdScreen() {
 
           {!isGoogleLinked && (
             <>
-              <InputField label="First Name" placeholder="Enter your first name" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
-              <InputField label="Middle Name (Optional)" placeholder="Enter your middle name" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
-              <InputField label="Last Name" placeholder="Enter your last name" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
+              <InputField label="First Name" placeholder="John" keyboardType="default" icon="person" value={firstName} onChangeText={setFirstName} />
+              <InputField label="Middle Name (Optional)" placeholder="Cruz" keyboardType="default" icon="person-outline" value={middleName} onChangeText={setMiddleName} />
+              <InputField label="Last Name" placeholder="Cruz" keyboardType="default" icon="person" value={lastName} onChangeText={setLastName} />
             </>
           )}
           <InputField label="Age" placeholder="Enter your age" keyboardType="number-pad" maxLength={2} icon="cake" value={age} onChangeText={setAge} />
@@ -267,14 +281,14 @@ export default function RegisterHouseholdScreen() {
 
           {/* DETAILED ADDRESS FIELD (House No., Street, Landmark) */}
           <InputField
-            label="House No., Street, Landmark (Optional)"
-            placeholder="e.g., Blk 4 Lot 2, Mabini St., near school"
+            label="Street, Baranggay"
+            placeholder="e.g., Sitio Abada, Marfransico"
             icon="home"
             value={detailedAddress}
             onChangeText={setDetailedAddress}
           />
 
-          <InputField label="Phone Number" placeholder="Enter your phone number" keyboardType="phone-pad" icon="phone" value={phone} onChangeText={setPhone} />
+          <InputField label="Phone Number" placeholder="09123456789" keyboardType="phone-pad" maxLength={11} icon="phone" value={phone} onChangeText={(value) => setPhone(value.replace(/[^0-9]/g, '').slice(0, 11))} />
 
           <TouchableOpacity
             onPress={handleNext}
@@ -300,7 +314,7 @@ export default function RegisterHouseholdScreen() {
             <>
               <InputField
                 label="Email Address"
-                placeholder="Enter your email"
+                placeholder="juandelacruz@gmail.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon="email"
@@ -311,7 +325,7 @@ export default function RegisterHouseholdScreen() {
 
               <InputField
                 label="Password"
-                placeholder="Create a password"
+                placeholder="********"
                 isPassword
                 icon="lock"
                 value={password}
