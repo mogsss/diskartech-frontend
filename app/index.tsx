@@ -147,6 +147,12 @@ export default function SplashScreen() {
               { rotate: motion.logo.interpolate({ inputRange: [0, 1], outputRange: ['-8deg', '0deg'] }) },
             ] },
           ]}>
+            <LinearGradient
+              colors={[Colors.primary, Colors.primaryDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.logoFrameFill, compact && { borderRadius: 24 }]}
+            />
             <Image source={require('../assets/images/icon.png')} style={styles.logo} resizeMode="cover" accessible={false} />
           </Animated.View>
 
@@ -188,7 +194,8 @@ const styles = StyleSheet.create({
   orbitDot: { position: 'absolute', top: '14%', right: '14%', width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
   foreground: { flex: 1 },
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 16 },
-  logoFrame: { width: 112, height: 112, borderRadius: 30, padding: 6, backgroundColor: '#FFFFFF', marginBottom: 24, shadowColor: '#400008', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.25, shadowRadius: 24, elevation: 12 },
+  logoFrame: { width: 112, height: 112, borderRadius: 30, padding: 6, backgroundColor: Colors.primaryDark, marginBottom: 24, shadowColor: '#400008', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.25, shadowRadius: 24, elevation: 12 },
+  logoFrameFill: { ...StyleSheet.absoluteFillObject, borderRadius: 30 },
   logoCompact: { width: 88, height: 88, borderRadius: 24, marginBottom: 16 },
   logo: { width: '100%', height: '100%', borderRadius: 24 },
   wordmark: { alignItems: 'center' },
